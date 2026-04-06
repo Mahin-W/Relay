@@ -8,12 +8,17 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test-parse": "node src/test-parse.js"
+    "test-parse": "node src/test-parse.js",
+    "watch": "node scripts/auto-commit.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "latest",
-    "groq-sdk": "latest",
     "@supabase/supabase-js": "latest",
-    "dotenv": "latest"
+    "dotenv": "latest",
+    "groq-sdk": "latest",
+    "node-telegram-bot-api": "latest"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
+    "chokidar": "^5.0.0"
   }
 }
