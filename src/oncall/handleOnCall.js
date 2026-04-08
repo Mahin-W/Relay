@@ -4,7 +4,7 @@ import {
   getOnCallStaff as liveGetOnCallStaff,
   clearWeekOnCall as liveClearWeekOnCall,
 } from './onCallDb.js'
-import { getNextWeekStart } from '../schedule/generateSchedule.js'
+import { getCurrentWeekStart } from '../schedule/generateSchedule.js'
 import { logger } from '../logger.js'
 
 export async function handleOnCallOffer(bot, msg, intent, db = null) {
@@ -17,7 +17,7 @@ export async function handleOnCallOffer(bot, msg, intent, db = null) {
   const staff = await _getStaffMember(userId)
   if (!staff) return
 
-  const weekStart = getNextWeekStart()
+  const weekStart = getCurrentWeekStart()
   const allWeek = intent.all_week !== false
   const days = intent.days ?? []
 
@@ -34,7 +34,7 @@ export async function handleOnCallOffer(bot, msg, intent, db = null) {
 // Re-export for convenience: gets on-call staff for next week.
 export async function getOnCallStaff(groupId, db = null) {
   const _getOnCallStaff = db?.getOnCallStaff ?? liveGetOnCallStaff
-  const weekStart = getNextWeekStart()
+  const weekStart = getCurrentWeekStart()
   return _getOnCallStaff(groupId, weekStart)
 }
 

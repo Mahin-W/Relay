@@ -7,6 +7,17 @@ import { calculateWeeklyHours, detectHoursIssues } from './hoursTracker.js'
 
 const DAY_ORDER = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 }
 
+// Returns the ISO date string (YYYY-MM-DD) of this week's Monday (current week)
+export function getCurrentWeekStart() {
+  const today = new Date()
+  const day = today.getDay() // 0=Sun, 1=Mon ... 6=Sat
+  const daysToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(today)
+  monday.setDate(today.getDate() + daysToMonday)
+  monday.setHours(0, 0, 0, 0)
+  return monday.toISOString().split('T')[0]
+}
+
 // Returns the ISO date string (YYYY-MM-DD) of next week's Monday
 export function getNextWeekStart() {
   const today = new Date()

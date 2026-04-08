@@ -30,7 +30,7 @@ export async function saveOnCall(staffId, groupId, weekStart, days = [], allWeek
         { onConflict: 'staff_id,week_start' }
       )
       .select()
-      .single()
+      .maybeSingle()
     if (error) throw error
     return data
   } catch (err) {
