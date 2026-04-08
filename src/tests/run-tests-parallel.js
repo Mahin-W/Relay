@@ -19,6 +19,12 @@ const FAST_SUITES = [
   { id: 'unit_read_receipts', file: 'unit/readReceipts.test.js', label: 'Unit — Read Receipts', timeout: 10_000 },
   { id: 'unit_clopening', file: 'unit/clopening.test.js', label: 'Unit — Clopening Detection', timeout: 10_000 },
   { id: 'unit_hours', file: 'unit/hoursTracker.test.js', label: 'Unit — Hours Tracker', timeout: 10_000 },
+  { id: 'unit_passive_avail', file: 'unit/passiveAvailability.test.js', label: 'Unit — Passive Availability', timeout: 10_000 },
+  { id: 'unit_self_service', file: 'unit/selfService.test.js', label: 'Unit — Self-Service Schedule', timeout: 10_000 },
+  { id: 'unit_oncall', file: 'unit/onCall.test.js', label: 'Unit — On-Call Bench System', timeout: 15_000 },
+  { id: 'unit_noshow', file: 'unit/noShowWarning.test.js', label: 'Unit — No-show Warning', timeout: 10_000 },
+  { id: 'unit_reliability', file: 'unit/reliability.test.js', label: 'Unit — Reliability Scoring', timeout: 10_000 },
+  { id: 'unit_daily_briefing', file: 'unit/dailyBriefing.test.js', label: 'Unit — Daily Briefing', timeout: 10_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },
@@ -28,10 +34,11 @@ const FAST_SUITES = [
 // LLM suites: share a Groq rate limit (6000 TPM on free tier) — run sequentially
 const LLM_SUITES = [
   { id: 'unit_trade', file: 'unit/tradeFlow.test.js', label: 'Unit — Trade Flow (LLM)', timeout: 180_000 },
-  { id: 'unit_parse', file: 'unit/parseMessage.test.js', label: 'Unit — LLM Message Parser', timeout: 300_000 },
+  { id: 'unit_parse', file: 'unit/parseMessage.test.js', label: 'Unit — LLM Message Parser', timeout: 360_000 },
   { id: 'unit_timeoff', file: 'unit/timeOff.test.js', label: 'Unit — Time-off Flow (LLM)', timeout: 300_000 },
   { id: 'unit_latearrival', file: 'unit/lateArrival.test.js', label: 'Unit — Late Arrival (LLM)', timeout: 300_000 },
   { id: 'integration_setup', file: 'integration/setupFlow.test.js', label: 'Integration — Setup Flow (LLM)', timeout: 180_000 },
+  { id: 'unit_oncall_parse', file: 'unit/onCallParse.test.js', label: 'Unit — On-Call Parser (LLM)', timeout: 300_000 },
 ]
 
 const TEST_SUITES = [...FAST_SUITES, ...LLM_SUITES]
