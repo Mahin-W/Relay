@@ -2,6 +2,8 @@ import { saveRequest, getGroupMembersWithDm, saveOutreach, updateCoverageRequest
 import { getShiftRoster } from '../shiftMatcher.js'
 import { logger } from '../logger.js'
 import { resolveShift } from './shiftResolver.js'
+import { getOnCallStaff as liveGetOnCallStaff } from '../oncall/onCallDb.js'
+import { recordEvent as liveRecordEvent } from '../reliability/reliabilityDb.js'
 
 function buildRequestMessage(requestedBy, shiftDesc, matchedShift, roster) {
   if (matchedShift && !matchedShift.low_confidence) {
@@ -34,6 +36,8 @@ export async function handleCoverageRequest(bot, msg, intent, db = null) {
   const _saveOutreach = db?.saveOutreach ?? saveOutreach
   const _updateCoverageRequestShift = db?.updateCoverageRequestShift ?? updateCoverageRequestShift
   const _getShiftRoster = db?.getShiftRoster ?? getShiftRoster
+  const _getOnCallStaff = db?.getOnCallStaff ?? liveGetOnCallStaff
+  const _recordEvent = db?.recordEvent ?? liveRecordEvent
 
   const groupId = String(msg.chat.id)
   const groupName = msg.chat.title || 'Unknown Group'
@@ -42,6 +46,13 @@ export async function handleCoverageRequest(bot, msg, intent, db = null) {
   const shiftDesc = intent.shift || 'unspecified shift'
 
   const request = await _saveRequest(groupId, groupName, shiftDesc, requestedBy)
+
+  // Record reliability event — fire-and-forget, never crashes handler
+  if (requesterId) {
+    _recordEvent(requesterId, groupId, 'called_out').catch(err =>
+      logger.error(`recordEvent called_out failed: ${err.message}`)
+    )
+  }
 
   let matchedShift = intent._preResolvedShift ?? null
   let matchedWeekStart = intent._preResolvedWeekStart ?? null
@@ -78,18 +89,25 @@ export async function handleCoverageRequest(bot, msg, intent, db = null) {
 
   const shiftLabel = `${matchedShift.name} (${matchedShift.day_of_week}, ${matchedShift.start_time}–${matchedShift.end_time})`
 
+  const onCallRecords = await _getOnCallStaff(groupId, matchedWeekStart).catch(() => [])
+  const onCallSet = new Set(onCallRecords.map(r => String(r.staff_id)))
+
   for (const member of toNotify) {
+    if (!member.dmChatId) continue
     try {
-      await bot.sendMessage(
-        member.dmChatId,
-        `🔔 *Coverage Needed — ${groupName}*\n\n` +
-        `*Shift:* ${shiftLabel}\n` +
-        `*Requested by:* ${requestedBy}\n\n` +
-        `Can you cover it? Reply *yes* to volunteer ✋`,
-        { parse_mode: 'Markdown' }
-      )
+      const isOnCall = onCallSet.has(String(member.userId))
+      const dmText = isOnCall
+        ? `🔔 *You're on call — first dibs!*\n\n` +
+          `*Shift:* ${shiftLabel}\n` +
+          `*Requested by:* ${requestedBy}\n\n` +
+          `Can you cover it? Reply *yes* to volunteer ✋`
+        : `🔔 *Coverage Needed — ${groupName}*\n\n` +
+          `*Shift:* ${shiftLabel}\n` +
+          `*Requested by:* ${requestedBy}\n\n` +
+          `Can you cover it? Reply *yes* to volunteer ✋`
+      await bot.sendMessage(member.dmChatId, dmText, { parse_mode: 'Markdown' })
       await _saveOutreach(request.id, member.userId)
-      logger.bot(`DM sent to ${member.firstName}`)
+      logger.bot(`DM sent to ${member.firstName}${isOnCall ? ' (on-call priority)' : ''}`)
     } catch (err) {
       logger.error(`Failed to DM ${member.firstName}: ${err.message}`)
     }

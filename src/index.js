@@ -7,6 +7,8 @@ import { handleGroupMessage } from './routing/groupRouter.js'
 import { startReminderJobs } from './reminders/shiftReminders.js'
 import { shouldSkip } from './preFilter.js'
 import { startNoShowCron } from './noshow/noShowWarning.js'
+import { getReliabilityScores } from './reliability/reliabilityDb.js'
+import { formatReliabilityReport } from './reliability/reliabilityScore.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -74,6 +76,22 @@ bot.on('message', async (msg) => {
 
 bot.on('polling_error', (err) => {
   logger.error(`Polling error: ${err.message}`)
+})
+
+bot.onText(/^\/reliability/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const { getSetupSession } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(userId)) return // silent — don't reveal command
+
+  const scores = await getReliabilityScores(groupId)
+  const report = formatReliabilityReport(scores)
+  if (session.dm_chat_id) {
+    await bot.sendMessage(groupId, '📨 Reliability report sent to your DM.')
+    await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
+  }
 })
 
 process.on('SIGINT', () => {

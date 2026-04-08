@@ -3,6 +3,7 @@ import { getPublishedSchedule, swapPublishedScheduleAssignment } from '../availa
 import { formatScheduleMessage } from '../schedule/generateSchedule.js'
 import { getShiftById, swapScheduleAssignment, getStaffForGroup } from '../setup/setupDb.js'
 import { logger } from '../logger.js'
+import { recordEvent as liveRecordEvent } from '../reliability/reliabilityDb.js'
 
 async function swapIfPossible(openRequest, volunteer, groupId) {
   if (!openRequest.matched_shift_id || !openRequest.week_start) return
@@ -64,6 +65,7 @@ async function buildConfirmationMessage(volunteer, openRequest) {
 export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
   const _getOpenRequest = db?.getOpenRequest ?? getOpenRequest
   const _markCovered = db?.markCovered ?? markCovered
+  const _recordEvent = db?.recordEvent ?? liveRecordEvent
 
   const groupId = String(msg.chat.id)
   const volunteer = intent.person || msg.from?.first_name || 'Someone'
@@ -84,6 +86,13 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
   if (!marked) {
     await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
     return
+  }
+
+  // Record reliability event — fire-and-forget, never crashes handler
+  if (msg.from?.id) {
+    _recordEvent(msg.from.id, groupId, 'covered_someone').catch(err =>
+      logger.error(`recordEvent covered_someone failed: ${err.message}`)
+    )
   }
 
   await swapIfPossible(openRequest, volunteer, groupId)
