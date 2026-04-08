@@ -9,6 +9,7 @@ import { shouldSkip } from './preFilter.js'
 import { startNoShowCron } from './noshow/noShowWarning.js'
 import { getReliabilityScores } from './reliability/reliabilityDb.js'
 import { formatReliabilityReport } from './reliability/reliabilityScore.js'
+import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -38,6 +39,7 @@ bot.getMe().then((me) => {
   logger.bot('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   startReminderJobs(bot)
   startNoShowCron(bot)
+  startBriefingCron(bot)
 })
 
 async function isGroupAdmin(groupId, userId) {
@@ -76,6 +78,16 @@ bot.on('message', async (msg) => {
 
 bot.on('polling_error', (err) => {
   logger.error(`Polling error: ${err.message}`)
+})
+
+bot.onText(/^\/briefing/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  await sendDailyBriefing(bot, groupId)
+  await bot.sendMessage(groupId, '📨 Briefing sent to your DM.')
 })
 
 bot.onText(/^\/reliability/, async (msg) => {
