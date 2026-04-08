@@ -38,8 +38,11 @@ src/setup/shiftSteps.js   — add_shifts + shift_roles step handlers
 src/setup/staffSteps.js   — welcome + add_staff step handlers
 src/availability/availabilityDb.js — barrel → src/availability/db/*
 src/availability/collectAvailability.js — /availability flow + reply handler
-src/schedule/generateSchedule.js — weekly schedule algorithm
-src/schedule/reviewSchedule.js   — manager approve/edit/publish flow
+src/schedule/generateSchedule.js — weekly schedule algorithm (returns clopenings + hoursIssues)
+src/schedule/reviewSchedule.js   — manager approve/edit/publish flow (handles "approve anyway")
+src/schedule/readReceipts.js     — sendPersonalSchedule, handleReceiptConfirmation, getUnconfirmedStaff, sendReceiptReminders
+src/schedule/clopen.js           — detectClopenings, formatClopeningWarning (pure, no DB/Groq)
+src/schedule/hoursTracker.js     — calculateWeeklyHours, detectHoursIssues, formatHoursWarning (pure)
 src/logger.js             — logger utility
 ```
 
