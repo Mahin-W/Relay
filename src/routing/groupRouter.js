@@ -3,6 +3,8 @@ import { parseMessage } from '../parseMessage.js'
 import { handleCoverageRequest, handleCoverageConfirmation, handleCoverageCancel, handleTradeRequest, handleTradeOffer, handleCoverageTradeOffer, resolvePendingClarification } from '../handleCoverage.js'
 import { handleTimeOffRequest } from '../timeOff/handleTimeOff.js'
 import { handleLateArrival } from '../lateArrival/handleLateArrival.js'
+import { handleAvailabilityMention } from '../availability/passiveAvailability.js'
+import { handleOnCallOffer } from '../oncall/handleOnCall.js'
 import { logger } from '../logger.js'
 import { handleGroupCommands } from './commandRouter.js'
 
@@ -79,6 +81,12 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
         break
       case 'running_late':
         await handleLateArrival(bot, msg, intent)
+        break
+      case 'availability_mention':
+        await handleAvailabilityMention(bot, msg, intent)
+        break
+      case 'on_call_offer':
+        await handleOnCallOffer(bot, msg, intent)
         break
       case 'schedule_update':
         logger.info(`Schedule update noted: ${intent.details}`)

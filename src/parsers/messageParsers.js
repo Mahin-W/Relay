@@ -56,6 +56,27 @@ Extract minutes if stated ('20 min late' → set minutes to 20, '15 min' → 15)
 MUST NOT trigger on past tense: 'I was late last week', 'sorry I was late yesterday', 'the bus is always late' (not about them personally today).
 MUST NOT trigger on coverage_request phrases. 'calling in sick' or 'can't come in' = coverage_request. Someone saying they're on their way but delayed = running_late.
 
+AVAILABILITY_MENTION — someone passively mentions their own availability or unavailability for specific days or the whole week, without requesting coverage or asking for time off:
+{"type":"availability_mention","person":"name of person, use sender name if unclear","available_days":[],"unavailable_days":[],"available_all_week":false,"unavailable_all_week":false}
+
+Common availability_mention phrases: 'I can't do Tuesday', 'not available Monday', 'free Friday', 'I'm free Wednesday', 'can work Saturday', 'available Thursday', 'free all week', 'out of town Friday', 'off Monday', 'I won't be around Sunday', 'free next week'
+Extract all day names mentioned into available_days or unavailable_days arrays.
+Set available_all_week=true for 'free all week', 'free next week', 'available all week'.
+Set unavailable_all_week=true for 'out all week', 'away all week', 'not available all week', 'out of town all week'.
+MUST NOT trigger on: coverage requests ('can anyone cover my friday'), running late mentions, time-off requests (those get approval from manager).
+DISTINCTION: availability_mention = informational statement about their own schedule. coverage_request = asking others to cover. time_off_request = asking manager for approval.
+
+ON_CALL_OFFER — staff proactively volunteering to be on call / available for extra shifts this week, without responding to a specific coverage request:
+{"type":"on_call_offer","person":"name of person, use sender name if unclear","days":[],"all_week":true}
+
+Common on_call_offer phrases: 'I'm on call this week', 'ping me if you need someone', 'I can pick up extra shifts', 'available for extra shifts', 'put me on call', 'I'm available if needed', 'hit me up if you need coverage', 'I'm free if needed', 'available if anyone needs coverage'
+Extract specific days if mentioned into the days array. Set all_week: true if no specific days are mentioned or they mention the whole week.
+MUST NOT trigger on:
+- 'I can cover that' / 'I can cover it' → coverage_confirmation (direct response to a specific request)
+- 'I'm available Monday' / 'free Wednesday' → availability_mention (specific day only, no on-call framing)
+- 'can anyone cover' → coverage_request (asking others to cover their shift)
+KEY DISTINCTION: on_call_offer = proactively putting themselves on-call for the week. availability_mention = stating availability for specific days only.
+
 SCHEDULE_UPDATE — availability or schedule change, not urgent coverage:
 {"type":"schedule_update","details":"brief description"}
 
