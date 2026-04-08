@@ -5,6 +5,8 @@ import { isBotAdmin } from './setup/setupDb.js'
 import { handleDmMessage } from './routing/dmRouter.js'
 import { handleGroupMessage } from './routing/groupRouter.js'
 import { startReminderJobs } from './reminders/shiftReminders.js'
+import { shouldSkip } from './preFilter.js'
+import { startNoShowCron } from './noshow/noShowWarning.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -33,6 +35,7 @@ bot.getMe().then((me) => {
   logger.bot('Listening for group messages...')
   logger.bot('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   startReminderJobs(bot)
+  startNoShowCron(bot)
 })
 
 async function isGroupAdmin(groupId, userId) {
@@ -64,6 +67,7 @@ bot.on('message', async (msg) => {
   }
 
   if (isGroup) {
+    if (shouldSkip(msg.text)) return
     await handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin)
   }
 })
