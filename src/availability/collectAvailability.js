@@ -154,17 +154,37 @@ function buildAvailabilityDm(firstName, managerName, restaurantName, weekLabel, 
   )
 }
 
+// Pure parser — extracts intent from a user's availability reply text.
+// Returns { type: 'unavailable' | 'all_week' | 'specific_shifts' | 'unclear', numbers?: string[] }
+export function parseAvailabilityResponse(text, shiftMap) {
+  const lower = text.toLowerCase().trim()
+
+  if (/^(off|can'?t|no|nope|none|unavailable|not available|busy all week)$/i.test(lower)) {
+    return { type: 'unavailable' }
+  }
+
+  if (/^(all|all shifts|every shift|every day|all week|available all|yes all)$/i.test(lower)) {
+    return { type: 'all_week' }
+  }
+
+  const numbers = (text.match(/\d+/g) ?? []).map(String).filter(n => shiftMap[n])
+  if (numbers.length > 0) {
+    return { type: 'specific_shifts', numbers }
+  }
+
+  return { type: 'unclear' }
+}
+
 // Called when a DM comes in and there's a pending availability session
 export async function handleAvailabilityReply(bot, msg, session) {
   const userId = msg.from?.id
   const text = msg.text?.trim()
   if (!text || !userId) return
 
-  const lower = text.toLowerCase()
   const shiftMap = session.shift_map ?? {}
+  const parsed = parseAvailabilityResponse(text, shiftMap)
 
-  // ── Unavailable ──────────────────────────────────────────────────────────────
-  if (/^(off|can'?t|no|nope|none|unavailable|not available|busy all week)$/i.test(lower)) {
+  if (parsed.type === 'unavailable') {
     await saveAvailability(userId, session.group_id, session.week_start, [], false, true, text)
     await updateAvailabilitySessionStatus(userId, session.week_start, 'responded')
     await bot.sendMessage(msg.chat.id, `Got it — you're off next week. Rest up! 😊`)
@@ -173,8 +193,7 @@ export async function handleAvailabilityReply(bot, msg, session) {
     return
   }
 
-  // ── All shifts ───────────────────────────────────────────────────────────────
-  if (/^(all|all shifts|every shift|every day|all week|available all|yes all)$/i.test(lower)) {
+  if (parsed.type === 'all_week') {
     const allShiftIds = Object.values(shiftMap).map(s => Number(s.id))
     await saveAvailability(userId, session.group_id, session.week_start, allShiftIds, true, false, text)
     await updateAvailabilitySessionStatus(userId, session.week_start, 'responded')
@@ -188,34 +207,28 @@ export async function handleAvailabilityReply(bot, msg, session) {
     return
   }
 
-  // ── Numbered selection ───────────────────────────────────────────────────────
-  const numbers = (text.match(/\d+/g) ?? []).map(String)
-  const matchedShifts = numbers
-    .filter(n => shiftMap[n])
-    .map(n => shiftMap[n])
-
-  if (matchedShifts.length === 0) {
-    const shiftListText = formatShiftList(shiftMap)
+  if (parsed.type === 'specific_shifts') {
+    const matchedShifts = parsed.numbers.map(n => shiftMap[n])
+    const shiftIds = matchedShifts.map(s => Number(s.id))
+    await saveAvailability(userId, session.group_id, session.week_start, shiftIds, false, false, text)
+    await updateAvailabilitySessionStatus(userId, session.week_start, 'responded')
     await bot.sendMessage(
       msg.chat.id,
-      `I didn't catch that. Reply with shift numbers:\n\n${shiftListText}\n\n` +
-      `• Numbers like *1 3 5*\n• *all* for every shift\n• *off* if you can't work`,
-      { parse_mode: 'Markdown' }
+      `✅ Got it! I'll factor that in when building the schedule. I'll DM you your assigned shifts once it's ready.`
     )
+    logger.bot(`User ${userId} available for ${shiftIds.length} shift(s) week ${session.week_start}`)
+    await checkAllResponded(bot, session)
     return
   }
 
-  const shiftIds = matchedShifts.map(s => Number(s.id))
-  await saveAvailability(userId, session.group_id, session.week_start, shiftIds, false, false, text)
-  await updateAvailabilitySessionStatus(userId, session.week_start, 'responded')
-
+  // unclear
+  const shiftListText = formatShiftList(shiftMap)
   await bot.sendMessage(
     msg.chat.id,
-    `✅ Got it! I'll factor that in when building the schedule. I'll DM you your assigned shifts once it's ready.`
+    `I didn't catch that. Reply with shift numbers:\n\n${shiftListText}\n\n` +
+    `• Numbers like *1 3 5*\n• *all* for every shift\n• *off* if you can't work`,
+    { parse_mode: 'Markdown' }
   )
-
-  logger.bot(`User ${userId} available for ${shiftIds.length} shift(s) week ${session.week_start}`)
-  await checkAllResponded(bot, session)
 }
 
 async function checkAllResponded(bot, session) {

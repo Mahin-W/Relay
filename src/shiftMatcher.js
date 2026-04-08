@@ -50,9 +50,10 @@ function parseHour(timeStr) {
 
 // Returns the best matching shift for a group, or null if nothing fits.
 // low_confidence: true when the best match is ambiguous (close runner-up).
-export async function matchShift(groupId, intentShift, messageText) {
+// Pass shifts directly (for tests) to skip the DB call.
+export async function matchShift(groupId, intentShift, messageText, shifts = null) {
   try {
-    const shifts = await getShiftsForGroup(groupId)
+    if (!shifts) shifts = await getShiftsForGroup(groupId)
     if (shifts.length === 0) return null
     if (shifts.length === 1) {
       // Only one shift — always a match, but flag low confidence if the

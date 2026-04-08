@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS coverage_requests (
   group_name TEXT,
   shift_description TEXT NOT NULL,
   requested_by TEXT NOT NULL,
+  matched_shift_id UUID,
+  week_start DATE,
   status TEXT NOT NULL DEFAULT 'open',
   covered_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -64,3 +66,28 @@ CREATE POLICY "Allow all for anon on coverage_outreach"
 ALTER TABLE staff_dms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coverage_outreach ENABLE ROW LEVEL SECURITY;
+
+-- Shift trade requests
+CREATE TABLE IF NOT EXISTS trade_requests (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  group_name TEXT,
+  requester_id BIGINT NOT NULL,
+  requester_name TEXT NOT NULL,
+  shift_id UUID,
+  shift_description TEXT NOT NULL,
+  week_start DATE,
+  status TEXT NOT NULL DEFAULT 'open',
+  accepted_by_id BIGINT,
+  accepted_by_name TEXT,
+  accepted_shift_id UUID,
+  accepted_shift_description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT valid_trade_status CHECK (status IN ('open', 'completed', 'cancelled'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_trade_group_status ON trade_requests(group_id, status);
+
+ALTER TABLE trade_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for anon on trade_requests"
+  ON trade_requests FOR ALL TO anon USING (true) WITH CHECK (true);

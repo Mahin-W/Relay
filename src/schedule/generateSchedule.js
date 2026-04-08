@@ -30,49 +30,71 @@ export function formatWeekLabel(weekStart) {
 // Core scheduling algorithm.
 // Returns { assignments, gaps, weekStart, scheduleId }
 // Never throws — gaps are surfaced, never silently dropped.
-export async function generateWeeklySchedule(groupId, weekStart) {
+//
+// mockData bypasses all DB calls (for tests):
+//   { shifts, staff, availability, requirements }
+//   staff must include userId already resolved (no DM-pool name matching needed)
+export async function generateWeeklySchedule(groupId, weekStart, mockData = null) {
   try {
-    // ── Load all data ─────────────────────────────────────────────────────────
-    const [shifts, staff, availabilityRecords, dmPoolBase, setupSession] = await Promise.all([
-      getShiftsForGroup(groupId),
-      getStaffForGroup(groupId),
-      getAvailabilityForGroup(groupId, weekStart),
-      getGroupMembersWithDm(groupId),
-      getSetupSession(groupId),
-    ])
+    let shifts, resolvedStaff, availabilityRecords, requirements
 
-    // Always include the manager in the pool (they may not be in staff_dms)
-    const dmPool = [...dmPoolBase]
-    if (setupSession?.manager_id && setupSession?.dm_chat_id) {
-      const alreadyIn = dmPool.some(m => m.userId === setupSession.manager_id)
-      if (!alreadyIn) {
-        const managerMember = await getGroupMemberName(setupSession.manager_id, groupId)
-        dmPool.push({ userId: setupSession.manager_id, firstName: managerMember, dmChatId: setupSession.dm_chat_id })
-      }
-    }
-
-    // Load requirements for every shift in parallel
-    const reqArrays = await Promise.all(
-      shifts.map(s => getShiftRequirements(s.id).then(reqs => reqs.map(r => ({ ...r, shift_id: s.id }))))
-    )
-    const requirements = reqArrays.flat()
-
-    // ── Resolve staff: match staff records to Telegram users by first name ───
-    // This links staff.role to a user_id so we can check their availability.
-    const resolvedStaff = staff.map(s => {
-      const nameLower = (s.name || '').toLowerCase().trim()
-      const matched = dmPool.find(m => {
-        const mLower = (m.firstName || '').toLowerCase().trim()
-        return mLower === nameLower || nameLower.startsWith(mLower) || mLower.startsWith(nameLower)
-      })
-      return {
+    if (mockData) {
+      // ── Test path: use provided data directly ─────────────────────────────
+      shifts = mockData.shifts ?? []
+      requirements = mockData.requirements ?? []
+      availabilityRecords = mockData.availability ?? []
+      resolvedStaff = (mockData.staff ?? []).map(s => ({
         staffId: s.id,
         name: s.name,
         role: s.role,
-        userId: matched?.userId ?? null,
-        dmChatId: matched?.dmChatId ?? null,
+        userId: s.userId ?? null,
+        dmChatId: s.dmChatId ?? null,
+      }))
+    } else {
+      // ── Live path: load all data from DB ──────────────────────────────────
+      const [liveShifts, liveStaff, liveAvail, dmPoolBase, setupSession] = await Promise.all([
+        getShiftsForGroup(groupId),
+        getStaffForGroup(groupId),
+        getAvailabilityForGroup(groupId, weekStart),
+        getGroupMembersWithDm(groupId),
+        getSetupSession(groupId),
+      ])
+
+      shifts = liveShifts
+      availabilityRecords = liveAvail
+
+      // Always include the manager in the pool (they may not be in staff_dms)
+      const dmPool = [...dmPoolBase]
+      if (setupSession?.manager_id && setupSession?.dm_chat_id) {
+        const alreadyIn = dmPool.some(m => m.userId === setupSession.manager_id)
+        if (!alreadyIn) {
+          const managerMember = await getGroupMemberName(setupSession.manager_id, groupId)
+          dmPool.push({ userId: setupSession.manager_id, firstName: managerMember, dmChatId: setupSession.dm_chat_id })
+        }
       }
-    })
+
+      // Load requirements for every shift in parallel
+      const reqArrays = await Promise.all(
+        liveShifts.map(s => getShiftRequirements(s.id).then(reqs => reqs.map(r => ({ ...r, shift_id: s.id }))))
+      )
+      requirements = reqArrays.flat()
+
+      // Resolve staff: match staff records to Telegram users by first name
+      resolvedStaff = liveStaff.map(s => {
+        const nameLower = (s.name || '').toLowerCase().trim()
+        const matched = dmPool.find(m => {
+          const mLower = (m.firstName || '').toLowerCase().trim()
+          return mLower === nameLower || nameLower.startsWith(mLower) || mLower.startsWith(nameLower)
+        })
+        return {
+          staffId: s.id,
+          name: s.name,
+          role: s.role,
+          userId: matched?.userId ?? null,
+          dmChatId: matched?.dmChatId ?? null,
+        }
+      })
+    }
 
     // ── Availability lookup ───────────────────────────────────────────────────
     const availMap = {}
@@ -159,8 +181,8 @@ export async function generateWeeklySchedule(groupId, weekStart) {
 
     logger.bot(`Schedule generated: ${assignments.length} assignments, ${gaps.length} gaps`)
 
-    // ── Persist draft ─────────────────────────────────────────────────────────
-    const saved = await saveGeneratedSchedule(groupId, weekStart, assignments, gaps)
+    // ── Persist draft (skipped in test/mock mode) ─────────────────────────────
+    const saved = mockData ? null : await saveGeneratedSchedule(groupId, weekStart, assignments, gaps)
 
     return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null }
   } catch (err) {
