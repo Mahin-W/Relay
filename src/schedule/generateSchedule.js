@@ -2,6 +2,8 @@ import { getShiftsForGroup, getShiftRequirements, getStaffForGroup, getSetupSess
 import { getAvailabilityForGroup, saveGeneratedSchedule } from '../availability/availabilityDb.js'
 import { getGroupMembersWithDm, getGroupMemberName } from '../db.js'
 import { logger } from '../logger.js'
+import { detectClopenings } from './clopen.js'
+import { calculateWeeklyHours, detectHoursIssues } from './hoursTracker.js'
 
 const DAY_ORDER = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 }
 
@@ -181,10 +183,17 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
 
     logger.bot(`Schedule generated: ${assignments.length} assignments, ${gaps.length} gaps`)
 
+    // ── Detect scheduling issues ───────────────────────────────────────────────
+    const clopenings = detectClopenings(assignments, shifts)
+    const hoursMap = calculateWeeklyHours(assignments, shifts)
+    const hoursIssues = detectHoursIssues(hoursMap)
+    if (clopenings.length > 0) logger.bot(`Clopening warnings: ${clopenings.length}`)
+    if (hoursIssues.overtime.length > 0) logger.bot(`Overtime warnings: ${hoursIssues.overtime.length}`)
+
     // ── Persist draft (skipped in test/mock mode) ─────────────────────────────
     const saved = mockData ? null : await saveGeneratedSchedule(groupId, weekStart, assignments, gaps)
 
-    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null }
+    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues }
   } catch (err) {
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
     return { assignments: [], gaps: [], weekStart, scheduleId: null }

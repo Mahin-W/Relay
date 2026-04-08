@@ -10,6 +10,7 @@ import { handleManagerTimeOffReply } from '../timeOff/handleTimeOff.js'
 import { isDmConfirmation, parseMessage } from '../parseMessage.js'
 import { getOutreachByUser } from '../db.js'
 import { logger } from '../logger.js'
+import { isReceiptConfirmation, handleReceiptConfirmation } from '../schedule/readReceipts.js'
 
 export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   const text = msg.text.trim()
@@ -74,6 +75,15 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
       logger.error(`Availability reply handling failed: ${err.message}`)
     }
     return
+  }
+
+  if (isReceiptConfirmation(text)) {
+    try {
+      await handleReceiptConfirmation(bot, msg)
+      return
+    } catch (err) {
+      logger.error(`Receipt confirmation failed: ${err.message}`)
+    }
   }
 
   const managerGroup = await getManagerGroup(userId)

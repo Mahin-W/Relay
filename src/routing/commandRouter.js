@@ -1,9 +1,12 @@
 import { getSetupSession, getBotAdmins, addBotAdmin, removeBotAdmin } from '../setup/setupDb.js'
 import { startAvailabilityCollection } from '../availability/collectAvailability.js'
 import { resetAvailabilityForGroup, getPublishedSchedule } from '../availability/availabilityDb.js'
-import { generateWeeklySchedule, formatScheduleMessage, getNextWeekStart } from '../schedule/generateSchedule.js'
+import { generateWeeklySchedule, formatScheduleMessage, getNextWeekStart, formatWeekLabel } from '../schedule/generateSchedule.js'
 import { getManagerGroup } from '../setup/setupDb.js'
 import { logger } from '../logger.js'
+import { formatClopeningWarning } from '../schedule/clopen.js'
+import { calculateWeeklyHours, formatHoursWarning } from '../schedule/hoursTracker.js'
+import { getUnconfirmedStaff } from '../schedule/readReceipts.js'
 
 // Returns true if a command was handled, false otherwise
 export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
@@ -56,8 +59,14 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
       const weekStart = getNextWeekStart()
       const schedule = await generateWeeklySchedule(groupId, weekStart)
       const formatted = formatScheduleMessage(schedule.assignments, schedule.gaps, weekStart)
+      const clopeningWarn = formatClopeningWarning(schedule.clopenings ?? [])
+      const hoursWarn = formatHoursWarning(schedule.hoursIssues ?? { overtime: [], underScheduled: [] })
+      const hasWarnings = clopeningWarn || hoursWarn
+      const reviewPrompt = hasWarnings
+        ? `Reply *approve anyway* to publish despite warnings, *approve* if you've fixed them, or *regenerate* for a different arrangement.`
+        : `Reply *approve* to publish, or *regenerate* for a different arrangement.`
       await bot.sendMessage(managerGroup.dm_chat_id,
-        `📋 *Draft Schedule Ready*\n\n${formatted}\n\nReply *approve* to publish, or *regenerate* for a different arrangement.`,
+        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}\n${reviewPrompt}`,
         { parse_mode: 'Markdown' })
       await bot.sendMessage(msg.chat.id, `📋 Draft schedule sent to the manager for review.`)
     } catch (err) {
@@ -78,6 +87,55 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
       }
     } catch (err) {
       logger.error(`/schedule failed: ${err.message}`)
+      await bot.sendMessage(msg.chat.id, `Something went wrong — try again.`)
+    }
+    return true
+  }
+
+  if (cmd('receipts')) {
+    const admin = await isAuthorizedAdmin(groupId, userId)
+    if (!admin) { await bot.sendMessage(msg.chat.id, `⚠️ Only group admins can check receipt status.`); return true }
+    try {
+      const weekStart = getNextWeekStart()
+      const unconfirmed = await getUnconfirmedStaff(groupId, weekStart)
+      if (unconfirmed.length === 0) {
+        await bot.sendMessage(msg.chat.id, `✅ All staff have confirmed next week's schedule.`)
+      } else {
+        const names = unconfirmed.map(s => `• ${s.name}`).join('\n')
+        await bot.sendMessage(msg.chat.id, `⏳ *Awaiting confirmation from:*\n${names}`, { parse_mode: 'Markdown' })
+      }
+    } catch (err) {
+      logger.error(`/receipts failed: ${err.message}`)
+      await bot.sendMessage(msg.chat.id, `Something went wrong — try again.`)
+    }
+    return true
+  }
+
+  if (cmd('hours')) {
+    const admin = await isAuthorizedAdmin(groupId, userId)
+    if (!admin) { await bot.sendMessage(msg.chat.id, `⚠️ Only group admins can view hour summaries.`); return true }
+    try {
+      const schedule = await getPublishedSchedule(groupId)
+      if (!schedule) {
+        await bot.sendMessage(msg.chat.id, `No published schedule yet. Run */makeschedule* to generate one.`, { parse_mode: 'Markdown' })
+        return true
+      }
+      const hoursMap = calculateWeeklyHours(schedule.assignments ?? [], [])
+      const entries = Object.values(hoursMap).sort((a, b) => b.totalHours - a.totalHours)
+      if (entries.length === 0) {
+        await bot.sendMessage(msg.chat.id, `No scheduled hours found for this week.`)
+        return true
+      }
+      const weekLabel = formatWeekLabel(schedule.week_start)
+      const lines = entries.map(e =>
+        `${e.staffName}: ${e.totalHours.toFixed(1)} hrs (${e.shiftCount} shift${e.shiftCount !== 1 ? 's' : ''})`
+      ).join('\n')
+      const totalHours = entries.reduce((sum, e) => sum + e.totalHours, 0)
+      await bot.sendMessage(msg.chat.id,
+        `📊 *Scheduled hours — week of ${weekLabel}*\n\n${lines}\n\nTotal: ${totalHours.toFixed(1)} hrs across ${entries.length} staff`,
+        { parse_mode: 'Markdown' })
+    } catch (err) {
+      logger.error(`/hours failed: ${err.message}`)
       await bot.sendMessage(msg.chat.id, `Something went wrong — try again.`)
     }
     return true

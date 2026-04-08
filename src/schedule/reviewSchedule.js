@@ -5,6 +5,7 @@ import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from '
 import { getGroupMembersWithDm } from '../db.js'
 import { logger } from '../logger.js'
 import { applyEdit } from './scheduleEditor.js'
+import { sendPersonalSchedule } from './readReceipts.js'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
@@ -16,7 +17,7 @@ export async function handleManagerReview(bot, msg, schedule, managerGroup) {
   const text = msg.text?.trim() ?? ''
   const lower = text.toLowerCase()
 
-  if (lower === 'approve') {
+  if (lower === 'approve' || lower === 'approve anyway') {
     await publishSchedule(bot, schedule, managerGroup)
     return
   }
@@ -115,16 +116,9 @@ export async function publishSchedule(bot, schedule, managerGroup) {
         return mLower === nameLower || nameLower.startsWith(mLower) || mLower.startsWith(nameLower)
       })
       if (!member?.dmChatId) continue
-      const myShifts = assignments.filter(a => a.staffId === staff.id)
+      const staffMember = { id: staff.id, name: staff.name, dmChatId: member.dmChatId }
       try {
-        if (myShifts.length === 0) {
-          await bot.sendMessage(member.dmChatId, `👋 Hi ${staff.name}! You don't have any shifts next week (${weekLabel}). Enjoy your time off! 😊`)
-        } else {
-          const shiftLines = myShifts.map(s => `• ${s.dayOfWeek} — ${s.shiftName}, ${s.startTime}–${s.endTime}`).join('\n')
-          await bot.sendMessage(member.dmChatId,
-            `👋 Hi ${staff.name}! Here's your schedule for next week:\n\n📅 *Your shifts (${weekLabel}):*\n${shiftLines}\n\nQuestions? Contact ${restaurantName}.`,
-            { parse_mode: 'Markdown' })
-        }
+        await sendPersonalSchedule(bot, schedule.group_id, staffMember, assignments, schedule.week_start)
       } catch (err) { logger.error(`Could not DM ${staff.name} their schedule: ${err.message}`) }
     }
 
