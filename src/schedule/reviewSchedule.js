@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk'
+import { groq, groqWithRetry } from '../parsers/groq.js'
 import { getSetupSession, getStaffForGroup, addScheduleAssignment, getShiftsForGroup, getShiftRequirements } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
@@ -6,8 +6,6 @@ import { getGroupMembersWithDm } from '../db.js'
 import { logger } from '../logger.js'
 import { applyEdit } from './scheduleEditor.js'
 import { sendPersonalSchedule } from './readReceipts.js'
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
 const REVIEW_PROMPT = `Reply *approve* to publish, *regenerate* for a new arrangement, or describe an edit:
 • _remove Mahin from Monday Morning Prep_
@@ -36,7 +34,7 @@ export async function handleManagerReview(bot, msg, schedule, managerGroup) {
   }
 
   const edit = await parseEditIntent(text, schedule)
-  if (edit.action !== 'unclear') {
+  if (edit && edit.action !== 'unclear') {
     await applyEdit(bot, msg, schedule, REVIEW_PROMPT, edit)
     return
   }
@@ -51,7 +49,7 @@ async function parseEditIntent(text, schedule) {
     const shiftNames = [...new Set([...filledShifts, ...gapShifts])]
     const staffNames = [...new Set((schedule.assignments ?? []).map(a => a.staffName))]
 
-    const completion = await groq.chat.completions.create({
+    const completion = await groqWithRetry(() => groq.chat.completions.create({
       model: 'llama-3.1-8b-instant',
       temperature: 0.0,
       max_tokens: 120,
@@ -77,13 +75,13 @@ Rules:
         },
         { role: 'user', content: text },
       ],
-    })
+    }))
     const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}')
     logger.parse(`Edit intent: ${JSON.stringify(result)}`)
     return result.action ? result : { action: 'unclear' }
   } catch (err) {
     logger.error(`parseEditIntent failed: ${err.message}`)
-    return { action: 'unclear' }
+    return null
   }
 }
 
