@@ -1,4 +1,5 @@
 import { getShiftsForGroup, getShiftRequirements, getStaffForGroup, getSetupSession } from '../setup/setupDb.js'
+import { buildRotationPriorityMap, applyRotationToAssignments } from '../fairness/rotationTracker.js'
 import { getAvailabilityForGroup, saveGeneratedSchedule } from '../availability/availabilityDb.js'
 import { getGroupMembersWithDm, getGroupMemberName } from '../db.js'
 import { logger } from '../logger.js'
@@ -189,6 +190,18 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
             shortfall: req.count - picked.length,
           })
         }
+      }
+    }
+
+    // ── Apply rotation fairness (live mode only) ───────────────────────────────
+    if (!mockData && assignments.length > 0) {
+      try {
+        const priorityMap = await buildRotationPriorityMap(groupId, shifts, resolvedStaff)
+        const fairAssignments = applyRotationToAssignments(assignments, priorityMap, shifts)
+        assignments.length = 0
+        assignments.push(...fairAssignments)
+      } catch (fairErr) {
+        logger.error(`Rotation fairness failed (non-fatal): ${fairErr.message}`)
       }
     }
 

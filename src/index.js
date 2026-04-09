@@ -10,6 +10,7 @@ import { startNoShowCron } from './noshow/noShowWarning.js'
 import { getReliabilityScores } from './reliability/reliabilityDb.js'
 import { formatReliabilityReport } from './reliability/reliabilityScore.js'
 import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.js'
+import { handleRotationCommand } from './fairness/rotationTracker.js'
 import { updateRoleRate } from './setup/setupDb.js'
 import { sendPayReport, formatStaffPayHistory } from './payroll/payReport.js'
 import { getPayrollHistory } from './payroll/payDb.js'
@@ -179,6 +180,11 @@ bot.onText(/^\/reliability/, async (msg) => {
     await bot.sendMessage(groupId, '📨 Reliability report sent to your DM.')
     await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
   }
+})
+
+bot.onText(/^\/rotation/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  await handleRotationCommand(bot, msg)
 })
 
 process.on('SIGINT', () => {
