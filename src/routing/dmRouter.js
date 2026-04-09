@@ -7,6 +7,8 @@ import { handleAvailabilityReply } from '../availability/collectAvailability.js'
 import { handleManagerReview } from '../schedule/reviewSchedule.js'
 import { handleDmConfirmation, handleDmCoverageTradeOffer } from '../handleCoverage.js'
 import { handleManagerTimeOffReply } from '../timeOff/handleTimeOff.js'
+import { handleScheduleQuery, handleHoursQuery, isScheduleQuery, isHoursQuery } from '../schedule/selfService.js'
+import { handleStaffPayQuery, handleStaffHistoryQuery, isPayQuery, isHistoryQuery } from '../payroll/staffPayService.js'
 import { isDmConfirmation, parseMessage } from '../parseMessage.js'
 import { getOutreachByUser } from '../db.js'
 import { logger } from '../logger.js'
@@ -105,6 +107,34 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
       }
       return
     }
+  }
+
+  if (isHistoryQuery(text)) {
+    try { await handleStaffHistoryQuery(bot, msg) } catch (err) {
+      logger.error(`Staff pay history query failed: ${err.message}`)
+    }
+    return
+  }
+
+  if (isPayQuery(text)) {
+    try { await handleStaffPayQuery(bot, msg) } catch (err) {
+      logger.error(`Staff pay query failed: ${err.message}`)
+    }
+    return
+  }
+
+  if (isHoursQuery(text)) {
+    try { await handleHoursQuery(bot, msg) } catch (err) {
+      logger.error(`Hours query failed: ${err.message}`)
+    }
+    return
+  }
+
+  if (isScheduleQuery(text)) {
+    try { await handleScheduleQuery(bot, msg) } catch (err) {
+      logger.error(`Schedule query failed: ${err.message}`)
+    }
+    return
   }
 
   if (await isDmConfirmation(text)) {
