@@ -43,7 +43,14 @@ const LLM_SUITES = [
   { id: 'unit_oncall_parse', file: 'unit/onCallParse.test.js', label: 'Unit — On-Call Parser (LLM)', timeout: 300_000 },
 ]
 
-const TEST_SUITES = [...FAST_SUITES, ...LLM_SUITES]
+const args = process.argv.slice(2)
+const skipLlm = args.includes('--skip-llm')
+const llmOnly = args.includes('--llm-only')
+
+const fastToRun = llmOnly ? [] : FAST_SUITES
+const llmToRun = skipLlm ? [] : LLM_SUITES
+
+const TEST_SUITES = [...fastToRun, ...llmToRun]
 
 // ── Suite runner ─────────────────────────────────────────────────────────────
 
@@ -163,18 +170,29 @@ async function main() {
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   console.log('  Relay Parallel Test Suite')
-  console.log(`  ${TEST_SUITES.length} suites launching simultaneously`)
+  console.log(`  ${TEST_SUITES.length} suites launching`)
+  if (skipLlm) console.log('  Mode: --skip-llm (fast suites only)')
+  if (llmOnly) console.log('  Mode: --llm-only (LLM suites only)')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
 
   // Phase 1: fast suites run in parallel
-  console.log(`Phase 1: ${FAST_SUITES.length} fast suites in parallel...`)
-  const fastResults = await Promise.all(FAST_SUITES.map(suite => runSuite(suite)))
+  let fastResults = []
+  if (fastToRun.length > 0) {
+    console.log(`Phase 1: ${fastToRun.length} fast suites in parallel...`)
+    fastResults = await Promise.all(fastToRun.map(suite => runSuite(suite)))
+  }
 
   // Phase 2: LLM suites run sequentially to respect Groq TPM rate limits
-  console.log(`Phase 2: ${LLM_SUITES.length} LLM suites sequentially...\n`)
   const llmResults = []
-  for (const suite of LLM_SUITES) {
-    llmResults.push(await runSuite(suite))
+  if (llmToRun.length > 0) {
+    console.log(`Phase 2: ${llmToRun.length} LLM suites sequentially...\n`)
+    for (let i = 0; i < llmToRun.length; i++) {
+      if (i > 0) {
+        process.stdout.write('\n⏳ Waiting 62s before next LLM suite (Groq rate limit)...\n')
+        await new Promise(r => setTimeout(r, 62_000))
+      }
+      llmResults.push(await runSuite(llmToRun[i]))
+    }
   }
   const results = [...fastResults, ...llmResults]
   const failures = printResults(results, 1)
