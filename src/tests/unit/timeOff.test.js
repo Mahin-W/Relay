@@ -209,7 +209,7 @@ test('time_off logic: handleManagerTimeOffReply calls saveAvailability when appr
       return { id: 1 }
     },
   })
-  const msg = { text: 'approve Alice', from: { id: 9999, first_name: 'Manager' }, chat: { id: 99999, type: 'private' } }
+  const msg = makeGroupMsg({ text: 'approve Alice', from: { id: 9999, first_name: 'Manager' }, chat: { id: 99999, type: 'private' } })
 
   await handleManagerTimeOffReply(bot, msg, db)
 

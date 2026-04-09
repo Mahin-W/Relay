@@ -8,7 +8,7 @@ import { getSetupSession, getManagerGroup } from '../setup/setupDb.js'
 import { saveAvailability } from '../availability/availabilityDb.js'
 import { logger } from '../logger.js'
 
-function computeWeekStart(dateString) {
+function computeWeekStart(dateString, today = new Date()) {
   if (!dateString || dateString === 'unknown date') return null
 
   const norm = dateString.trim().toLowerCase()
@@ -16,7 +16,6 @@ function computeWeekStart(dateString) {
 
   const dayIndex = DAYS.findIndex(d => norm.includes(d))
   if (dayIndex !== -1) {
-    const today = new Date()
     const todayDay = today.getDay()
     let daysAhead = dayIndex - todayDay
     if (daysAhead <= 0) daysAhead += 7
@@ -29,7 +28,7 @@ function computeWeekStart(dateString) {
     return monday.toISOString().slice(0, 10)
   }
 
-  const currentYear = new Date().getFullYear()
+  const currentYear = today.getFullYear()
   const candidates = [
     new Date(`${dateString} ${currentYear}`),
     new Date(dateString),
@@ -44,6 +43,7 @@ function computeWeekStart(dateString) {
     }
   }
 
+  logger.warn(`computeWeekStart: could not parse date "${dateString}" — week_start will be null`)
   return null
 }
 
