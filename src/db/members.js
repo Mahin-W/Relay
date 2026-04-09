@@ -56,9 +56,11 @@ export async function getGroupMembersWithDm(groupId) {
 
     const groupUserIds = new Set((members ?? []).map(m => m.user_id))
 
-    const result = groupUserIds.size > 0
-      ? dms.filter(d => groupUserIds.has(d.user_id))
-      : dms
+    if (groupUserIds.size === 0) {
+      logger.warn(`getGroupMembersWithDm: no registered members for group ${groupId} — returning empty list`)
+      return []
+    }
+    const result = dms.filter(d => groupUserIds.has(d.user_id))
 
     const staff = result.map(d => ({ userId: d.user_id, firstName: d.first_name, dmChatId: d.dm_chat_id }))
     logger.db(`Found ${staff.length} registered staff to DM`)

@@ -70,6 +70,32 @@ test('does not DM the requester themselves', async () => {
   assert.equal(requesterMsgs.length, 0, 'should not DM the person requesting coverage')
 })
 
+test('no DMs sent when getGroupMembersWithDm returns empty array', async () => {
+  const db = {
+    saveRequest: async () => ({ id: 1, shift_description: 'Morning', requested_by: 'Alice', status: 'open' }),
+    getGroupMembersWithDm: async () => [],
+    saveOutreach: async () => {},
+    updateCoverageRequestShift: async () => {},
+    getShiftRoster: async () => [],
+    getOnCallStaff: async () => [],
+    recordEvent: async () => {},
+  }
+  const mockBotLocal = { messages: [], sendMessage: async (id, text) => mockBotLocal.messages.push({ chatId: id, text }) }
+  const msg = {
+    chat: { id: -500, title: 'Test Group', type: 'group' },
+    from: { id: 1001, first_name: 'Alice' },
+    text: 'can someone cover my morning shift',
+  }
+  const intent = {
+    type: 'coverage_request', shift: 'Morning', person: 'Alice',
+    _preResolvedShift: { id: 'shift-1', name: 'Morning', day_of_week: 'Monday', start_time: '9:00', end_time: '17:00' },
+    _preResolvedWeekStart: '2026-04-13',
+  }
+  await handleCoverageRequest(mockBotLocal, msg, intent, db)
+  const dms = mockBotLocal.messages.filter(m => m.chatId !== msg.chat.id)
+  assert.strictEqual(dms.length, 0, 'No DMs should be sent when staff list is empty')
+})
+
 // ── handleCoverageConfirmation ───────────────────────────────────────────────
 
 test('confirmation posts covered message when open request exists', async () => {
