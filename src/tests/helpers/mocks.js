@@ -105,13 +105,14 @@ export class MockDB {
   _nextId() { return this._id++ }
 
   // Coverage requests
-  async saveRequest(groupId, groupName, shiftDesc, requestedBy) {
+  async saveRequest(groupId, groupName, shiftDesc, requestedBy, requesterTelegramId = null) {
     const row = {
       id: this._nextId(),
       group_id: String(groupId),
       group_name: groupName,
       shift_description: shiftDesc,
       requested_by: requestedBy,
+      requester_telegram_id: requesterTelegramId,
       matched_shift_id: null,
       week_start: null,
       status: 'open',

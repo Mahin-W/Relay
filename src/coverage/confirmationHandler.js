@@ -77,7 +77,12 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
     return
   }
 
-  if (volunteer.toLowerCase() === openRequest.requested_by?.toLowerCase()) {
+  const volunteerId = msg.from?.id
+  const isRequester = volunteerId && openRequest.requester_telegram_id
+    ? String(volunteerId) === String(openRequest.requester_telegram_id)
+    : volunteer.toLowerCase() === openRequest.requested_by?.toLowerCase()  // legacy fallback
+
+  if (isRequester) {
     await bot.sendMessage(msg.chat.id, `You can't cover your own shift, ${volunteer} 😅`)
     return
   }
@@ -120,7 +125,11 @@ export async function handleDmConfirmation(bot, msg) {
     return
   }
 
-  if (volunteer.toLowerCase() === openRequest.requested_by?.toLowerCase()) {
+  const isDmRequester = userId && openRequest.requester_telegram_id
+    ? String(userId) === String(openRequest.requester_telegram_id)
+    : volunteer.toLowerCase() === openRequest.requested_by?.toLowerCase()  // legacy fallback
+
+  if (isDmRequester) {
     await bot.sendMessage(msg.chat.id, `You can't cover your own shift 😅`)
     return
   }

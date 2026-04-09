@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS coverage_requests (
   group_name TEXT,
   shift_description TEXT NOT NULL,
   requested_by TEXT NOT NULL,
+  requester_telegram_id BIGINT,
   matched_shift_id UUID,
   week_start DATE,
   status TEXT NOT NULL DEFAULT 'open',

@@ -152,6 +152,57 @@ test("can't cover own shift", async () => {
   assert.ok(msgs.some(m => m.text.includes("can't cover your own")), 'expected self-cover rejection')
 })
 
+test('self-cover NOT blocked when same name but different telegram ID', async () => {
+  const bot = new MockBot()
+  const db = makeMockDb({
+    getOpenRequest: async () => ({
+      id: 'req-2',
+      shift_description: 'friday morning',
+      requested_by: 'Alex',
+      requester_telegram_id: 9001,  // original requester's ID
+      group_id: GROUP_ID,
+      matched_shift_id: null,
+    }),
+    markCovered: async () => true,
+  })
+  // Different person also named Alex (different Telegram ID)
+  const intent = { type: 'coverage_confirmation', person: 'Alex' }
+  const msg = makeMsg({ firstName: 'Alex', userId: 9002, chatId: GROUP_ID })  // different ID
+
+  await handleCoverageConfirmation(bot, msg, intent, db)
+
+  const msgs = bot.messagesTo(GROUP_ID)
+  assert.ok(
+    !msgs.some(m => m.text.includes("can't cover your own")),
+    'different ID should NOT be blocked even with same name'
+  )
+  assert.ok(
+    msgs.some(m => m.text.includes('Covered') || m.text.includes('covered')),
+    'volunteer with same name but different ID should succeed'
+  )
+})
+
+test('self-cover blocked when same telegram ID', async () => {
+  const bot = new MockBot()
+  const db = makeMockDb({
+    getOpenRequest: async () => ({
+      id: 'req-3',
+      shift_description: 'friday morning',
+      requested_by: 'Alice',
+      requester_telegram_id: 1001,
+      group_id: GROUP_ID,
+      matched_shift_id: null,
+    }),
+  })
+  const intent = { type: 'coverage_confirmation', person: 'Alice' }
+  const msg = makeMsg({ firstName: 'Alice', userId: 1001, chatId: GROUP_ID })  // same ID
+
+  await handleCoverageConfirmation(bot, msg, intent, db)
+
+  const msgs = bot.messagesTo(GROUP_ID)
+  assert.ok(msgs.some(m => m.text.includes("can't cover your own")), 'same telegram ID should be blocked')
+})
+
 // ── Full-cycle integration test ───────────────────────────────────────────────
 
 describe('Coverage — full request → confirmation cycle', () => {

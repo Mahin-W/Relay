@@ -3,12 +3,12 @@ import { logger } from '../logger.js'
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
-export async function saveRequest(groupId, groupName, shiftDescription, requestedBy) {
+export async function saveRequest(groupId, groupName, shiftDescription, requestedBy, requesterTelegramId = null) {
   try {
     logger.db(`Saving coverage request for group ${groupId}: "${shiftDescription}"`)
     const { data, error } = await supabase
       .from('coverage_requests')
-      .insert({ group_id: groupId, group_name: groupName, shift_description: shiftDescription, requested_by: requestedBy })
+      .insert({ group_id: groupId, group_name: groupName, shift_description: shiftDescription, requested_by: requestedBy, requester_telegram_id: requesterTelegramId })
       .select()
       .single()
 

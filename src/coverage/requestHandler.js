@@ -45,7 +45,7 @@ export async function handleCoverageRequest(bot, msg, intent, db = null) {
   const requesterId = msg.from?.id
   const shiftDesc = intent.shift || 'unspecified shift'
 
-  const request = await _saveRequest(groupId, groupName, shiftDesc, requestedBy)
+  const request = await _saveRequest(groupId, groupName, shiftDesc, requestedBy, msg.from?.id ?? null)
 
   // Record reliability event — fire-and-forget, never crashes handler
   if (requesterId) {
