@@ -8,6 +8,45 @@ import { getSetupSession, getManagerGroup } from '../setup/setupDb.js'
 import { saveAvailability } from '../availability/availabilityDb.js'
 import { logger } from '../logger.js'
 
+function computeWeekStart(dateString) {
+  if (!dateString || dateString === 'unknown date') return null
+
+  const norm = dateString.trim().toLowerCase()
+  const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+  const dayIndex = DAYS.findIndex(d => norm.includes(d))
+  if (dayIndex !== -1) {
+    const today = new Date()
+    const todayDay = today.getDay()
+    let daysAhead = dayIndex - todayDay
+    if (daysAhead <= 0) daysAhead += 7
+    const target = new Date(today)
+    target.setDate(today.getDate() + daysAhead)
+    const dayOfWeek = target.getDay()
+    const daysFromMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    const monday = new Date(target)
+    monday.setDate(target.getDate() + daysFromMonday)
+    return monday.toISOString().slice(0, 10)
+  }
+
+  const currentYear = new Date().getFullYear()
+  const candidates = [
+    new Date(`${dateString} ${currentYear}`),
+    new Date(dateString),
+  ]
+  for (const d of candidates) {
+    if (!isNaN(d.getTime())) {
+      const dayOfWeek = d.getDay()
+      const daysFromMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+      const monday = new Date(d)
+      monday.setDate(d.getDate() + daysFromMonday)
+      return monday.toISOString().slice(0, 10)
+    }
+  }
+
+  return null
+}
+
 export async function handleTimeOffRequest(bot, msg, intent, db = null) {
   const _saveTimeOffRequest = db?.saveTimeOffRequest ?? saveTimeOffRequest
   const _getSetupSession = db?.getSetupSession ?? getSetupSession
@@ -17,7 +56,8 @@ export async function handleTimeOffRequest(bot, msg, intent, db = null) {
   const staffTelegramId = msg.from?.id
   const requestedDate = intent.date || 'unknown date'
 
-  const request = await _saveTimeOffRequest(groupId, staffTelegramId, staffName, requestedDate, null)
+  const weekStart = computeWeekStart(requestedDate)
+  const request = await _saveTimeOffRequest(groupId, staffTelegramId, staffName, requestedDate, weekStart)
 
   await bot.sendMessage(
     msg.chat.id,

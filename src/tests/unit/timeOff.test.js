@@ -170,3 +170,48 @@ test('time_off logic: handleManagerTimeOffReply approve → availability record 
 
   assert.equal(availabilitySaved, true, 'availability record was not created')
 })
+
+test('time_off logic: handleTimeOffRequest saves request with non-null week_start in YYYY-MM-DD format', async () => {
+  const bot = new MockBot()
+  let savedWeekStart = undefined
+  const db = makeTimeOffDb({
+    saveTimeOffRequest: async (groupId, staffId, name, date, weekStart) => {
+      savedWeekStart = weekStart
+      return { id: 1, group_id: groupId, staff_telegram_id: staffId, staff_name: name, requested_date: date, week_start: weekStart, status: 'pending' }
+    },
+  })
+  const msg = makeGroupMsg({ text: 'can I have Friday off', from: { id: 12345, first_name: 'Alice' } })
+  const intent = { type: 'time_off_request', person: 'Alice', date: 'Friday', shift: null }
+
+  await handleTimeOffRequest(bot, msg, intent, db)
+
+  assert.ok(savedWeekStart !== null, 'week_start should not be null for a named day')
+  assert.match(savedWeekStart, /^\d{4}-\d{2}-\d{2}$/, 'week_start should be YYYY-MM-DD format')
+})
+
+test('time_off logic: handleManagerTimeOffReply calls saveAvailability when approving request with week_start set', async () => {
+  const bot = new MockBot()
+  let availabilityCalled = false
+  const db = makeTimeOffDb({
+    getPendingTimeOffByName: async (groupId, name) => ({
+      id: 1,
+      group_id: groupId,
+      staff_telegram_id: 12345,
+      staff_name: name,
+      requested_date: 'Friday',
+      week_start: '2026-04-13',
+      status: 'pending',
+    }),
+    saveAvailability: async (userId, groupId, weekStart, shiftIds, availAll, unavail, raw) => {
+      availabilityCalled = true
+      assert.equal(weekStart, '2026-04-13')
+      assert.equal(unavail, true)
+      return { id: 1 }
+    },
+  })
+  const msg = { text: 'approve Alice', from: { id: 9999, first_name: 'Manager' }, chat: { id: 99999, type: 'private' } }
+
+  await handleManagerTimeOffReply(bot, msg, db)
+
+  assert.equal(availabilityCalled, true, 'saveAvailability should be called when week_start is set')
+})
