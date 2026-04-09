@@ -10,6 +10,7 @@ import { startNoShowCron } from './noshow/noShowWarning.js'
 import { getReliabilityScores } from './reliability/reliabilityDb.js'
 import { formatReliabilityReport } from './reliability/reliabilityScore.js'
 import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.js'
+import { updateRoleRate } from './setup/setupDb.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -88,6 +89,30 @@ bot.onText(/^\/briefing/, async (msg) => {
   if (!isAdmin) return
   await sendDailyBriefing(bot, groupId)
   await bot.sendMessage(groupId, '📨 Briefing sent to your DM.')
+})
+
+bot.onText(/^\/setrate/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const { getSetupSession } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(userId)) return // silent
+
+  const parts = msg.text.trim().split(/\s+/)
+  // /setrate [role] [amount] — role may be multiple words before the number
+  if (parts.length < 3) {
+    await bot.sendMessage(groupId, `Usage: /setrate [role] [amount]\nExample: /setrate Chef 16.50`)
+    return
+  }
+  const amount = parseFloat(parts[parts.length - 1])
+  const roleName = parts.slice(1, -1).join(' ')
+  if (isNaN(amount) || amount <= 0 || !roleName) {
+    await bot.sendMessage(groupId, `Usage: /setrate [role] [amount]\nExample: /setrate Chef 16.50`)
+    return
+  }
+  await updateRoleRate(groupId, roleName, amount)
+  await bot.sendMessage(groupId, `✅ ${roleName} rate updated to $${amount.toFixed(2)}/hr`)
 })
 
 bot.onText(/^\/reliability/, async (msg) => {

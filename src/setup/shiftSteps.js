@@ -1,5 +1,6 @@
 import { getShiftsForGroup, saveShift, saveShiftRequirement, deleteShiftsForGroup, deleteShiftRequirementsForGroup, updateSetupSession } from './setupDb.js'
 import { parseShift, parseShiftRequirements } from '../parseMessage.js'
+import { moveToRoleRatesStep } from './roleRatesSteps.js'
 import { logger } from '../logger.js'
 
 export async function handleAddShiftsStep(bot, msg, session, text) {
@@ -64,7 +65,7 @@ export async function moveToShiftRolesStep(bot, msg, session) {
 
 export async function handleShiftRolesStep(bot, msg, session, text) {
   if (/^skip$/i.test(text) || /^(done|finish)$/i.test(text)) {
-    await moveToStaffStepShared(bot, msg, session)
+    await moveToRoleRatesStep(bot, msg, session)
     return
   }
 
@@ -92,7 +93,7 @@ export async function handleShiftRolesStep(bot, msg, session, text) {
 
   const list = reqs.map(r => `• ${r.count}× ${r.role} on *${r.shift_name}*`).join('\n')
   await bot.sendMessage(msg.chat.id,
-    `✅ Saved ${saved} requirement${saved !== 1 ? 's' : ''}:\n${list}\n\nAdd more, or send *done* to continue to staff.`,
+    `✅ Saved ${saved} requirement${saved !== 1 ? 's' : ''}:\n${list}\n\nAdd more, or send *done* to continue.`,
     { parse_mode: 'Markdown' })
 }
 

@@ -2,6 +2,7 @@ import { createSetupSession } from './setupDb.js'
 import { logger } from '../logger.js'
 import { handleWelcomeStep, handleAddStaffStep, resetStaffStep } from './staffSteps.js'
 import { handleAddShiftsStep, handleShiftRolesStep, resetShiftStep, resetShiftRolesStep, moveToStaffStepShared } from './shiftSteps.js'
+import { handleRoleRatesStep } from './roleRatesSteps.js'
 
 export async function startSetupDM(bot, msg, groupId) {
   const managerId = msg.from.id
@@ -47,6 +48,9 @@ export async function handleSetupMessage(bot, msg, session) {
       break
     case 'shift_roles':
       await handleShiftRolesStep(bot, msg, session, text)
+      break
+    case 'role_rates':
+      await handleRoleRatesStep(bot, msg, session, text)
       break
     case 'add_staff':
       await handleAddStaffStep(bot, msg, session, text)
