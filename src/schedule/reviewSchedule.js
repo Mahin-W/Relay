@@ -8,6 +8,7 @@ import { applyEdit } from './scheduleEditor.js'
 import { sendPersonalSchedule } from './readReceipts.js'
 import { calculateWeeklyPay } from '../payroll/payCalculator.js'
 import { savePeriodPayroll, getLateEventsForWeek } from '../payroll/payDb.js'
+import { sendPayReport } from '../payroll/payReport.js'
 
 const REVIEW_PROMPT = `Reply *approve* to publish, *regenerate* for a new arrangement, or describe an edit:
 • _remove Mahin from Monday Morning Prep_
@@ -130,6 +131,7 @@ export async function publishSchedule(bot, schedule, managerGroup) {
       const payroll = calculateWeeklyPay(assignments, shifts, rates, lateEvents)
       await savePeriodPayroll(schedule.group_id, schedule.week_start, payroll)
       logger.info(`Payroll calculated for week ${schedule.week_start}`)
+      await sendPayReport(bot, schedule.group_id, schedule.week_start)
     } catch (payErr) {
       logger.error(`Payroll calculation failed (non-fatal): ${payErr.message}`)
     }

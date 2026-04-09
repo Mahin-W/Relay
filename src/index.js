@@ -11,6 +11,8 @@ import { getReliabilityScores } from './reliability/reliabilityDb.js'
 import { formatReliabilityReport } from './reliability/reliabilityScore.js'
 import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.js'
 import { updateRoleRate } from './setup/setupDb.js'
+import { sendPayReport, formatStaffPayHistory } from './payroll/payReport.js'
+import { getPayrollHistory } from './payroll/payDb.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -89,6 +91,54 @@ bot.onText(/^\/briefing/, async (msg) => {
   if (!isAdmin) return
   await sendDailyBriefing(bot, groupId)
   await bot.sendMessage(groupId, '📨 Briefing sent to your DM.')
+})
+
+bot.onText(/^\/pay/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const { getSetupSession } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(userId)) return // silent
+
+  const parts = msg.text.trim().split(/\s+/)
+  const weekArg = parts[1] ?? null // e.g. /pay 2025-01-06
+  await bot.sendMessage(groupId, `📨 Pay summary sent to your DM.`)
+  await sendPayReport(bot, groupId, weekArg)
+})
+
+bot.onText(/^\/staffpay/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const { getSetupSession, getStaffForGroup } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(userId)) return // silent
+
+  const parts = msg.text.trim().split(/\s+/)
+  const rawName = parts.slice(1).join(' ').replace(/^@/, '')
+  if (!rawName) {
+    await bot.sendMessage(groupId, `Usage: /staffpay @username or /staffpay FirstName`)
+    return
+  }
+
+  const allStaff = await getStaffForGroup(groupId)
+  const matched = allStaff.find(s =>
+    s.name?.toLowerCase() === rawName.toLowerCase() ||
+    s.username?.toLowerCase() === rawName.toLowerCase() ||
+    s.name?.toLowerCase().includes(rawName.toLowerCase())
+  )
+  if (!matched) {
+    await bot.sendMessage(groupId, `Could not find staff member "${rawName}".`)
+    return
+  }
+
+  const history = await getPayrollHistory(matched.id, groupId)
+  const report = formatStaffPayHistory(matched.name, history)
+  if (session.dm_chat_id) {
+    await bot.sendMessage(groupId, `📨 Pay history for ${matched.name} sent to your DM.`)
+    await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
+  }
 })
 
 bot.onText(/^\/setrate/, async (msg) => {
