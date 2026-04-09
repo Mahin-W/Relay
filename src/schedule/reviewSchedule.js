@@ -1,11 +1,13 @@
 import { groq, groqWithRetry } from '../parsers/groq.js'
-import { getSetupSession, getStaffForGroup, addScheduleAssignment, getShiftsForGroup, getShiftRequirements } from '../setup/setupDb.js'
+import { getSetupSession, getStaffForGroup, addScheduleAssignment, getShiftsForGroup, getShiftRequirements, getRatesForGroup } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
 import { getGroupMembersWithDm } from '../db.js'
 import { logger } from '../logger.js'
 import { applyEdit } from './scheduleEditor.js'
 import { sendPersonalSchedule } from './readReceipts.js'
+import { calculateWeeklyPay } from '../payroll/payCalculator.js'
+import { savePeriodPayroll, getLateEventsForWeek } from '../payroll/payDb.js'
 
 const REVIEW_PROMPT = `Reply *approve* to publish, *regenerate* for a new arrangement, or describe an edit:
 • _remove Mahin from Monday Morning Prep_
@@ -118,6 +120,18 @@ export async function publishSchedule(bot, schedule, managerGroup) {
       try {
         await sendPersonalSchedule(bot, schedule.group_id, staffMember, assignments, schedule.week_start)
       } catch (err) { logger.error(`Could not DM ${staff.name} their schedule: ${err.message}`) }
+    }
+
+    // Calculate payroll after publishing
+    try {
+      const shifts = await getShiftsForGroup(schedule.group_id)
+      const rates = await getRatesForGroup(schedule.group_id)
+      const lateEvents = await getLateEventsForWeek(schedule.group_id, schedule.week_start)
+      const payroll = calculateWeeklyPay(assignments, shifts, rates, lateEvents)
+      await savePeriodPayroll(schedule.group_id, schedule.week_start, payroll)
+      logger.info(`Payroll calculated for week ${schedule.week_start}`)
+    } catch (payErr) {
+      logger.error(`Payroll calculation failed (non-fatal): ${payErr.message}`)
     }
 
     logger.success(`Schedule published for group ${schedule.group_id} (week ${schedule.week_start})`)
