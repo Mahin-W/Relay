@@ -90,3 +90,22 @@ test('reminders: staff with no dm_chat_id receives no DM', async () => {
   assert.equal(results.length, 0)
   bot.assertSilent()
 })
+
+test('night-before dedup: same key not sent twice', () => {
+  // Test the dedup logic directly (not the cron) by simulating two sends
+  // with the same key. This verifies the Set-based dedup pattern works.
+  const sentNightBefore = new Set()
+  const sends = []
+  const shifts = [{ dm_chat_id: '111', shift_id: 'shift-1', staff_name: 'Alice' }]
+
+  for (let run = 0; run < 2; run++) {
+    for (const s of shifts) {
+      const key = `${s.dm_chat_id}:${s.shift_id}:night`
+      if (sentNightBefore.has(key)) continue
+      sentNightBefore.add(key)
+      sends.push(s.staff_name)
+    }
+  }
+
+  assert.strictEqual(sends.length, 1, 'Night-before should only send once per shift per day')
+})

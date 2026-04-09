@@ -6,6 +6,10 @@ import { logger } from '../logger.js'
 // Key: `staffName:shiftId:date`
 const sentToday = new Set()
 
+// Tracks night-before reminders sent to avoid double-sending if cron fires twice
+// Key: `dmChatId:shiftId:night`
+const sentNightBefore = new Set()
+
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0
   // HH:MM format
@@ -116,6 +120,7 @@ export function startReminderJobs(bot) {
   // Clear the dedup set at midnight
   cron.schedule('0 0 * * *', () => {
     sentToday.clear()
+    sentNightBefore.clear()
     logger.bot('Reminder dedup set cleared for new day')
   })
 
@@ -133,6 +138,10 @@ export function startReminderJobs(bot) {
 
       let sent = 0
       for (const a of toRemind) {
+        const nightKey = `${a.dm_chat_id}:${a.shift_id}:night`
+        if (sentNightBefore.has(nightKey)) continue
+        sentNightBefore.add(nightKey)
+
         try {
           await bot.sendMessage(
             a.dm_chat_id,
