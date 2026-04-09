@@ -101,16 +101,24 @@ export async function handleTradeOffer(bot, msg, intent, openTrade) {
   const requesterStaff = allStaff.find(s => s.name?.toLowerCase() === openTrade.requester_name?.toLowerCase())
   const offererStaff = allStaff.find(s => s.name?.toLowerCase() === offererName.toLowerCase())
 
-  if (requesterStaff && offererStaff) {
+  if (!requesterStaff || !offererStaff) {
+    logger.bot(`Trade swap failed — staff record not found (requester: ${openTrade.requester_name}, offerer: ${offererName})`)
+    await bot.sendMessage(msg.chat.id, `⚠️ Trade couldn't be completed — couldn't match staff records. Please try again or contact your manager.`)
+    return
+  }
+
+  try {
     await swapScheduleAssignment(groupId, openTrade.shift_id, openTrade.week_start, requesterStaff.id, offererStaff.id)
     await swapPublishedScheduleAssignment(groupId, openTrade.shift_id, requesterStaff.id, offererName, offererStaff.id)
     await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id)
     await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openTrade.requester_name, requesterStaff.id)
-    logger.bot(`Trade complete: ${openTrade.requester_name} ↔ ${offererName}`)
-  } else {
-    logger.bot(`Could not swap — staff not found (requester: ${openTrade.requester_name}, offerer: ${offererName})`)
+  } catch (swapErr) {
+    logger.error(`Trade swap failed: ${swapErr.message}`)
+    await bot.sendMessage(msg.chat.id, `⚠️ Trade couldn't be completed — please check the schedule and try again.`)
+    return
   }
 
+  logger.bot(`Trade complete: ${openTrade.requester_name} ↔ ${offererName}`)
   await markTradeCompleted(openTrade.id, offererId, offererName, offeredShift.id, offeredShift.name)
 
   await bot.sendMessage(

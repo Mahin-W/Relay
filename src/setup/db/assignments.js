@@ -145,19 +145,15 @@ export async function getScheduledShiftForPerson(groupId, staffName, dayOfWeek, 
 }
 
 export async function swapScheduleAssignment(groupId, shiftId, weekStart, fromStaffId, toStaffId) {
-  try {
-    const { error } = await supabase
-      .from('schedule_assignments')
-      .update({ staff_id: toStaffId })
-      .eq('group_id', groupId)
-      .eq('shift_id', shiftId)
-      .eq('week_start', weekStart)
-      .eq('staff_id', fromStaffId)
-    if (error) throw error
-    logger.db(`Swapped assignment: staff ${fromStaffId} → ${toStaffId} on shift ${shiftId}`)
-  } catch (err) {
-    logger.error(`swapScheduleAssignment failed: ${err.message}`)
-  }
+  const { error } = await supabase
+    .from('schedule_assignments')
+    .update({ staff_id: toStaffId })
+    .eq('group_id', groupId)
+    .eq('shift_id', shiftId)
+    .eq('week_start', weekStart)
+    .eq('staff_id', fromStaffId)
+  if (error) throw new Error(`swapScheduleAssignment failed: ${error.message}`)
+  logger.db(`Swapped assignment: staff ${fromStaffId} → ${toStaffId} on shift ${shiftId}`)
 }
 
 export async function updateAssignmentStatus(assignmentId, status) {
