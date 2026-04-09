@@ -25,6 +25,8 @@ const FAST_SUITES = [
   { id: 'unit_noshow', file: 'unit/noShowWarning.test.js', label: 'Unit — No-show Warning', timeout: 10_000 },
   { id: 'unit_reliability', file: 'unit/reliability.test.js', label: 'Unit — Reliability Scoring', timeout: 10_000 },
   { id: 'unit_daily_briefing', file: 'unit/dailyBriefing.test.js', label: 'Unit — Daily Briefing', timeout: 10_000 },
+  { id: 'unit_prefilter', file: 'unit/preFilter.test.js', label: 'Unit — Pre-filter', timeout: 10_000 },
+  { id: 'unit_prefilter_exhaustive', file: 'unit/preFilter-exhaustive.test.js', label: 'Unit — Pre-filter Exhaustive', timeout: 15_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },
