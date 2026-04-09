@@ -1,164 +1,177 @@
 # Relay
 
-## What is Relay
+A Telegram bot that handles shift scheduling, coverage, and trades for restaurant teams. It lives in your existing staff group chat — no new apps, no training.
 
-Restaurant shift management is chaos. Someone calls in sick, a manager scrambles through DMs, half the group chat doesn't see it, and the shift goes uncovered. Relay fixes this by sitting inside your existing staff Telegram group and handling the whole thing automatically — coverage requests, shift trades, availability collection, weekly scheduling, time-off, and late arrivals.
+## What Relay Does
 
-No new app. No training. No behavior change for your staff.
+**Scheduling** — Collects availability from every staff member via DM, generates a weekly schedule, and lets the manager review, edit, and publish it. Staff get their personal schedule as a DM and confirm they've seen it.
 
-## Features
+**Coverage** — When someone can't make their shift, they just say so in the group chat. Relay detects it, posts a structured request, and DMs available staff. The first person to volunteer gets confirmed.
 
-| Feature | How it works |
-|---|---|
-| **Coverage requests** | Staff say "can anyone cover my Saturday lunch?" — Relay detects it and posts a structured request |
-| **Confirmations** | First volunteer to say "I'll take it" gets confirmed and the request closes |
-| **Shift trades** | "Anyone want to trade Friday dinner for Sunday brunch?" — Relay brokers the swap |
-| **Availability** | `/availability` DMs every registered staff member to collect weekly availability |
-| **Schedule generation** | `/makeschedule` builds a draft schedule from availability, sends it to the manager for review |
-| **Time off** | "I need Saturday off" — logged and acknowledged |
-| **Late arrivals** | "Running 20 minutes late" — Relay relays to the group |
-| **Shift reminders** | Automated DM reminders before upcoming shifts |
-| **Setup wizard** | Full onboarding flow for configuring shifts, roles, and staff |
+**Shift Trades** — Staff can propose swapping their shift with someone else. Relay brokers the trade and updates both assignments.
 
-## Architecture
+**Time Off** — Staff request days off in natural language. Relay logs it and notifies the manager.
 
-```
-Telegram Group Chat
-      ↓ message
-node-telegram-bot-api (polling)
-      ↓ text + sender
-src/routing/groupRouter.js
-      ↓ commands → commandRouter.js
-      ↓ natural language → parseMessage.js → Groq (llama-3.1-8b-instant)
-      ↓ intent JSON
-src/coverage/*  src/timeOff/*  src/lateArrival/*  src/schedule/*
-      ↓ save / read
-Supabase (Postgres)
-      ↓ reply
-Telegram Group Chat
-```
+**Late Arrivals** — "Running 20 min late" gets relayed to the group with the details extracted.
 
-## File map
+**On-Call** — Staff can volunteer to be on call for extra shifts throughout the week.
 
-```
-src/index.js                        — bot init + message dispatcher
-src/routing/
-  dmRouter.js                       — DM message handling
-  groupRouter.js                    — group message dispatch
-  commandRouter.js                  — /command handlers
-src/coverage/
-  requestHandler.js                 — handleCoverageRequest
-  confirmationHandler.js            — handleCoverageConfirmation, handleDmConfirmation
-  cancelHandler.js                  — handleCoverageCancel
-  tradeHandler.js                   — handleTradeRequest, handleTradeOffer
-  shiftResolver.js                  — resolveShift (LLM + day matching)
-  pendingState.js                   — in-memory clarification TTL state
-src/parsers/
-  messageParsers.js                 — parseMessage, isDmConfirmation + SYSTEM_PROMPT
-  setupParsers.js                   — parseShift, parseStaff, parseShiftRequirements
-  groq.js                           — shared Groq client + groqWithRetry
-src/db/
-  coverage.js                       — coverage request DB ops
-  members.js                        — group member DB ops
-  trades.js                         — trade request DB ops
-src/availability/
-  collectAvailability.js            — /availability flow + reply handler
-  db/records.js                     — availability record ops
-  db/schedules.js                   — published schedule ops
-  db/sessions.js                    — availability session ops
-src/schedule/
-  generateSchedule.js               — weekly schedule algorithm
-  reviewSchedule.js                 — manager approve/edit/publish flow
-  scheduleEditor.js                 — inline schedule editing
-src/setup/
-  setupFlow.js                      — setup state machine
-  shiftSteps.js                     — add_shifts + shift_roles step handlers
-  staffSteps.js                     — welcome + add_staff step handlers
-  db/sessions.js                    — setup session ops
-  db/admins.js                      — bot admin ops
-  db/shifts.js                      — shift config ops
-  db/staff.js                       — staff roster ops
-  db/assignments.js                 — shift assignment ops
-src/timeOff/
-  handleTimeOff.js                  — time off request handler
-  timeOffDb.js                      — time off DB ops
-src/lateArrival/
-  handleLateArrival.js              — late arrival handler
-src/reminders/
-  shiftReminders.js                 — cron-based shift reminder jobs
-src/shiftMatcher.js                 — fuzzy shift matching (score-based)
-src/logger.js                       — logger utility
-```
+## Getting Started
 
-## Setup
+### 1. Create a Telegram Bot
 
-### 1. Create a Telegram bot via @BotFather
+Open [@BotFather](https://t.me/BotFather) on Telegram and run:
 
-```
-/newbot          — create the bot, copy the token
-/setprivacy      — select your bot → Disable  ← REQUIRED to read all messages
-/setjoingroups   — select your bot → Enable
-```
+- `/newbot` — create the bot and copy the token
+- `/setprivacy` — select your bot, then choose **Disable** (required so the bot can read group messages)
+- `/setjoingroups` — select your bot, then choose **Enable**
 
-### 2. Get a Groq API key
+### 2. Get a Groq API Key
 
-Sign up free (no credit card) at [console.groq.com](https://console.groq.com), then create an API key.
+Sign up free at [console.groq.com](https://console.groq.com) and create an API key. No credit card required.
 
-### 3. Set up Supabase
+### 3. Set Up Supabase
 
 1. Create a project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor → New Query**, paste the contents of `supabase-schema.sql`, and click **Run**
-3. Copy your **Project URL** and **anon key** from **Settings → API**
+2. Go to **SQL Editor**, paste the contents of `supabase-schema.sql`, and run it
+3. Copy your **Project URL** and **anon key** from **Settings > API**
 
-### 4. Run locally
+### 4. Configure and Run
 
 ```bash
-git clone <repo>
+git clone <repo-url>
 cd relay-bot
 cp .env.example .env
-# Fill in all 4 values in .env
-npm install
-npm run test-parse   # verify Groq is working
-npm run dev
 ```
 
-### 5. Add the bot to your Telegram group
+Fill in the four values in `.env`:
 
-1. Add the bot as a member of the group
-2. Make it an admin: **Group Settings → Administrators → Add Admin**
-3. Grant: Read Messages, Send Messages
-4. DM the bot directly — it will walk you through the setup wizard to configure shifts and staff
+```
+TELEGRAM_BOT_TOKEN=your-token-from-botfather
+GROQ_API_KEY=your-groq-key
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+Then:
+
+```bash
+npm install
+node src/index.js
+```
+
+### 5. Add the Bot to Your Group
+
+1. Add the bot as a member of your Telegram staff group
+2. Promote it to admin: **Group Settings > Administrators > Add Admin**
+3. Grant permissions: Read Messages, Send Messages
+4. Type `/setup` in the group — the bot will DM you to walk through configuration
+
+## Setup Wizard
+
+When you run `/setup`, Relay walks you through in a private DM:
+
+1. **Restaurant name** — what to call your team
+2. **Shifts** — define your shift schedule (e.g., Morning Prep 7am-11am, Lunch 11am-3pm)
+3. **Roles** — how many people you need per shift
+4. **Staff** — add your team members by name
+
+You can type `reset` at any step to redo it.
 
 ## Commands
 
-| Command | Who | What it does |
-|---|---|---|
-| `/register` | Admin | Generates a staff registration link |
-| `/availability` | Admin | DMs all staff to collect availability for next week |
-| `/resetavailability` | Admin | Clears collected availability to start fresh |
-| `/makeschedule` | Admin | Generates a draft schedule and sends it to the manager for review |
-| `/setup` | Admin (DM) | Starts the shift/staff setup wizard |
+Run these in your staff group chat.
 
-## Tests
+### Everyone
 
-```bash
-npm test                   # full suite (parallel)
-npm run test:unit          # pure unit tests (no API calls)
-npm run test:unit:groq     # Groq API tests
-npm run test:integration   # integration tests
-npm run test:e2e           # end-to-end full-week flow
-```
+| Command | What it does |
+|---|---|
+| `/schedule` | View the current published schedule |
+| `/register` | Get a link for new staff to register with the bot |
+| `/commands` | Show all available commands |
 
-## Environment variables
+### Admins Only
 
-```
-TELEGRAM_BOT_TOKEN   — from @BotFather
-GROQ_API_KEY         — from console.groq.com
-SUPABASE_URL         — from Supabase project settings
-SUPABASE_ANON_KEY    — from Supabase project settings
-```
+| Command | What it does |
+|---|---|
+| `/setup` | Configure Relay for this group |
+| `/availability` | DM all staff to collect next week's availability |
+| `/resetavailability` | Clear collected availability and start fresh |
+| `/makeschedule` | Generate a draft schedule and send it to the manager for review |
+| `/receipts` | See which staff haven't confirmed their schedule yet |
+| `/hours` | View total scheduled hours per staff member |
 
-## Deploying to Railway
+### Manager Only
+
+| Command | What it does |
+|---|---|
+| `/addadmin` | Reply to someone's message to grant them admin access |
+| `/removeadmin` | Reply to someone's message to revoke admin access |
+| `/admins` | List current Relay admins |
+
+## Natural Language
+
+Relay understands natural language in the group chat. Staff don't need to learn commands — they just talk normally.
+
+### Coverage Requests
+
+> "Can anyone cover my Saturday lunch?"
+> "Calling in sick, need someone for Friday morning"
+> "Can't make it tomorrow"
+
+Relay detects the request, posts it to the group, and DMs available staff.
+
+### Volunteering
+
+> "I can cover" / "I'll take it" / "bet" / "igu" / "say less"
+
+Relay understands casual slang and emoji reactions (👍 ✅ 💯). The first volunteer gets confirmed.
+
+### Cancelling
+
+> "Never mind, I found someone" / "Cancel my request"
+
+Cancels your open coverage request. Managers can cancel anyone's.
+
+### Shift Trades
+
+> "Trade my Monday morning for anyone's Tuesday"
+
+Relay posts the trade offer. Someone replies with their own shift to complete the swap.
+
+### Time Off
+
+> "Can I have Saturday off?" / "I can't work Sunday"
+
+Logged and sent to the manager.
+
+### Running Late
+
+> "Running 20 minutes late" / "Stuck in traffic, be there by 6:30"
+
+Relay extracts the details and relays it to the group.
+
+### On-Call
+
+> "I can pick up extra shifts this week" / "Put me on call"
+
+Relay notes the availability for the week.
+
+## Schedule Workflow
+
+1. **Collect** — Run `/availability`. Relay DMs each registered staff member to ask what days they can work.
+2. **Generate** — Run `/makeschedule`. Relay builds a schedule from availability, shift requirements, and staff roles.
+3. **Review** — The manager gets a draft in DM with warnings for clopenings (close then open) and overtime. They can:
+   - Reply **approve** to publish
+   - Reply **approve anyway** to publish despite warnings
+   - Reply **regenerate** for a different arrangement
+   - Describe an edit: *"remove Mahin from Monday Morning Prep"* or *"add Sapna to Tuesday Lunch"*
+4. **Publish** — Approved schedules are posted to the group. Each staff member gets a personal DM with their shifts.
+5. **Confirm** — Staff reply to confirm they've seen their schedule. Run `/receipts` to see who hasn't confirmed yet.
+
+## Deploying
+
+### Railway
 
 ```bash
 npm install -g @railway/cli
@@ -167,12 +180,8 @@ railway init
 railway up
 ```
 
-Add the 4 environment variables from `.env` under **Variables** in the Railway dashboard. Railway auto-restarts on failure.
+Add the four environment variables under **Variables** in the Railway dashboard.
 
-## Tech stack
+## Support
 
-- **Node.js 25** — ES modules
-- **Groq** — llama-3.1-8b-instant for intent classification
-- **Supabase** — Postgres for all persistent state
-- **node-telegram-bot-api** — Telegram polling
-- **node-cron** — shift reminders
+Type `/commands` in any group with Relay to see the full command list.
