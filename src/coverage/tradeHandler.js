@@ -7,6 +7,19 @@ import { getPublishedSchedule } from '../availability/availabilityDb.js'
 import { formatScheduleMessage } from '../schedule/generateSchedule.js'
 import { matchShift, getCurrentWeekStart } from '../shiftMatcher.js'
 
+// Finds a staff record by display name. Tries exact match first, then
+// falls back to starts-with so "Mike" matches "Mike Chen" in the staff table.
+function findStaffByName(allStaff, displayName) {
+  if (!displayName) return undefined
+  const norm = displayName.trim().toLowerCase()
+  return (
+    allStaff.find(s => s.name?.toLowerCase() === norm) ??
+    allStaff.find(s => s.name?.toLowerCase().startsWith(norm + ' ')) ??
+    allStaff.find(s => norm.startsWith(s.name?.toLowerCase() + ' ')) ??
+    allStaff.find(s => s.name?.toLowerCase().startsWith(norm))
+  )
+}
+
 async function resendSchedule(bot, groupId) {
   try {
     const schedule = await getPublishedSchedule(groupId)
@@ -158,14 +171,27 @@ export async function handleCoverageTradeOffer(bot, msg, intent, openRequest) {
 
   if (requestedShift) {
     const allStaff = await getStaffForGroup(groupId).catch(() => [])
-    const requesterStaff = allStaff.find(s => s.name?.toLowerCase() === openRequest.requested_by?.toLowerCase())
-    const offererStaff = allStaff.find(s => s.name?.toLowerCase() === offererName.toLowerCase())
-    if (requesterStaff && offererStaff) {
-      await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id).catch(() => {})
-      await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openRequest.requested_by, requesterStaff.id).catch(() => {})
-      await swapScheduleAssignment(groupId, requestedShift.id, openRequest.week_start, requesterStaff.id, offererStaff.id).catch(() => {})
-      await swapPublishedScheduleAssignment(groupId, requestedShift.id, requesterStaff.id, offererName, offererStaff.id).catch(() => {})
+    const requesterStaff = findStaffByName(allStaff, openRequest.requested_by)
+    const offererStaff = findStaffByName(allStaff, offererName)
+
+    if (!requesterStaff || !offererStaff) {
+      logger.bot(`Coverage trade swap failed — staff not found (requester: ${openRequest.requested_by}, offerer: ${offererName})`)
+      await bot.sendMessage(msg.chat.id,
+        `⚠️ Couldn't complete the trade — staff records not found for one or both people. The coverage request is still open.`)
+      return
+    }
+
+    try {
+      await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id)
+      await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openRequest.requested_by, requesterStaff.id)
+      await swapScheduleAssignment(groupId, requestedShift.id, openRequest.week_start, requesterStaff.id, offererStaff.id)
+      await swapPublishedScheduleAssignment(groupId, requestedShift.id, requesterStaff.id, offererName, offererStaff.id)
       logger.bot(`Trade-coverage swap: ${openRequest.requested_by} ↔ ${offererName}`)
+    } catch (swapErr) {
+      logger.error(`Coverage trade swap error: ${swapErr.message}`)
+      await bot.sendMessage(msg.chat.id,
+        `⚠️ Trade couldn't be completed — schedule update failed. The coverage request is still open.`)
+      return
     }
   }
 
@@ -212,14 +238,31 @@ export async function handleDmCoverageTradeOffer(bot, msg, intent, openRequest) 
 
   if (requestedShift) {
     const allStaff = await getStaffForGroup(groupId).catch(() => [])
-    const requesterStaff = allStaff.find(s => s.name?.toLowerCase() === openRequest.requested_by?.toLowerCase())
-    const offererStaff = allStaff.find(s => s.name?.toLowerCase() === offererName.toLowerCase())
-    if (requesterStaff && offererStaff) {
-      await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id).catch(() => {})
-      await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openRequest.requested_by, requesterStaff.id).catch(() => {})
-      await swapScheduleAssignment(groupId, requestedShift.id, openRequest.week_start, requesterStaff.id, offererStaff.id).catch(() => {})
-      await swapPublishedScheduleAssignment(groupId, requestedShift.id, requesterStaff.id, offererName, offererStaff.id).catch(() => {})
+    const requesterStaff = findStaffByName(allStaff, openRequest.requested_by)
+    const offererStaff = findStaffByName(allStaff, offererName)
+
+    if (!requesterStaff || !offererStaff) {
+      logger.bot(`DM coverage trade swap failed — staff not found (requester: ${openRequest.requested_by}, offerer: ${offererName})`)
+      await bot.sendMessage(msg.chat.id,
+        `⚠️ Couldn't complete the trade — staff records not found. The coverage request is still open.`)
+      await bot.sendMessage(groupId,
+        `⚠️ Trade couldn't be completed — staff records not found for one or both people. The coverage request is still open.`)
+      return
+    }
+
+    try {
+      await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id)
+      await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openRequest.requested_by, requesterStaff.id)
+      await swapScheduleAssignment(groupId, requestedShift.id, openRequest.week_start, requesterStaff.id, offererStaff.id)
+      await swapPublishedScheduleAssignment(groupId, requestedShift.id, requesterStaff.id, offererName, offererStaff.id)
       logger.bot(`DM trade-coverage swap: ${openRequest.requested_by} ↔ ${offererName}`)
+    } catch (swapErr) {
+      logger.error(`DM coverage trade swap error: ${swapErr.message}`)
+      await bot.sendMessage(msg.chat.id,
+        `⚠️ Trade couldn't be completed — schedule update failed. The coverage request is still open.`)
+      await bot.sendMessage(groupId,
+        `⚠️ Trade couldn't be completed — please check the schedule and try again.`)
+      return
     }
   }
 
