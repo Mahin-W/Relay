@@ -7,6 +7,7 @@ import { handleAvailabilityMention } from '../availability/passiveAvailability.j
 import { handleOnCallOffer } from '../oncall/handleOnCall.js'
 import { logger } from '../logger.js'
 import { handleGroupCommands } from './commandRouter.js'
+import { handleCopySchedule } from '../schedule/copySchedule.js'
 
 export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
   const groupName = msg.chat.title || 'Unknown Group'
@@ -87,6 +88,9 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
         break
       case 'on_call_offer':
         await handleOnCallOffer(bot, msg, intent)
+        break
+      case 'copy_schedule_request':
+        await handleCopySchedule(bot, msg)
         break
       case 'schedule_update':
         logger.info(`Schedule update noted: ${intent.details}`)

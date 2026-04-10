@@ -11,6 +11,7 @@ import { getReliabilityScores } from './reliability/reliabilityDb.js'
 import { formatReliabilityReport } from './reliability/reliabilityScore.js'
 import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.js'
 import { handleRotationCommand } from './fairness/rotationTracker.js'
+import { handleCopySchedule } from './schedule/copySchedule.js'
 import { updateRoleRate } from './setup/setupDb.js'
 import { sendPayReport, formatStaffPayHistory } from './payroll/payReport.js'
 import { getPayrollHistory } from './payroll/payDb.js'
@@ -185,6 +186,11 @@ bot.onText(/^\/reliability/, async (msg) => {
 bot.onText(/^\/rotation/, async (msg) => {
   if (!['group', 'supergroup'].includes(msg.chat.type)) return
   await handleRotationCommand(bot, msg)
+})
+
+bot.onText(/^\/copyschedule/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  await handleCopySchedule(bot, msg)
 })
 
 process.on('SIGINT', () => {

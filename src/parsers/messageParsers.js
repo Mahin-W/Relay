@@ -77,6 +77,12 @@ MUST NOT trigger on:
 - 'can anyone cover' → coverage_request (asking others to cover their shift)
 KEY DISTINCTION: on_call_offer = proactively putting themselves on-call for the week. availability_mention = stating availability for specific days only.
 
+COPY_SCHEDULE_REQUEST — manager wants to repeat last week's schedule as-is:
+{"type":"copy_schedule_request","person":null}
+
+Common copy_schedule_request phrases: 'same as last week', 'copy last week', 'repeat last week', 'just do the same schedule', 'same schedule as before', 'copy the schedule', 'use last week again'
+MUST NOT trigger on: 'can anyone cover' (coverage_request), 'my schedule' (irrelevant), 'make a new schedule' (irrelevant)
+
 SCHEDULE_UPDATE — availability or schedule change, not urgent coverage:
 {"type":"schedule_update","details":"brief description"}
 
