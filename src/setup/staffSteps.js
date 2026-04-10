@@ -1,4 +1,5 @@
 import { getShiftsForGroup, getStaffForGroup, saveStaff, deleteStaffForGroup, updateSetupSession } from './setupDb.js'
+import { startOvertimeStep } from './overtimeSteps.js'
 import { parseStaff } from '../parseMessage.js'
 import { logger } from '../logger.js'
 
@@ -22,17 +23,12 @@ export async function handleWelcomeStep(bot, msg, session, text) {
 
 export async function handleAddStaffStep(bot, msg, session, text) {
   if (/^(done|finish|finished|that'?s? it|thats it)$/i.test(text)) {
-    const [shifts, staff] = await Promise.all([
-      getShiftsForGroup(session.group_id),
-      getStaffForGroup(session.group_id),
-    ])
-    await completeSetup(bot, msg, session, shifts, staff)
+    await startOvertimeStep(bot, msg.chat.id, session.group_id, session.setup_data ?? {})
     return
   }
 
   if (/^skip$/i.test(text)) {
-    const shifts = await getShiftsForGroup(session.group_id)
-    await completeSetup(bot, msg, session, shifts, [])
+    await startOvertimeStep(bot, msg.chat.id, session.group_id, session.setup_data ?? {})
     return
   }
 
@@ -66,34 +62,3 @@ export async function resetStaffStep(bot, chatId, groupId) {
     { parse_mode: 'Markdown' })
 }
 
-async function completeSetup(bot, msg, session, shifts, staff) {
-  await updateSetupSession(session.group_id, {
-    step: 'complete',
-    setup_complete: true,
-  })
-
-  const shiftList = shifts.length > 0
-    ? shifts.map(s => `• *${s.name}* — ${s.day_of_week}, ${s.start_time}–${s.end_time}`).join('\n')
-    : '_None added_'
-
-  const staffList = staff && staff.length > 0
-    ? staff.map(s => `• *${s.name}* — ${s.role}`).join('\n')
-    : '_None added_'
-
-  await bot.sendMessage(msg.chat.id,
-    `✅ *Setup complete!*\n\n*Shifts:*\n${shiftList}\n\n*Staff:*\n${staffList}\n\nRelay is now active in your group.`,
-    { parse_mode: 'Markdown' })
-
-  try {
-    const managerName = msg.from?.first_name || 'The manager'
-    await bot.sendMessage(
-      session.group_id,
-      `✅ *Relay Setup Complete*\n\n${managerName} has finished configuring Relay for this group.\nI'm now ready to handle shift coverage automatically.`,
-      { parse_mode: 'Markdown' }
-    )
-  } catch (err) {
-    logger.error(`Could not send setup-complete message to group ${session.group_id}: ${err.message}`)
-  }
-
-  logger.success(`Setup complete for group ${session.group_id}`)
-}
