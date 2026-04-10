@@ -116,3 +116,55 @@ export async function handleStaffHistoryQuery(bot, msg, db = null) {
   const report = formatStaffPayHistory(staff.name ?? staff.firstName ?? 'You', history)
   await bot.sendMessage(chatId, report, { parse_mode: 'Markdown' })
 }
+
+/**
+ * Format a personal pay stub for a single staff member.
+ * @param {object} staffRecord - pay summary (staffId, staffName, shifts[], totalGrossPay, etc.)
+ * @param {string} weekStart   - ISO date string e.g. '2025-01-06'
+ * @param {boolean} showRate   - whether to show hourly rate (default true)
+ */
+export function formatPersonalPayStub(staffRecord, weekStart, showRate = true) {
+  let text = `💵 *Your pay — week of ${weekStart}*\n\n`
+
+  const shifts = staffRecord.shifts ?? (staffRecord.shift_breakdown
+    ? (typeof staffRecord.shift_breakdown === 'string'
+        ? JSON.parse(staffRecord.shift_breakdown)
+        : staffRecord.shift_breakdown)
+    : [])
+
+  for (const s of shifts) {
+    const day   = s.dayOfWeek ?? s.day_of_week ?? ''
+    const start = s.startTime ?? s.start_time ?? ''
+    const end   = s.endTime   ?? s.end_time   ?? ''
+    const hrs   = (s.hoursWorked ?? s.effectiveHours ?? 0).toFixed(1)
+    const rate  = s.hourlyRate ?? staffRecord.hourlyRate ?? 0
+    const gross = (s.grossPay ?? 0).toFixed(2)
+
+    text += `${s.shiftName ?? 'Shift'} (${day}, ${start}–${end})\n`
+    if (showRate) {
+      text += `${hrs}hrs @ $${rate}/hr`
+    } else {
+      text += `${hrs}hrs worked`
+    }
+    if ((s.dailyOTHours ?? 0) > 0) {
+      text += `\n+ ${(s.dailyOTHours).toFixed(1)}hrs daily OT @ ${staffRecord.daily_multiplier ?? 1.5}x`
+    }
+    if ((s.weeklyOTHours ?? 0) > 0) {
+      text += `\n+ ${(s.weeklyOTHours).toFixed(1)}hrs weekly OT @ ${staffRecord.weekly_multiplier ?? 1.5}x`
+    }
+    if ((s.lateMinutes ?? 0) > 0) {
+      text += `\n⚠️ ${s.lateMinutes}min late (-$${(s.lateDeduction ?? 0).toFixed(2)})`
+    }
+    text += `\nShift: $${gross}\n\n`
+  }
+
+  text += `━━━━━━━━━━━━━━━━━━\n`
+  const total    = (staffRecord.totalGrossPay ?? staffRecord.total_gross_pay ?? 0).toFixed(2)
+  const totalHrs = (staffRecord.totalEffectiveHours ?? staffRecord.totalHours ?? staffRecord.total_hours ?? 0).toFixed(1)
+  if (showRate) {
+    text += `${totalHrs}hrs → *$${total}*`
+  } else {
+    text += `*Total: $${total}*`
+  }
+  return text
+}

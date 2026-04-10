@@ -234,3 +234,70 @@ await Promise.all([
     bot.assertSent(DM_CHAT_ID, 'register')
   }),
 ])
+
+// ── formatPersonalPayStub ──────────────────────────────────────────────
+import { formatPersonalPayStub } from '../../payroll/staffPayService.js'
+
+const baseRecord = {
+  staffName: 'Marcus', hourlyRate: 15,
+  shifts: [{
+    shiftName: 'Monday Lunch', dayOfWeek: 'Monday', startTime: '11am', endTime: '5pm',
+    hoursWorked: 6, hourlyRate: 15, grossPay: 90,
+    dailyOTHours: 0, weeklyOTHours: 0, lateMinutes: 0, lateDeduction: 0,
+  }],
+  totalEffectiveHours: 6, totalGrossPay: 90,
+}
+
+test('formatPersonalPayStub: contains week header', () => {
+  const text = formatPersonalPayStub(baseRecord, '2025-01-06')
+  assert.ok(text.includes('Your pay') || text.includes('2025-01-06'))
+})
+
+test('formatPersonalPayStub: correct total', () => {
+  const text = formatPersonalPayStub(baseRecord, '2025-01-06')
+  assert.ok(text.includes('90.00'))
+})
+
+test('formatPersonalPayStub: showRate:false hides hourly rate', () => {
+  const text = formatPersonalPayStub(baseRecord, '2025-01-06', false)
+  assert.ok(!text.includes('/hr'))
+  assert.ok(text.includes('hrs worked'))
+})
+
+test('formatPersonalPayStub: showRate:true shows hourly rate', () => {
+  const text = formatPersonalPayStub(baseRecord, '2025-01-06', true)
+  assert.ok(text.includes('/hr'))
+})
+
+test('formatPersonalPayStub: shows daily OT line when dailyOTHours > 0', () => {
+  const rec = {
+    ...baseRecord,
+    shifts: [{ ...baseRecord.shifts[0], dailyOTHours: 1, weeklyOTHours: 0 }],
+  }
+  const text = formatPersonalPayStub(rec, '2025-01-06')
+  assert.ok(text.includes('daily OT') || text.includes('OT'))
+})
+
+test('formatPersonalPayStub: shows weekly OT line when weeklyOTHours > 0', () => {
+  const rec = {
+    ...baseRecord,
+    shifts: [{ ...baseRecord.shifts[0], dailyOTHours: 0, weeklyOTHours: 2 }],
+  }
+  const text = formatPersonalPayStub(rec, '2025-01-06')
+  assert.ok(text.includes('weekly OT') || text.includes('OT'))
+})
+
+test('formatPersonalPayStub: shows late line when lateMinutes > 0', () => {
+  const rec = {
+    ...baseRecord,
+    shifts: [{ ...baseRecord.shifts[0], lateMinutes: 20, lateDeduction: 5 }],
+  }
+  const text = formatPersonalPayStub(rec, '2025-01-06')
+  assert.ok(text.toLowerCase().includes('late'))
+})
+
+test('formatPersonalPayStub: no OT lines when no OT', () => {
+  const text = formatPersonalPayStub(baseRecord, '2025-01-06')
+  assert.ok(!text.includes('daily OT'))
+  assert.ok(!text.includes('weekly OT'))
+})
