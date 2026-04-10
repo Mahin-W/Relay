@@ -1,76 +1,34 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-10T18:15:40.428Z",
-  "phase": "adhoc",
-  "phase_name": "7-tab payroll spreadsheet expansion",
-  "phase_dir": null,
-  "plan": 1,
+  "timestamp": "2026-04-10T18:15:14.402Z",
+  "phase": "01",
+  "phase_name": "analytics-features",
+  "phase_dir": ".planning/phases/01-analytics-features",
+  "plan": 0,
   "task": 0,
-  "total_tasks": 8,
+  "total_tasks": 7,
   "status": "paused",
   "completed_tasks": [
-    {"id": 0, "name": "Research — all 7 parallel agents completed", "status": "done", "commit": null}
+    {"id": 0, "name": "Research — read all source files, identify patterns and insertion points", "status": "done", "commit": "n/a (no code changes)"}
   ],
   "remaining_tasks": [
-    {"id": 1, "name": "Write implementation plan (superpowers:writing-plans)", "status": "not_started"},
-    {"id": 2, "name": "Write ALL tests first (TDD — red phase)", "status": "not_started"},
-    {"id": 3, "name": "Implement 7-tab spreadsheetGenerator.js", "status": "not_started"},
-    {"id": 4, "name": "Run node --test → green", "status": "not_started"},
-    {"id": 5, "name": "Run python scripts/recalc.py — zero formula errors", "status": "not_started"},
-    {"id": 6, "name": "simplify spreadsheetGenerator.js", "status": "not_started"},
-    {"id": 7, "name": "superpowers:verification-before-completion", "status": "not_started"},
-    {"id": 8, "name": "Commit: feat: expanded 7-tab payroll spreadsheet", "status": "not_started"}
+    {"id": 1, "name": "Build Labor Cost % Tracker (TDD)", "status": "not_started"},
+    {"id": 2, "name": "Build Hours Budget Alert (TDD)", "status": "not_started"},
+    {"id": 3, "name": "Build Manager Shift Log (TDD)", "status": "not_started"},
+    {"id": 4, "name": "Wire all 3 features into index.js + routing", "status": "not_started"},
+    {"id": 5, "name": "Wire budget alert into schedule flow", "status": "not_started"},
+    {"id": 6, "name": "Final validation + defense-in-depth", "status": "not_started"},
+    {"id": 7, "name": "Print SQL + test suite objects", "status": "not_started"}
   ],
   "blockers": [],
   "human_actions_pending": [],
   "decisions": [
-    {
-      "decision": "time_off_requests table does NOT exist in supabase-schema.sql",
-      "rationale": "Tab 7 (Time Off) must always show graceful empty state — no data source",
-      "phase": "research"
-    },
-    {
-      "decision": "schedule_receipts table does NOT exist in schema",
-      "rationale": "Tab 6 (Attendance) cannot show confirmation status from DB — use reliabilityData param only",
-      "phase": "research"
-    },
-    {
-      "decision": "payroll_records table does NOT exist in schema",
-      "rationale": "Tab 3 4-week comparison section will show current week only with 'History builds over time' note",
-      "phase": "research"
-    },
-    {
-      "decision": "/mnt/skills/public/xlsx/SKILL.md does not exist",
-      "rationale": "Proceed with ExcelJS patterns from existing spreadsheetGenerator.js code",
-      "phase": "research"
-    },
-    {
-      "decision": "No chart libraries available (exceljs ^4.4.0 only)",
-      "rationale": "Hours bar chart in Tab 4 must be cell-fill based (color-fill cells proportionally), not a real chart",
-      "phase": "research"
-    },
-    {
-      "decision": "Function signature backward-compatible",
-      "rationale": "All new params (coverageEvents, reliabilityData, timeOffData, budgetData, revenueData) default to empty/null",
-      "phase": "research"
-    },
-    {
-      "decision": "Late Arrivals Log tab becomes part of Tab 6 (Attendance & Reliability)",
-      "rationale": "Avoid duplicate sheets; old Tab 3 Late Arrivals Log removed, content merged into Tab 6",
-      "phase": "research"
-    },
-    {
-      "decision": "Existing tests (23) must still pass — only ADD new tests, don't break old ones",
-      "rationale": "Old tests check for 'Schedule', 'Payroll', 'Late Arrivals Log' sheets — new workbook has 7 sheets including these. BUT 'Late Arrivals Log' test currently checks wb.worksheets.length > 0 and sheet existence — need to keep backward compat",
-      "phase": "research"
-    },
-    {
-      "decision": "Old test: '\"Late Arrivals Log\" NOT created when lateEvents empty' will BREAK",
-      "rationale": "New design always creates 7 sheets regardless. Must update this test to reflect new sheet count and remove Late Arrivals as standalone sheet. The late data moves into Tab 6.",
-      "phase": "research"
-    }
+    {"decision": "Build all 3 features in parallel with isolated file ownership", "rationale": "No file overlap between features — each agent owns its own files", "phase": "01"},
+    {"decision": "No agent touches index.js or routing during build — use WIRING_TODO.md", "rationale": "Prevents merge conflicts between parallel agents", "phase": "01"},
+    {"decision": "Budget alert wires into commandRouter.js /makeschedule handler", "rationale": "That's where draft schedule is sent to manager DM (lines 49-77)", "phase": "01"},
+    {"decision": "Log handler is LAST in dmRouter.js before fallback", "rationale": "Catch-all for manager free-text, must not intercept other flows", "phase": "01"}
   ],
   "uncommitted_files": [],
-  "next_action": "Invoke superpowers:writing-plans skill, then write full implementation plan before ANY code. Then write tests first (TDD red phase), then implement all 7 tabs.",
-  "context_notes": "Research is 100% complete. All source files read. Ready to write plan then implement. Key insight: 3 DB tables referenced in requirements don't exist — Tab 6, 7, and 4-week history will show graceful empty states. The existing 'Late Arrivals Log' sheet test that checks it's NOT created when lateEvents=[] will need updating since new design always creates 7 sheets."
+  "next_action": "Dispatch 3 parallel TDD build agents for labor cost, budget alert, and shift log features",
+  "context_notes": "All research is complete — every source file has been read and patterns documented. The user provided an extremely detailed spec with exact function signatures, test cases, DB schemas, and wiring instructions. Implementation should follow the spec closely. Key patterns: db=null injection, bot.onText command handlers, MockBot/MockDB test helpers, Supabase createClient."
 }
