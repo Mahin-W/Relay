@@ -22,6 +22,7 @@
   "dependencies": {
     "@supabase/supabase-js": "latest",
     "dotenv": "latest",
+    "exceljs": "^4.4.0",
     "groq-sdk": "latest",
     "node-cron": "^4.2.1",
     "node-telegram-bot-api": "latest"
