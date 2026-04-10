@@ -1,6 +1,9 @@
-import Groq from 'groq-sdk'
+import OpenAI from 'openai'
 
-export const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+export const groq = new OpenAI({
+  apiKey: process.env.CEREBRAS_API_KEY,
+  baseURL: 'https://api.cerebras.ai/v1',
+})
 
 export async function groqWithRetry(createFn, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {

@@ -115,10 +115,10 @@ RULES:
 export async function isDmConfirmation(text) {
   try {
     const completion = await groqWithRetry(() => groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3.1-8b',
       temperature: 0.0,
       max_tokens: 10,
-      response_format: { type: 'json_object' },
+
       messages: [
         {
           role: 'system',
@@ -161,10 +161,10 @@ export async function parseMessage(text, senderName, groupName) {
 
   try {
     const completion = await groqWithRetry(() => groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3.1-8b',
       temperature: 0.0,
       max_tokens: 200,
-      response_format: { type: 'json_object' },
+
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `Message from ${senderName}: ${text}` },

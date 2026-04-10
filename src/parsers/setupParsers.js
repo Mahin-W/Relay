@@ -4,10 +4,10 @@ import { logger } from '../logger.js'
 export async function parseShift(text) {
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3.1-8b',
       temperature: 0.0,
       max_tokens: 800,
-      response_format: { type: 'json_object' },
+
       messages: [
         {
           role: 'system',
@@ -46,10 +46,10 @@ Always use full day names (Monday not Mon). Always use 12-hour AM/PM format.`,
 export async function parseShiftRequirements(text, shiftNames) {
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3.1-8b',
       temperature: 0.0,
       max_tokens: 500,
-      response_format: { type: 'json_object' },
+
       messages: [
         {
           role: 'system',
@@ -88,10 +88,10 @@ export async function parseStaff(text, senderName) {
       : `If someone says "I'm a [role]" but no name is given, skip them.`
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3.1-8b',
       temperature: 0.0,
       max_tokens: 400,
-      response_format: { type: 'json_object' },
+
       messages: [
         {
           role: 'system',

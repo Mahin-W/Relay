@@ -25,7 +25,8 @@
     "exceljs": "^4.4.0",
     "groq-sdk": "latest",
     "node-cron": "^4.2.1",
-    "node-telegram-bot-api": "latest"
+    "node-telegram-bot-api": "latest",
+    "openai": "^6.34.0"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.82.0",

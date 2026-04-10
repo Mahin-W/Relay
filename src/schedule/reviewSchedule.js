@@ -54,10 +54,10 @@ async function parseEditIntent(text, schedule) {
     const staffNames = [...new Set((schedule.assignments ?? []).map(a => a.staffName))]
 
     const completion = await groqWithRetry(() => groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama3.1-8b',
       temperature: 0.0,
       max_tokens: 120,
-      response_format: { type: 'json_object' },
+
       messages: [
         {
           role: 'system',

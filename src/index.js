@@ -20,7 +20,7 @@ import { updateRoleRate } from './setup/setupDb.js'
 import { sendPayReport, formatStaffPayHistory } from './payroll/payReport.js'
 import { getPayrollHistory } from './payroll/payDb.js'
 
-const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'GROQ_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
+const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
 if (missing.length > 0) {
   console.error(`❌ Missing required environment variables: ${missing.join(', ')}`)
