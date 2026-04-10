@@ -5,13 +5,13 @@
 node src/index.js          # run bot
 npm test                   # full suite (parallel)
 npm run test:unit          # 23 pure tests
-npm run test:unit:groq     # 15 Groq API tests
+npm run test:unit:groq     # 15 LLM API tests (Cerebras)
 npm run test:integration   # 13 tests
 npm run test:e2e           # 3 tests
 ```
 
 ## Tech stack
-Node.js 25, ES modules, Supabase (postgres), Groq (llama-3.1-8b-instant), node-telegram-bot-api
+Node.js 25, ES modules, Supabase (postgres), Cerebras (llama3.1-8b), node-telegram-bot-api
 
 ## File map
 ```
@@ -29,7 +29,7 @@ src/coverage/tradeHandler.js — handleTradeRequest, handleTradeOffer
 src/parseMessage.js       — barrel → src/parsers/*
 src/parsers/messageParsers.js — parseMessage, isDmConfirmation + SYSTEM_PROMPT
 src/parsers/setupParsers.js — parseShift, parseStaff, parseShiftRequirements
-src/parsers/groq.js       — shared groq client + groqWithRetry
+src/parsers/groq.js       — shared Cerebras client (OpenAI SDK) + groqWithRetry + extractJSON
 src/shiftMatcher.js       — fuzzy shift matching (score-based)
 src/db.js                 — barrel → src/db/{coverage,members,trades}.js
 src/setup/setupDb.js      — barrel → src/setup/db/{sessions,admins,shifts,staff,assignments}.js
@@ -50,11 +50,11 @@ src/logger.js             — logger utility
 - DB injection via 4th param `db = null` on handleCoverageRequest/Confirmation
 - Pre-resolved shifts via `intent._preResolvedShift` / `intent._preResolvedWeekStart`
 - `--env-file=.env` required on node (Supabase throws at module level without env)
-- TAP output: look for `# pass` and `# fail` in stdout
+- TAP output: look for `ℹ pass` and `ℹ fail` in stdout (Node.js 25 format)
 - `bot.deleteWebHook({ drop_pending_updates: true })` (capital H) before polling
 
 ## DB schema
 See `supabase-schema.sql`
 
 ## Environment
-See `.env` — requires: TELEGRAM_BOT_TOKEN, GROQ_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
+See `.env` — requires: TELEGRAM_BOT_TOKEN, CEREBRAS_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
