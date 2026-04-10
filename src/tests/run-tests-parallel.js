@@ -31,6 +31,7 @@ const FAST_SUITES = [
   { id: 'unit_pay_calculator', file: 'unit/payCalculator.test.js', label: 'Unit — Pay Calculator', timeout: 10_000 },
   { id: 'unit_pay_report', file: 'unit/payReport.test.js', label: 'Unit — Pay Report', timeout: 10_000 },
   { id: 'unit_staff_pay', file: 'unit/staffPayService.test.js', label: 'Unit — Staff Pay Service', timeout: 10_000 },
+  { id: 'unit_rotation', file: 'unit/rotationTracker.test.js', label: 'Unit — Rotation Fairness', timeout: 10_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },
@@ -45,6 +46,9 @@ const LLM_SUITES = [
   { id: 'unit_latearrival', file: 'unit/lateArrival.test.js', label: 'Unit — Late Arrival (LLM)', timeout: 300_000 },
   { id: 'integration_setup', file: 'integration/setupFlow.test.js', label: 'Integration — Setup Flow (LLM)', timeout: 180_000 },
   { id: 'unit_oncall_parse', file: 'unit/onCallParse.test.js', label: 'Unit — On-Call Parser (LLM)', timeout: 300_000 },
+  { id: 'unit_copy_schedule', file: 'unit/copySchedule.test.js', label: 'Unit — Copy Schedule (LLM)', timeout: 300_000 },
+  { id: 'unit_new_hire', file: 'unit/newHire.test.js', label: 'Unit — New Hire Onboarding (LLM)', timeout: 300_000 },
+  { id: 'unit_partial_coverage', file: 'unit/partialCoverage.test.js', label: 'Unit — Partial Coverage (LLM)', timeout: 300_000 },
 ]
 
 const args = process.argv.slice(2)
