@@ -1,4 +1,4 @@
-import { groq, groqWithRetry } from './groq.js'
+import { groq, groqWithRetry, extractJSON } from './groq.js'
 import { logger } from '../logger.js'
 
 const SYSTEM_PROMPT = `You are an intent classifier for Relay, a shift coverage bot for restaurant staff group chats. Your ONLY job is to classify messages and extract key details.
@@ -147,7 +147,7 @@ Key rules:
       ],
     }))
     const raw = completion.choices[0]?.message?.content ?? '{}'
-    const result = JSON.parse(raw)
+    const result = JSON.parse(extractJSON(raw))
     logger.parse(`DM affirmative check: "${text}" → ${result.yes ? 'yes' : 'no'}`)
     return result.yes === true
   } catch (err) {
@@ -172,7 +172,7 @@ export async function parseMessage(text, senderName, groupName) {
     }))
 
     const raw = completion.choices[0]?.message?.content ?? '{}'
-    const intent = JSON.parse(raw)
+    const intent = JSON.parse(extractJSON(raw))
     logger.parse(`Result: ${JSON.stringify(intent)}`)
     return intent
   } catch (err) {

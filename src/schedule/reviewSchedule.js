@@ -1,4 +1,4 @@
-import { groq, groqWithRetry } from '../parsers/groq.js'
+import { groq, groqWithRetry, extractJSON } from '../parsers/groq.js'
 import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
@@ -61,7 +61,7 @@ async function parseEditIntent(text, schedule) {
       messages: [
         {
           role: 'system',
-          content: `You parse schedule edit commands from a restaurant manager. Return valid JSON only.
+          content: `You parse schedule edit commands from a restaurant manager. Return ONLY a valid JSON object. No explanation. No code. No markdown. No extra text. Raw JSON only.
 
 Current schedule staff: ${staffNames.join(', ')}
 Current shifts: ${shiftNames.join(', ')}
@@ -80,7 +80,7 @@ Rules:
         { role: 'user', content: text },
       ],
     }))
-    const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}')
+    const result = JSON.parse(extractJSON(completion.choices[0]?.message?.content ?? '{}'))
     logger.parse(`Edit intent: ${JSON.stringify(result)}`)
     return result.action ? result : { action: 'unclear' }
   } catch (err) {
