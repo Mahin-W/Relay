@@ -11,6 +11,7 @@ import { handleScheduleQuery, handleHoursQuery, isScheduleQuery, isHoursQuery } 
 import { handleStaffPayQuery, handleStaffHistoryQuery, isPayQuery, isHistoryQuery } from '../payroll/staffPayService.js'
 import { isDmConfirmation, parseMessage } from '../parseMessage.js'
 import { getOutreachByUser } from '../db.js'
+import { handleNewHireRegistration } from '../onboarding/handleNewHire.js'
 import { logger } from '../logger.js'
 import { isReceiptConfirmation, handleReceiptConfirmation } from '../schedule/readReceipts.js'
 
@@ -40,15 +41,7 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
       const groupId = param.replace('register_', '')
       await upsertStaffDm(userId, senderName, msg.from?.username, msg.chat.id)
       await upsertGroupMember(userId, groupId, senderName, msg.from?.username)
-      let groupName = 'your group'
-      try {
-        const chat = await bot.getChat(groupId)
-        groupName = chat.title || groupName
-      } catch (_) {}
-      await bot.sendMessage(msg.chat.id,
-        `👋 Hey ${senderName}! You're registered with Relay for *${groupName}*.\n\n` +
-        `I'll DM you here when the schedule is ready or when shifts need coverage.`,
-        { parse_mode: 'Markdown' })
+      await handleNewHireRegistration(bot, msg, groupId)
       logger.bot(`${senderName} registered via group invite link (group ${groupId})`)
       return
     }

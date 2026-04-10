@@ -77,6 +77,13 @@ MUST NOT trigger on:
 - 'can anyone cover' → coverage_request (asking others to cover their shift)
 KEY DISTINCTION: on_call_offer = proactively putting themselves on-call for the week. availability_mention = stating availability for specific days only.
 
+NEW_HIRE_ANNOUNCEMENT — manager announces a new staff member joining the team:
+{"type":"new_hire_announcement","person":"name of new hire extracted from message","startDate":null,"role":null}
+
+Common new_hire_announcement phrases: 'everyone welcome [name]', 'please welcome [name]', 'welcome [name] to the team', '[name] is joining us', '[name] starts [day]', 'new team member [name]', 'introducing [name]', '[name] is our new [role]'
+Extract: person = the new hire's name. role = their job role if mentioned. startDate = when they start if mentioned.
+MUST NOT trigger on: 'welcome back [name]' (returning staff), 'welcome everyone' (no specific person), general greetings without a new hire context.
+
 COPY_SCHEDULE_REQUEST — manager wants to repeat last week's schedule as-is:
 {"type":"copy_schedule_request","person":null}
 

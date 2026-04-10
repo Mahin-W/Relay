@@ -8,6 +8,7 @@ import { handleOnCallOffer } from '../oncall/handleOnCall.js'
 import { logger } from '../logger.js'
 import { handleGroupCommands } from './commandRouter.js'
 import { handleCopySchedule } from '../schedule/copySchedule.js'
+import { handleNewHireAnnouncement } from '../onboarding/handleNewHire.js'
 
 export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
   const groupName = msg.chat.title || 'Unknown Group'
@@ -88,6 +89,9 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
         break
       case 'on_call_offer':
         await handleOnCallOffer(bot, msg, intent)
+        break
+      case 'new_hire_announcement':
+        await handleNewHireAnnouncement(bot, msg, intent)
         break
       case 'copy_schedule_request':
         await handleCopySchedule(bot, msg)
