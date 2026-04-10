@@ -37,7 +37,7 @@ export async function getUpcomingShifts(groupId) {
 
     // Check if schedule is published
     const { data: schedule } = await supabase
-      .from('schedules')
+      .from('generated_schedules')
       .select('id')
       .eq('group_id', groupId)
       .eq('week_start', weekStart)
