@@ -1,187 +1,260 @@
 # Relay
 
-A Telegram bot that handles shift scheduling, coverage, and trades for restaurant teams. It lives in your existing staff group chat — no new apps, no training.
+Relay is a Telegram bot that handles shift scheduling, coverage, and team communication for restaurants. It manages the full weekly cycle: collect availability, generate the schedule, review it, publish it, and track everything after.
 
-## What Relay Does
+Staff only need Telegram. There is no extra app to install.
 
-**Scheduling** — Collects availability from every staff member via DM, generates a weekly schedule, and lets the manager review, edit, and publish it. Staff get their personal schedule as a DM and confirm they've seen it.
+---
 
-**Coverage** — When someone can't make their shift, they just say so in the group chat. Relay detects it, posts a structured request, and DMs available staff. The first person to volunteer gets confirmed.
+## Table of Contents
 
-**Shift Trades** — Staff can propose swapping their shift with someone else. Relay brokers the trade and updates both assignments.
+- [Getting Started](#getting-started)
+- [The Weekly Cycle](#the-weekly-cycle)
+- [Group Chat Commands](#group-chat-commands)
+- [What Staff Can Do in DMs](#what-staff-can-do-in-dms)
+- [Natural Language (Just Talk Normally)](#natural-language-just-talk-normally)
+- [Automatic Features](#automatic-features)
+- [Notifications Staff Receive](#notifications-staff-receive)
+- [Pay and Overtime](#pay-and-overtime)
+- [Troubleshooting](#troubleshooting)
 
-**Time Off** — Staff request days off in natural language. Relay logs it and notifies the manager.
-
-**Late Arrivals** — "Running 20 min late" gets relayed to the group with the details extracted.
-
-**On-Call** — Staff can volunteer to be on call for extra shifts throughout the week.
+---
 
 ## Getting Started
 
-### 1. Create a Telegram Bot
+### First-Time Setup
 
-Open [@BotFather](https://t.me/BotFather) on Telegram and run:
+1. Create a Telegram group for your restaurant staff.
+2. Add the Relay bot to the group.
+3. Type `/setup` in the group. The bot will send you a private message to walk you through:
+   - Your restaurant name
+   - Shifts (for example, "Saturday Lunch, 11am-3pm")
+   - How many of each role you need per shift (for example, "Saturday Lunch: 2 servers, 1 cook")
+   - Hourly pay rates for each role
+   - Staff names and roles
+   - Overtime settings
+4. Type `/register` in the group and have each staff member tap the link that appears. This lets the bot send them private messages.
+5. You are ready to go.
 
-- `/newbot` — create the bot and copy the token
-- `/setprivacy` — select your bot, then choose **Disable** (required so the bot can read group messages)
-- `/setjoingroups` — select your bot, then choose **Enable**
+### Getting Staff Registered
 
-### 2. Get a Groq API Key
+Type `/register` in the group. The bot posts a link. When a staff member taps that link, it opens a private chat with the bot and they are registered. That is all they need to do.
 
-Sign up free at [console.groq.com](https://console.groq.com) and create an API key. No credit card required.
+---
 
-### 3. Set Up Supabase
+## The Weekly Cycle
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor**, paste the contents of `supabase-schema.sql`, and run it
-3. Copy your **Project URL** and **anon key** from **Settings > API**
+Here is how a typical week works from start to finish:
 
-### 4. Configure and Run
+1. **Collect availability** -- Type `/availability` in the group. The bot sends every registered staff member a private message with a numbered list of shifts and asks which ones they can work.
+2. **Staff respond** -- Each person replies in their private chat with shift numbers (like "1 3 5"), "all", or "off".
+3. **Generate the schedule** -- Type `/makeschedule` in the group. The bot builds a draft schedule using availability, role requirements, and fairness rotation. It flags problems like clopenings (less than 10 hours of rest between shifts) and overtime risks (40+ hours).
+4. **Review the draft** -- The bot sends the draft to the manager in a private message. You can type "approve", "approve anyway" (to publish despite warnings), "regenerate" (for a different arrangement), or make edits in plain English like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch".
+5. **Publish** -- Once you approve, the schedule is posted to the group.
+6. **Staff get their schedules** -- Each staff member receives a private message showing only their shifts for the week. They reply "got it" to confirm they have seen it.
+7. **Track confirmations** -- Type `/receipts` to see who has not confirmed yet.
+8. **Payroll** -- Payroll is calculated automatically when the schedule is published. You get a text summary and an Excel spreadsheet.
+9. **Daily briefings** -- Every morning at 8am, the manager gets a private message with today's shifts and anything that needs attention.
+10. **Shift reminders** -- Staff get a reminder the night before their shift and again two hours before. If someone has not confirmed 15 minutes before their shift, the manager gets a warning.
 
-```bash
-git clone <repo-url>
-cd relay-bot
-cp .env.example .env
-```
+---
 
-Fill in the four values in `.env`:
+## Group Chat Commands
 
-```
-TELEGRAM_BOT_TOKEN=your-token-from-botfather
-GROQ_API_KEY=your-groq-key
-SUPABASE_URL=your-supabase-project-url
-SUPABASE_ANON_KEY=your-supabase-anon-key
-```
+These are the commands you can type in your restaurant's Telegram group.
 
-Then:
+### Setup and Registration
 
-```bash
-npm install
-node src/index.js
-```
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/setup` | Group admin | Starts the setup wizard. The bot sends you a private message to walk through everything. |
+| `/register` | Anyone | Posts a registration link for staff to tap and connect with the bot. |
+| `/welcome [name]` | Admin | Manually starts the new hire welcome flow for someone. |
 
-### 5. Add the Bot to Your Group
+### Scheduling
 
-1. Add the bot as a member of your Telegram staff group
-2. Promote it to admin: **Group Settings > Administrators > Add Admin**
-3. Grant permissions: Read Messages, Send Messages
-4. Type `/setup` in the group — the bot will DM you to walk through configuration
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/availability` | Admin | Sends a private message to every registered staff member asking which shifts they can work next week. |
+| `/resetavailability` | Admin | Clears all availability responses so you can start fresh. |
+| `/makeschedule` | Admin | Generates next week's schedule based on availability, role requirements, and fairness rotation. |
+| `/schedule` | Anyone | Shows the current published schedule in the group. |
+| `/copyschedule` | Admin | Copies last week's schedule as a starting draft for next week (removes staff who are no longer active). |
+| `/hours` | Admin | Shows total scheduled hours for each staff member this week. |
+| `/receipts` | Admin | Shows which staff have not confirmed they have seen their schedule. |
+| `/rotation` | Admin | Shows the rotation fairness report -- who has been getting the desirable shifts. |
 
-## Setup Wizard
+### Pay and Reports
 
-When you run `/setup`, Relay walks you through in a private DM:
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/pay` | Manager | Sends you this week's payroll summary (hours, gross pay, deductions) in a private message. |
+| `/staffpay [name]` | Manager | Shows a specific staff member's pay history. |
+| `/setrate [role] [amount]` | Manager | Sets the hourly pay rate for a role. Example: `/setrate server 18` |
+| `/setovertime` | Manager | Walks you through overtime settings (weekly and daily thresholds and multipliers). |
+| `/spreadsheet` | Admin | Sends you an Excel file with the schedule, payroll, and late arrivals. |
+| `/briefing` | Admin | Sends you a daily summary: today's shifts, open requests, pending approvals. |
+| `/reliability` | Manager | Shows staff reliability scores (internal, last 90 days). |
 
-1. **Restaurant name** — what to call your team
-2. **Shifts** — define your shift schedule (e.g., Morning Prep 7am-11am, Lunch 11am-3pm)
-3. **Roles** — how many people you need per shift
-4. **Staff** — add your team members by name
+### Admin Management
 
-You can type `reset` at any step to redo it.
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/addadmin` | Manager | Reply to someone's message to grant them admin access. |
+| `/removeadmin` | Manager | Reply to someone's message to revoke admin access. |
+| `/admins` | Anyone | Lists current bot admins. |
 
-## Commands
+### Help
 
-Run these in your staff group chat.
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/help` or `/commands` | Anyone | Shows available commands. |
 
-### Everyone
+---
 
-| Command | What it does |
-|---|---|
-| `/schedule` | View the current published schedule |
-| `/register` | Get a link for new staff to register with the bot |
-| `/commands` | Show all available commands |
+## What Staff Can Do in DMs
 
-### Admins Only
+Staff can send private messages to the bot at any time. Here is what works:
 
-| Command | What it does |
-|---|---|
-| `/setup` | Configure Relay for this group |
-| `/availability` | DM all staff to collect next week's availability |
-| `/resetavailability` | Clear collected availability and start fresh |
-| `/makeschedule` | Generate a draft schedule and send it to the manager for review |
-| `/receipts` | See which staff haven't confirmed their schedule yet |
-| `/hours` | View total scheduled hours per staff member |
+| What to say | What happens |
+|-------------|--------------|
+| "my schedule" or "when do I work" | Shows your personal shifts for the week. |
+| "my hours" or "how many hours" | Shows your total hours. |
+| "my pay" or "my paycheck" | Shows this week's pay breakdown. |
+| "pay history" | Shows your last 4 weeks of pay. |
+| "got it" | Confirms you have seen your schedule (read receipt). |
 
-### Manager Only
+Managers also get extra options in their private chat:
 
-| Command | What it does |
-|---|---|
-| `/addadmin` | Reply to someone's message to grant them admin access |
-| `/removeadmin` | Reply to someone's message to revoke admin access |
-| `/admins` | List current Relay admins |
+| What to say | What happens |
+|-------------|--------------|
+| "approve" | Publishes the draft schedule to the group. |
+| "approve anyway" | Publishes despite warnings about clopenings or overtime. |
+| "regenerate" | Asks the bot to build a different schedule arrangement. |
+| Natural language edits (like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch") | The bot updates the draft accordingly. |
+| "approve [name]" or "deny [name]" | Approves or denies a time-off request. |
 
-## Natural Language
+---
 
-Relay understands natural language in the group chat. Staff don't need to learn commands — they just talk normally.
+## Natural Language (Just Talk Normally)
 
-### Coverage Requests
+You do not need to memorize commands for most things. Just type what you mean in the group chat and the bot will figure it out.
 
-> "Can anyone cover my Saturday lunch?"
-> "Calling in sick, need someone for Friday morning"
-> "Can't make it tomorrow"
+### Coverage and Callouts
 
-Relay detects the request, posts it to the group, and DMs available staff.
+When someone cannot make their shift:
 
-### Volunteering
+| What to say | What happens |
+|-------------|--------------|
+| "I can't come in tonight" | The bot posts a coverage request to the group and sends private messages to all registered staff asking who can cover. On-call staff get notified first. |
+| "need someone to cover my evening shift" | Same as above. |
+| "can't work Friday" | Same as above. |
 
-> "I can cover" / "I'll take it" / "bet" / "igu" / "say less"
+When someone wants to pick up the shift:
 
-Relay understands casual slang and emoji reactions (👍 ✅ 💯). The first volunteer gets confirmed.
+| What to say | What happens |
+|-------------|--------------|
+| "I can cover" | The bot marks the shift as covered, swaps the schedule, and notifies everyone. |
+| "I can cover from 3pm to 5pm" | Partial coverage -- the bot tracks portions until the whole shift is filled. |
+| "bet" / "say less" / "I got u" / "fasho" | All count as yes. The bot understands casual language and slang. |
 
-### Cancelling
+Other responses:
 
-> "Never mind, I found someone" / "Cancel my request"
+| What to say | What happens |
+|-------------|--------------|
+| "Maybe" or "I think I can" | The bot asks for a firm yes or no. |
+| "Cancel" or "nevermind" | Cancels an open coverage request. Managers can cancel anyone's. |
 
-Cancels your open coverage request. Managers can cancel anyone's.
+### Shift Trading
 
-### Shift Trades
+| What to say | What happens |
+|-------------|--------------|
+| "I want to trade my Friday dinner shift" | The bot posts a trade offer to the group and sends private messages to staff. |
+| "trade my Saturday lunch" (in response to a trade or coverage request) | The bot executes a two-way shift swap and updates the schedule. |
 
-> "Trade my Monday morning for anyone's Tuesday"
+### Other Things You Can Say
 
-Relay posts the trade offer. Someone replies with their own shift to complete the swap.
+| What to say | What happens |
+|-------------|--------------|
+| "I need next Friday off" | The bot sends the manager a private message for approval. You get notified of the decision. |
+| "Running late, about 15 minutes" | The bot quietly acknowledges it in the group and sends the manager a detailed private message with shift info and your ETA. |
+| "I'm on call this week" or "I can pick up extra shifts" | The bot records you as on-call. You get first priority on coverage requests. |
+| "Welcome John to the team" | The bot posts a welcome message with a registration link. |
+| "Repeat last week's schedule" | Same as the `/copyschedule` command. |
 
-### Time Off
+### Slang and Casual Phrasing That Works
 
-> "Can I have Saturday off?" / "I can't work Sunday"
+The bot understands all of these as a "yes" when confirming coverage:
 
-Logged and sent to the manager.
+bet, fasho, fa sho, say less, word, ight, aight, no cap, on god, fr, igu, i got u, i gotchu, locked in, facts, frl, pulling up, ima pull up, count me in, put me down, on it, done, i'll take it, fs, ofc
 
-### Running Late
+Emoji replies also work: thumbs up, check mark, 100, raised hands, OK hand.
 
-> "Running 20 minutes late" / "Stuck in traffic, be there by 6:30"
+---
 
-Relay extracts the details and relays it to the group.
+## Automatic Features
 
-### On-Call
+These run on their own with no command needed.
 
-> "I can pick up extra shifts this week" / "Put me on call"
+| Feature | When it runs | Who gets notified |
+|---------|-------------|-------------------|
+| Shift reminders (night before) | 8pm daily | Staff who have shifts the next day |
+| Shift reminders (2 hours before) | Checked every 30 minutes | Staff with upcoming shifts |
+| No-show early warning | Checked every 15 minutes | Manager gets a private message if staff have not confirmed close to shift time |
+| Daily manager briefing | 8am daily | Manager |
+| Reliability tracking | Automatically on every coverage, no-show, and trade event | Stored internally, visible with `/reliability` |
+| Rotation fairness | During schedule generation | Automatically balances who gets the desirable shifts |
+| Payroll calculation | When the schedule is published | Manager gets a text summary and an Excel spreadsheet |
 
-Relay notes the availability for the week.
+---
 
-## Schedule Workflow
+## Notifications Staff Receive
 
-1. **Collect** — Run `/availability`. Relay DMs each registered staff member to ask what days they can work.
-2. **Generate** — Run `/makeschedule`. Relay builds a schedule from availability, shift requirements, and staff roles.
-3. **Review** — The manager gets a draft in DM with warnings for clopenings (close then open) and overtime. They can:
-   - Reply **approve** to publish
-   - Reply **approve anyway** to publish despite warnings
-   - Reply **regenerate** for a different arrangement
-   - Describe an edit: *"remove Mahin from Monday Morning Prep"* or *"add Sapna to Tuesday Lunch"*
-4. **Publish** — Approved schedules are posted to the group. Each staff member gets a personal DM with their shifts.
-5. **Confirm** — Staff reply to confirm they've seen their schedule. Run `/receipts` to see who hasn't confirmed yet.
+Here is every private message staff might get from the bot and what to do about it.
 
-## Deploying
+| When | What the message says | How to reply |
+|------|----------------------|--------------|
+| Manager runs `/availability` | A numbered list of shifts asking which you can work | Reply with numbers ("1 3 5"), "all", or "off" |
+| Schedule is published | Your personal shifts for the week | Reply "got it" to confirm |
+| Someone needs coverage | "[Name] needs coverage for [shift]. Can you cover?" | Reply "yes" or "trade my [shift]" |
+| Night before your shift | "Reminder -- you're on tomorrow for [shift]" | No reply needed |
+| 2 hours before your shift | "Heads up -- your [shift] starts in about 2 hours" | No reply needed |
+| Time off approved or denied | "Your time-off for [date] has been approved/denied" | No reply needed |
+| New hire registration | Welcome message with setup instructions | Follow the link to register |
 
-### Railway
+---
 
-```bash
-npm install -g @railway/cli
-railway login
-railway init
-railway up
-```
+## Pay and Overtime
 
-Add the four environment variables under **Variables** in the Railway dashboard.
+- Payroll is calculated automatically when the schedule is published.
+- The manager receives a text summary in a private message showing each staff member's hours and gross pay.
+- The manager also receives an Excel spreadsheet with three tabs: Schedule, Payroll, and Late Arrivals.
+- Staff can message the bot "my pay" to see this week's breakdown, or "pay history" for the last four weeks.
+- Overtime settings are configured during setup or with `/setovertime`. You can set weekly thresholds, daily thresholds, and multipliers.
+- Late arrival deductions are factored into payroll automatically.
 
-## Support
+---
 
-Type `/commands` in any group with Relay to see the full command list.
+## Troubleshooting
+
+| Problem | What to do |
+|---------|-----------|
+| Bot does not respond in the group | Make sure the bot is a member of the group and has permission to send messages. |
+| Staff did not get a private message | They need to register first. Type `/register` in the group and have them tap the link. |
+| `/makeschedule` says no availability | Run `/availability` first to collect staff responses. |
+| Schedule has unfilled positions | Not enough available staff for those shifts. Check `/hours` to see the gaps. |
+| Staff says "I can cover" but nothing happens | They need to be registered. Use `/register` to get them connected. |
+| Payroll numbers look wrong | Check `/setrate` to verify hourly rates and `/setovertime` for overtime settings. |
+| Bot sends too many reminders | Reminders are automatic -- one the night before and one two hours before each shift. |
+| Need to redo part of setup | Type "reset" during any setup step to clear that section and start over. |
+
+---
+
+## Requirements for Staff
+
+1. Have Telegram installed on any device.
+2. Someone types `/register` in the group.
+3. The staff member taps the link that appears, which opens a private chat with the bot.
+4. They are now registered and will receive schedule messages, coverage requests, and reminders.
+
+That is it.
