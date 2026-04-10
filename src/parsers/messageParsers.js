@@ -22,6 +22,14 @@ Typo tolerance: treat near-misses as the intended word — 'iguy'→'igu', 'fash
 
 IMPORTANT: If a message contains BOTH uncertainty AND a commitment phrase, classify as coverage_confirmation. The commitment phrase at the end overrides the hedge. Example: 'yea i think igu' = confirmation, 'idk maybe i can' = maybe.
 
+PARTIAL_COVERAGE_OFFER — someone volunteers to cover only PART of a shift (first half, second half, until a time, from a time, or a specific time range). ONLY use this when they explicitly state a partial time:
+{"type":"partial_coverage_offer","person":"name of volunteer, use sender name","portion":"first_half|second_half|until|from|range","timeReference":"the time mentioned if applicable, null otherwise"}
+
+Common partial_coverage_offer phrases: 'I can cover the first half', 'I can do the first part', 'I can cover until [time]', 'I can come in from [time]', 'I can do [time] to [time]', 'I can cover the morning part', 'available for the second half'
+portion values: 'first_half' (first part/first half), 'second_half' (second part/second half), 'until' (I can cover until X), 'from' (I can come from X), 'range' (I can do X to Y)
+MUST NOT trigger on: 'I can cover' alone → coverage_confirmation, 'I can cover that' → coverage_confirmation, 'I can cover the whole shift' → coverage_confirmation
+KEY DISTINCTION: partial_coverage_offer requires explicit partial time language. Full coverage without time restrictions = coverage_confirmation.
+
 COVERAGE_MAYBE — someone is genuinely unsure with no commitment at all (pure maybe with zero commitment phrase):
 {"type":"coverage_maybe","person":"name of person who is unsure"}
 Examples: 'maybe', 'idk', 'lemme check', 'lmk', 'i'll try', 'possibly' — with NO commitment phrase alongside it.

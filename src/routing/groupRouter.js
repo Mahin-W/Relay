@@ -9,6 +9,7 @@ import { logger } from '../logger.js'
 import { handleGroupCommands } from './commandRouter.js'
 import { handleCopySchedule } from '../schedule/copySchedule.js'
 import { handleNewHireAnnouncement } from '../onboarding/handleNewHire.js'
+import { handlePartialCoverageOffer } from '../coverage/partialCoverage.js'
 
 export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
   const groupName = msg.chat.title || 'Unknown Group'
@@ -52,6 +53,9 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
         break
       case 'coverage_request':
         await handleCoverageRequest(bot, msg, intent)
+        break
+      case 'partial_coverage_offer':
+        await handlePartialCoverageOffer(bot, msg, intent)
         break
       case 'coverage_confirmation':
         await handleCoverageConfirmation(bot, msg, intent)
