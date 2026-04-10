@@ -13,6 +13,9 @@ import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.j
 import { handleRotationCommand } from './fairness/rotationTracker.js'
 import { handleCopySchedule } from './schedule/copySchedule.js'
 import { handleWelcomeCommand } from './onboarding/handleNewHire.js'
+import { startOvertimeStep } from './setup/overtimeSteps.js'
+import { getManagerGroup } from './setup/setupDb.js'
+import { sendPayrollSpreadsheet } from './payroll/spreadsheetGenerator.js'
 import { updateRoleRate } from './setup/setupDb.js'
 import { sendPayReport, formatStaffPayHistory } from './payroll/payReport.js'
 import { getPayrollHistory } from './payroll/payDb.js'
@@ -198,6 +201,21 @@ bot.onText(/^\/welcome(.*)/, async (msg, match) => {
   if (!['group', 'supergroup'].includes(msg.chat.type)) return
   const name = (match[1] || '').trim().replace(/^@/, '')
   await handleWelcomeCommand(bot, msg, name)
+})
+
+bot.onText(/^\/setovertime/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const session = await getManagerGroup(msg.from.id)
+  if (!session) return
+  await startOvertimeStep(bot, session.dm_chat_id, String(msg.chat.id), session.setup_data ?? {})
+})
+
+bot.onText(/^\/spreadsheet(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  if (!(await isBotAdmin(String(msg.chat.id), msg.from.id))) return
+  const weekStart = match[1].trim() || null
+  await bot.sendMessage(msg.chat.id, '📊 Generating payroll spreadsheet...')
+  await sendPayrollSpreadsheet(bot, String(msg.chat.id), weekStart, null)
 })
 
 process.on('SIGINT', () => {
