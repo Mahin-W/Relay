@@ -89,7 +89,7 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
 
   const marked = await _markCovered(openRequest.id, volunteer)
   if (!marked) {
-    await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
+    await bot.sendMessage(msg.chat.id, 'That shift was already covered by someone else — thanks for offering! 🙏')
     return
   }
 

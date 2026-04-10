@@ -52,8 +52,9 @@ export async function markCovered(requestId, coveredBy) {
       .from('coverage_requests')
       .update({ status: 'covered', covered_by: coveredBy, covered_at: new Date().toISOString() })
       .eq('id', requestId)
+      .eq('status', 'open')
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) throw error
     logger.db(`Request id=${requestId} marked covered`)

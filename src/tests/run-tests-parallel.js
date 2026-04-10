@@ -97,8 +97,8 @@ function runSuite(suite) {
 
     proc.on('close', (code) => {
       clearTimeout(timer)
-      const passMatch = stdout.match(/^# pass\s+(\d+)/m)
-      const failMatch = stdout.match(/^# fail\s+(\d+)/m)
+      const passMatch = stdout.match(/^[#ℹ] pass\s+(\d+)/m)
+      const failMatch = stdout.match(/^[#ℹ] fail\s+(\d+)/m)
       const passCount = passMatch ? parseInt(passMatch[1]) : 0
       const failCount = failMatch ? parseInt(failMatch[1]) : 0
       resolve({

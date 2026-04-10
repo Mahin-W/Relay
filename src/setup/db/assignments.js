@@ -33,6 +33,20 @@ export async function getScheduleAssignments(shiftId, weekStart) {
   }
 }
 
+export async function clearScheduleAssignments(groupId, weekStart) {
+  try {
+    const { error } = await supabase
+      .from('schedule_assignments')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('week_start', weekStart)
+    if (error) throw error
+    logger.db(`Cleared schedule assignments for group ${groupId} week ${weekStart}`)
+  } catch (err) {
+    logger.error(`clearScheduleAssignments failed: ${err.message}`)
+  }
+}
+
 export async function addScheduleAssignment(groupId, shiftId, staffId, weekStart) {
   try {
     const { data, error } = await supabase

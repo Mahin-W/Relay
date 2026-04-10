@@ -109,6 +109,10 @@ bot.onText(/^\/pay/, async (msg) => {
 
   const parts = msg.text.trim().split(/\s+/)
   const weekArg = parts[1] ?? null // e.g. /pay 2025-01-06
+  if (!session.dm_chat_id) {
+    await bot.sendMessage(groupId, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+    return
+  }
   await bot.sendMessage(groupId, `📨 Pay summary sent to your DM.`)
   await sendPayReport(bot, groupId, weekArg)
 })
@@ -144,6 +148,8 @@ bot.onText(/^\/staffpay/, async (msg) => {
   if (session.dm_chat_id) {
     await bot.sendMessage(groupId, `📨 Pay history for ${matched.name} sent to your DM.`)
     await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
+  } else {
+    await bot.sendMessage(groupId, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
   }
 })
 
@@ -184,6 +190,8 @@ bot.onText(/^\/reliability/, async (msg) => {
   if (session.dm_chat_id) {
     await bot.sendMessage(groupId, '📨 Reliability report sent to your DM.')
     await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
+  } else {
+    await bot.sendMessage(groupId, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
   }
 })
 

@@ -4,7 +4,7 @@ import { logger } from '../../logger.js'
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 const DEFAULTS = {
-  overtime_enabled: true,
+  overtime_enabled: false,
   weekly_threshold: 40,
   weekly_multiplier: 1.5,
   daily_overtime_enabled: false,

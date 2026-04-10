@@ -1,5 +1,5 @@
 import { groq, groqWithRetry } from '../parsers/groq.js'
-import { getSetupSession, getStaffForGroup, addScheduleAssignment, getShiftsForGroup, getShiftRequirements, getRatesForGroup } from '../setup/setupDb.js'
+import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
 import { getGroupMembersWithDm } from '../db.js'
@@ -94,6 +94,7 @@ export async function publishSchedule(bot, schedule, managerGroup) {
     await updateScheduleStatus(schedule.id, 'published')
 
     const assignments = schedule.assignments ?? []
+    await clearScheduleAssignments(schedule.group_id, schedule.week_start)
     for (const a of assignments) {
       await addScheduleAssignment(schedule.group_id, a.shiftId, a.staffId, schedule.week_start)
     }
