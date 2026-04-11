@@ -50,13 +50,14 @@ export function formatWeekLabel(weekStart) {
 //   staff must include userId already resolved (no DM-pool name matching needed)
 export async function generateWeeklySchedule(groupId, weekStart, mockData = null) {
   try {
-    let shifts, resolvedStaff, availabilityRecords, requirements
+    let shifts, resolvedStaff, availabilityRecords, requirements, maxShiftsPerDay = 0
 
     if (mockData) {
       // ── Test path: use provided data directly ─────────────────────────────
       shifts = mockData.shifts ?? []
       requirements = mockData.requirements ?? []
       availabilityRecords = mockData.availability ?? []
+      maxShiftsPerDay = mockData.maxShiftsPerDay ?? 0
       resolvedStaff = (mockData.staff ?? []).map(s => ({
         staffId: s.id,
         name: s.name,
@@ -108,6 +109,8 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
           dmChatId: matched?.dmChatId ?? null,
         }
       })
+
+      maxShiftsPerDay = setupSession?.setup_data?.max_shifts_per_day ?? 0
     }
 
     // ── Availability lookup ───────────────────────────────────────────────────
@@ -134,7 +137,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
 
     const assignments = []
     const gaps = []
-    const assignedOnDay = {} // userId → Set<dayOfWeek>
+    const shiftsOnDay = {} // userId → Map<dayOfWeek, count>
     const assignmentCount = {} // staffId → number
 
     for (const shift of sortedShifts) {
@@ -149,7 +152,11 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         const candidates = resolvedStaff.filter(s => {
           if ((s.role || '').toLowerCase() !== roleLower) return false
           if (!isAvailable(s.userId, shift.id)) return false
-          if (assignedOnDay[s.userId]?.has(shift.day_of_week)) return false
+          // Enforce max shifts per day (0 = no limit)
+          if (s.userId && maxShiftsPerDay > 0) {
+            const dayCount = shiftsOnDay[s.userId]?.get(shift.day_of_week) ?? 0
+            if (dayCount >= maxShiftsPerDay) return false
+          }
           return true
         })
 
@@ -172,8 +179,9 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
             dmChatId: p.dmChatId,
           })
           if (p.userId) {
-            if (!assignedOnDay[p.userId]) assignedOnDay[p.userId] = new Set()
-            assignedOnDay[p.userId].add(shift.day_of_week)
+            if (!shiftsOnDay[p.userId]) shiftsOnDay[p.userId] = new Map()
+            const current = shiftsOnDay[p.userId].get(shift.day_of_week) ?? 0
+            shiftsOnDay[p.userId].set(shift.day_of_week, current + 1)
           }
           assignmentCount[p.staffId] = (assignmentCount[p.staffId] ?? 0) + 1
         }

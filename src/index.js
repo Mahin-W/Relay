@@ -285,6 +285,31 @@ bot.onText(/^\/log(.*)/, async (msg, match) => {
   await handleLogCommand(bot, msg, args)
 })
 
+bot.onText(/^\/setmaxshifts(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return await bot.sendMessage(msg.chat.id, '⚠️ Only admins can change this setting.')
+  const raw = (match[1] || '').trim().toLowerCase()
+  const { getSetupSession, updateSetupSession } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session) return
+  if (!raw || raw === 'none' || raw === 'no limit' || raw === '0') {
+    const data = { ...(session.setup_data ?? {}), max_shifts_per_day: 0 }
+    await updateSetupSession(groupId, { setup_data: data })
+    await bot.sendMessage(msg.chat.id, '✅ No limit on shifts per day.')
+    return
+  }
+  const n = parseInt(raw)
+  if (isNaN(n) || n < 1 || n > 5) {
+    return await bot.sendMessage(msg.chat.id, 'Usage: /setmaxshifts [1-5] or /setmaxshifts none')
+  }
+  const data = { ...(session.setup_data ?? {}), max_shifts_per_day: n }
+  await updateSetupSession(groupId, { setup_data: data })
+  await bot.sendMessage(msg.chat.id, `✅ Max shifts per person per day set to ${n}.`)
+})
+
 process.on('SIGINT', () => {
   logger.bot('Shutting down gracefully...')
   bot.stopPolling()
