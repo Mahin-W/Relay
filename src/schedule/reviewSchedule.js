@@ -127,11 +127,13 @@ export async function publishSchedule(bot, schedule, managerGroup) {
 
     // Calculate payroll after publishing
     try {
+      const { getTimeEntriesForWeek } = await import('../timeclock/clockDb.js')
       const shifts = await getShiftsForGroup(schedule.group_id)
       const rates = await getRatesForGroup(schedule.group_id)
       const otSettings = await getOvertimeSettings(schedule.group_id)
       const lateEvents = await getLateEventsForWeek(schedule.group_id, schedule.week_start)
-      const payroll = calculateWeeklyPayWithOT(assignments, shifts, rates, otSettings ?? {}, lateEvents)
+      const timeEntries = await getTimeEntriesForWeek(schedule.group_id, schedule.week_start).catch(() => [])
+      const payroll = calculateWeeklyPayWithOT(assignments, shifts, rates, otSettings ?? {}, lateEvents, [], timeEntries)
       await savePeriodPayroll(schedule.group_id, schedule.week_start, payroll)
       logger.info(`Payroll calculated for week ${schedule.week_start}`)
       await sendPayReport(bot, schedule.group_id, schedule.week_start)

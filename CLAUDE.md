@@ -43,6 +43,11 @@ src/schedule/reviewSchedule.js   — manager approve/edit/publish flow (handles 
 src/schedule/readReceipts.js     — sendPersonalSchedule, handleReceiptConfirmation, getUnconfirmedStaff, sendReceiptReminders
 src/schedule/clopen.js           — detectClopenings, formatClopeningWarning (pure, no DB/Groq)
 src/schedule/hoursTracker.js     — calculateWeeklyHours, detectHoursIssues, formatHoursWarning (pure)
+src/timeclock/clockDetector.js   — fast-path keyword matching for clock in/out (no LLM)
+src/timeclock/clockDb.js         — time_entries DB operations
+src/timeclock/clockHandler.js    — handleClockIn, handleClockOut + shift auto-matching
+src/timeclock/clockAlerts.js     — OT alerts on clock-out, compliance report for briefing
+src/timeclock/clockCommands.js   — /clockstatus, /timesheet commands
 src/logger.js             — logger utility
 ```
 

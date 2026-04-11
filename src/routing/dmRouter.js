@@ -15,6 +15,8 @@ import { handleNewHireRegistration } from '../onboarding/handleNewHire.js'
 import { logger } from '../logger.js'
 import { isReceiptConfirmation, handleReceiptConfirmation } from '../schedule/readReceipts.js'
 import { handleLogEntry } from '../managerLog/shiftLog.js'
+import { detectClockIntent } from '../timeclock/clockDetector.js'
+import { handleClockIn, handleClockOut } from '../timeclock/clockHandler.js'
 
 export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   const text = msg.text.trim()
@@ -71,6 +73,25 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
       logger.error(`Availability reply handling failed: ${err.message}`)
     }
     return
+  }
+
+  // Time clock — fast-path keyword detection (no LLM)
+  const clockIntent = detectClockIntent(text)
+  if (clockIntent === 'clock_in') {
+    try {
+      await handleClockIn(bot, msg)
+      return
+    } catch (err) {
+      logger.error(`Clock-in failed: ${err.message}`)
+    }
+  }
+  if (clockIntent === 'clock_out') {
+    try {
+      await handleClockOut(bot, msg)
+      return
+    } catch (err) {
+      logger.error(`Clock-out failed: ${err.message}`)
+    }
   }
 
   if (isReceiptConfirmation(text)) {

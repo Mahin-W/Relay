@@ -246,7 +246,7 @@ function dayRank(dayOfWeek) {
  * Calculate weekly pay for all staff with overtime support.
  * Returns array sorted by staffName ASC.
  */
-export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSettings, lateEvents = [], partialCoverages = []) {
+export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSettings, lateEvents = [], partialCoverages = [], timeEntries = []) {
   const shiftMap = Object.fromEntries((shifts ?? []).map(s => [String(s.id), s]))
   const roleMap  = Object.fromEntries((roles ?? []).map(r => [r.roleName?.toLowerCase(), r]))
 
@@ -259,6 +259,15 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
   const partialMap = {}
   for (const p of (partialCoverages ?? [])) {
     partialMap[`${p.staffId}:${p.shiftId}`] = p
+  }
+
+  // Time entries: map by staff_id+shift_id for actual hours lookup
+  const timeEntryMap = {}
+  for (const te of (timeEntries ?? [])) {
+    if (!te.clock_in || !te.clock_out) continue
+    const key = `${te.staff_id}:${te.shift_id}`
+    const ms = new Date(te.clock_out).getTime() - new Date(te.clock_in).getTime()
+    timeEntryMap[key] = ms / 3600000 // hours
   }
 
   const staffMap = {}
@@ -296,12 +305,16 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
     for (const { shiftObj, shiftId, roleObj } of entry.rawAssignments) {
       const lateMinutes = lateMap[`${entry.staffId}:${shiftId}`] ?? 0
       const partial     = partialMap[`${entry.staffId}:${shiftId}`]
+      // Use actual hours from time clock if available
+      const actualHours = timeEntryMap[`${entry.staffId}:${shiftId}`]
+      const useActual   = actualHours != null
       const pr = calculateShiftPayWithOT(
         shiftObj, roleObj, runningHours, overtimeSettings,
         lateMinutes,
-        partial?.partialFrom ?? null,
-        partial?.partialUntil ?? null,
+        useActual ? 0 : (partial?.partialFrom ?? null),
+        useActual ? actualHours : (partial?.partialUntil ?? null),
       )
+      pr.hoursSource = useActual ? 'actual' : 'scheduled'
       runningHours = round2(runningHours + pr.effectiveHours)
       shiftResults.push(pr)
     }

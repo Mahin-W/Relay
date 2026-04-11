@@ -38,6 +38,7 @@ const FAST_SUITES = [
   { id: 'unit_labor_cost', file: 'unit/laborCost.test.js', label: 'Unit — Labor Cost % Tracker', timeout: 15_000 },
   { id: 'unit_budget_alert', file: 'unit/budgetAlert.test.js', label: 'Unit — Budget Alert', timeout: 15_000 },
   { id: 'unit_shift_log', file: 'unit/shiftLog.test.js', label: 'Unit — Manager Shift Log', timeout: 15_000 },
+  { id: 'unit_time_clock', file: 'unit/timeClock.test.js', label: 'Unit — Time Clock', timeout: 15_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },

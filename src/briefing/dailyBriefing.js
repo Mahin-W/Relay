@@ -2,6 +2,7 @@ import cron from 'node-cron'
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '../logger.js'
 import { getSetupSession as liveGetSetupSession } from '../setup/setupDb.js'
+import { getClockComplianceReport, formatComplianceSection } from '../timeclock/clockAlerts.js'
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
@@ -158,7 +159,7 @@ export async function buildBriefing(groupId, date, db = null) {
     if (staffName) shiftMap.get(key).staffNames.push(staffName)
   }
 
-  return {
+  const result = {
     date: formatDate(date),
     todaysShifts: [...shiftMap.values()],
     openCoverageRequests: coverage.map(r => ({
@@ -169,7 +170,17 @@ export async function buildBriefing(groupId, date, db = null) {
     pendingTimeOff: timeOff.map(r => ({ staffName: r.staff_name, requestedDate: r.requested_date })),
     unconfirmedSchedule: unconfirmed,
     openTrades: trades.map(r => ({ shiftName: r.shift_description, requestedBy: r.requester_name })),
+    clockCompliance: null,
   }
+
+  // Clock compliance — non-fatal, never blocks the briefing
+  try {
+    result.clockCompliance = await getClockComplianceReport(groupId, date, db)
+  } catch (err) {
+    logger.error(`Clock compliance check failed (non-fatal): ${err.message}`)
+  }
+
+  return result
 }
 
 // ── formatBriefing ────────────────────────────────────────────────────────
@@ -213,6 +224,12 @@ export function formatBriefing(briefing) {
     lines.push('✅ Nothing needs your attention today')
   } else {
     lines.push(...attention)
+  }
+
+  // Clock compliance section
+  if (briefing.clockCompliance) {
+    const complianceText = formatComplianceSection(briefing.clockCompliance)
+    if (complianceText) lines.push(complianceText)
   }
 
   return lines.join('\n')

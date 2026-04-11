@@ -22,6 +22,7 @@ import { getPayrollHistory } from './payroll/payDb.js'
 import { handleRevenueInput, parseRevenueInput, getRevenueHistory, formatRevenueHistory } from './analytics/laborCost.js'
 import { saveBudget, getBudget } from './analytics/budgetAlert.js'
 import { handleLogCommand } from './managerLog/shiftLog.js'
+import { handleClockStatus, handleTimesheetCommand } from './timeclock/clockCommands.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -308,6 +309,21 @@ bot.onText(/^\/setmaxshifts(.*)/, async (msg, match) => {
   const data = { ...(session.setup_data ?? {}), max_shifts_per_day: n }
   await updateSetupSession(groupId, { setup_data: data })
   await bot.sendMessage(msg.chat.id, `✅ Max shifts per person per day set to ${n}.`)
+})
+
+bot.onText(/^\/clockstatus/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleClockStatus(bot, msg)
+})
+
+bot.onText(/^\/timesheet(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  const staffName = (match[1] || '').trim().replace(/^@/, '') || null
+  await handleTimesheetCommand(bot, msg, staffName)
 })
 
 process.on('SIGINT', () => {
