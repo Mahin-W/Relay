@@ -17,6 +17,7 @@ import { isReceiptConfirmation, handleReceiptConfirmation } from '../schedule/re
 import { handleLogEntry } from '../managerLog/shiftLog.js'
 import { detectClockIntent } from '../timeclock/clockDetector.js'
 import { handleClockIn, handleClockOut } from '../timeclock/clockHandler.js'
+import { handleWhoIsWorkingQuery } from '../schedule/currentShift.js'
 
 export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   const text = msg.text.trim()
@@ -173,6 +174,15 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     } catch (err) {
       logger.error(`DM trade offer handling failed: ${err.message}`)
     }
+  }
+
+  // "Who is working" query — fast-path keyword detection
+  const whoTriggers = ['who is working', 'who works', 'whos working', "who's on", 'current staff', 'on shift now', 'whos on now', 'who is on']
+  if (whoTriggers.some(t => text.toLowerCase().includes(t))) {
+    try { await handleWhoIsWorkingQuery(bot, msg) } catch (err) {
+      logger.error(`Who is working query failed: ${err.message}`)
+    }
+    return
   }
 
   // Manager shift log — catch manager free-text DMs that look like shift notes

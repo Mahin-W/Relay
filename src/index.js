@@ -23,6 +23,8 @@ import { handleRevenueInput, parseRevenueInput, getRevenueHistory, formatRevenue
 import { saveBudget, getBudget } from './analytics/budgetAlert.js'
 import { handleLogCommand } from './managerLog/shiftLog.js'
 import { handleClockStatus, handleTimesheetCommand } from './timeclock/clockCommands.js'
+import { handleListRules, handleDeleteRule } from './rules/businessRules.js'
+import { generateMoraleReport, formatMoraleReport } from './intelligence/moraleTracker.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -324,6 +326,47 @@ bot.onText(/^\/timesheet(.*)/, async (msg, match) => {
   if (!isAdmin) return
   const staffName = (match[1] || '').trim().replace(/^@/, '') || null
   await handleTimesheetCommand(bot, msg, staffName)
+})
+
+bot.onText(/^\/rules/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  await handleListRules(bot, msg, groupId)
+})
+
+bot.onText(/^\/delrule(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  const n = parseInt((match[1] || '').trim())
+  if (isNaN(n)) {
+    await bot.sendMessage(msg.chat.id, 'Usage: /delrule [number]\nSee /rules for the numbered list.')
+    return
+  }
+  await handleDeleteRule(bot, msg, n, groupId)
+})
+
+bot.onText(/^\/morale/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const { getSetupSession, getStaffForGroup } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(userId)) return
+  const allStaff = await getStaffForGroup(groupId)
+  const report = await generateMoraleReport(groupId, allStaff)
+  const formatted = formatMoraleReport(report)
+  if (session.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, '📨 Morale report sent to your DM.')
+    await bot.sendMessage(session.dm_chat_id, formatted, { parse_mode: 'Markdown' })
+  } else {
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+  }
 })
 
 process.on('SIGINT', () => {

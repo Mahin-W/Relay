@@ -40,6 +40,20 @@ export async function handleManagerReview(bot, msg, schedule, managerGroup) {
   const edit = await parseEditIntent(text, schedule)
   if (edit && edit.action !== 'unclear') {
     await applyEdit(bot, msg, schedule, REVIEW_PROMPT, edit)
+    // Track edit for preference learning
+    try {
+      const { saveEditEvent } = await import('../intelligence/preferenceDb.js')
+      await saveEditEvent(schedule.group_id, {
+        type: edit.action,
+        staffId: null,
+        staffName: edit.person ?? '',
+        fromShiftId: null,
+        toShiftId: null,
+        dayOfWeek: edit.day ?? null,
+        reason: null,
+        weekStart: schedule.week_start,
+      })
+    } catch (prefErr) { logger.error(`Save edit event failed (non-fatal): ${prefErr.message}`) }
     return
   }
 

@@ -222,10 +222,29 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     if (clopenings.length > 0) logger.bot(`Clopening warnings: ${clopenings.length}`)
     if (hoursIssues.overtime.length > 0) logger.bot(`Overtime warnings: ${hoursIssues.overtime.length}`)
 
+    // ── Business rules check (live mode only) ─────────────────────────────────
+    let ruleConflicts = []
+    if (!mockData && assignments.length > 0) {
+      try {
+        const { getRules } = await import('../rules/rulesDb.js')
+        const { applyRulesToAssignments } = await import('../rules/businessRules.js')
+        const rules = await getRules(groupId)
+        if (rules.length > 0) {
+          const mappedShifts = shifts.map(s => ({ id: s.id, name: s.name, dayOfWeek: s.day_of_week, startTime: s.start_time, endTime: s.end_time }))
+          const mappedStaff = resolvedStaff.map(s => ({ id: s.staffId, name: s.name }))
+          const result = applyRulesToAssignments(assignments, mappedShifts, mappedStaff, rules)
+          ruleConflicts = result.conflicts
+          if (ruleConflicts.length > 0) logger.bot(`Rule conflicts: ${ruleConflicts.length}`)
+        }
+      } catch (ruleErr) {
+        logger.error(`Business rules check failed (non-fatal): ${ruleErr.message}`)
+      }
+    }
+
     // ── Persist draft (skipped in test/mock mode) ─────────────────────────────
     const saved = mockData ? null : await saveGeneratedSchedule(groupId, weekStart, assignments, gaps)
 
-    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues }
+    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts }
   } catch (err) {
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
     return { assignments: [], gaps: [], weekStart, scheduleId: null }

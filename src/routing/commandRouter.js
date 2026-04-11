@@ -8,7 +8,8 @@ import { formatClopeningWarning } from '../schedule/clopen.js'
 import { calculateWeeklyHours, formatHoursWarning } from '../schedule/hoursTracker.js'
 import { getUnconfirmedStaff } from '../schedule/readReceipts.js'
 import { calculateProjectedLaborCost, formatBudgetAlert, getBudget } from '../analytics/budgetAlert.js'
-import { getShiftsForGroup, getRatesForGroup, getOvertimeSettings } from '../setup/setupDb.js'
+import { getShiftsForGroup, getRatesForGroup, getOvertimeSettings, getStaffForGroup } from '../setup/setupDb.js'
+import { formatRuleConflicts } from '../rules/businessRules.js'
 
 // Returns true if a command was handled, false otherwise
 export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
@@ -77,12 +78,54 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
         logger.error(`Budget alert failed (non-fatal): ${budgetErr.message}`)
       }
 
-      const hasWarnings = clopeningWarn || hoursWarn
+      // Business rule conflicts
+      let rulesSection = ''
+      try {
+        const ruleConflictsStr = formatRuleConflicts(schedule.ruleConflicts ?? [])
+        if (ruleConflictsStr) rulesSection = '\n\n' + ruleConflictsStr
+      } catch (rulesErr) {
+        logger.error(`Rule conflicts formatting failed (non-fatal): ${rulesErr.message}`)
+      }
+
+      // Preference auto-apply
+      let prefsSection = ''
+      try {
+        const { getPreferences } = await import('../intelligence/preferenceDb.js')
+        const { applyPreferencesToDraft, formatPreferenceSummary } = await import('../intelligence/preferenceTracker.js')
+        const prefs = await getPreferences(groupId)
+        const autoPrefs = prefs.filter(p => p.autoApply ?? p.auto_apply)
+        if (autoPrefs.length > 0) {
+          const allStaff = await getStaffForGroup(groupId)
+          const allShifts = await getShiftsForGroup(groupId)
+          const { newAssignments, applied } = applyPreferencesToDraft(schedule.assignments, autoPrefs, allShifts, allStaff)
+          if (applied.length > 0) {
+            schedule.assignments = newAssignments
+            const summary = formatPreferenceSummary(applied)
+            if (summary) prefsSection = '\n\n' + summary
+          }
+        }
+      } catch (prefErr) {
+        logger.error(`Preference auto-apply failed (non-fatal): ${prefErr.message}`)
+      }
+
+      // Proactive pattern alerts
+      let alertsSection = ''
+      try {
+        const { generatePrePublishAlerts, formatPrePublishAlerts } = await import('../intelligence/patternAlerts.js')
+        const allShifts = await getShiftsForGroup(groupId)
+        const alerts = await generatePrePublishAlerts(groupId, schedule.assignments, allShifts)
+        const alertStr = formatPrePublishAlerts(alerts)
+        if (alertStr) alertsSection = '\n\n' + alertStr
+      } catch (alertErr) {
+        logger.error(`Pattern alerts failed (non-fatal): ${alertErr.message}`)
+      }
+
+      const hasWarnings = clopeningWarn || hoursWarn || rulesSection
       const reviewPrompt = hasWarnings
         ? `Reply *approve anyway* to publish despite warnings, *approve* if you've fixed them, or *regenerate* for a different arrangement.`
         : `Reply *approve* to publish, or *regenerate* for a different arrangement.`
       await bot.sendMessage(managerGroup.dm_chat_id,
-        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}\n${reviewPrompt}`,
+        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}\n${reviewPrompt}`,
         { parse_mode: 'Markdown' })
       await bot.sendMessage(msg.chat.id, `📋 Draft schedule sent to the manager for review.`)
     } catch (err) {
