@@ -187,6 +187,22 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     }
   }
 
+  // Emergency availability — fast-path keyword detection (manager only)
+  const emergencyTriggers = [
+    'who can work tonight right now', 'who can work now', 'who is available now',
+    'emergency coverage', 'need someone now', 'who can come in',
+    'last minute coverage', 'need someone asap', 'need someone immediately',
+  ]
+  if (managerGroup && emergencyTriggers.some(t => text.toLowerCase().includes(t))) {
+    try {
+      const { handleEmergencyQuery } = await import('../intelligence/emergencyAvailability.js')
+      await handleEmergencyQuery(bot, msg)
+      return
+    } catch (err) {
+      logger.error(`Emergency availability query failed: ${err.message}`)
+    }
+  }
+
   // "Who is working" query — fast-path keyword detection
   const whoTriggers = ['who is working', 'who works', 'whos working', "who's on", 'current staff', 'on shift now', 'whos on now', 'who is on']
   if (whoTriggers.some(t => text.toLowerCase().includes(t))) {

@@ -92,24 +92,87 @@ export async function handleCoverageRequest(bot, msg, intent, db = null) {
   const onCallRecords = await _getOnCallStaff(groupId, matchedWeekStart).catch(() => [])
   const onCallSet = new Set(onCallRecords.map(r => String(r.staff_id)))
 
+  // Coverage speed: get top responders for priority DMs
+  let topNames = new Set()
+  try {
+    const { getTopResponders, formatCoverageSpeedNotice } = await import('../intelligence/coverageSpeed.js')
+    const top = await getTopResponders(groupId, 3)
+    if (top.length >= 2) {
+      topNames = new Set(top.map(t => t.staffName))
+
+      // Compute team avg fill time from stats
+      const avgFill = Math.round(top.reduce((sum, t) => sum + t.avgResponseMinutes, 0) / top.length)
+      const notice = formatCoverageSpeedNotice(top, avgFill)
+
+      // DM manager with speed notice (fire-and-forget)
+      if (notice && requesterId) {
+        import('../setup/setupDb.js').then(({ getManagerGroup }) =>
+          getManagerGroup(requesterId).then(mg => {
+            if (mg?.dm_chat_id) {
+              bot.sendMessage(mg.dm_chat_id, notice, { parse_mode: 'Markdown' }).catch(() => {})
+            }
+          })
+        ).catch(() => {})
+      }
+    }
+  } catch (err) {
+    logger.error(`Coverage speed check failed (non-fatal): ${err.message}`)
+  }
+
+  // Separate into priority (top responders + on-call) and everyone else
+  const priority = []
+  const rest = []
   for (const member of toNotify) {
     if (!member.dmChatId) continue
+    const isTopResponder = topNames.has(member.firstName)
+    const isOnCall = onCallSet.has(String(member.userId))
+    if (isTopResponder || isOnCall) {
+      priority.push({ ...member, isOnCall, isTopResponder })
+    } else {
+      rest.push({ ...member, isOnCall: false, isTopResponder: false })
+    }
+  }
+
+  // DM priority responders immediately
+  for (const member of priority) {
     try {
-      const isOnCall = onCallSet.has(String(member.userId))
-      const dmText = isOnCall
-        ? `🔔 *You're on call — first dibs!*\n\n` +
-          `*Shift:* ${shiftLabel}\n` +
-          `*Requested by:* ${requestedBy}\n\n` +
-          `Can you cover it? Reply *yes* to volunteer ✋`
-        : `🔔 *Coverage Needed — ${groupName}*\n\n` +
-          `*Shift:* ${shiftLabel}\n` +
-          `*Requested by:* ${requestedBy}\n\n` +
-          `Can you cover it? Reply *yes* to volunteer ✋`
+      const tag = member.isOnCall ? 'on call — first dibs' : 'top responder'
+      const dmText = `🔔 *Coverage Needed — ${groupName}*\n\n` +
+        `*Shift:* ${shiftLabel}\n` +
+        `*Requested by:* ${requestedBy}\n\n` +
+        `Can you cover it? Reply *yes* to volunteer ✋`
       await bot.sendMessage(member.dmChatId, dmText, { parse_mode: 'Markdown' })
       await _saveOutreach(request.id, member.userId)
-      logger.bot(`DM sent to ${member.firstName}${isOnCall ? ' (on-call priority)' : ''}`)
+      logger.bot(`DM sent to ${member.firstName} (${tag} — priority)`)
     } catch (err) {
       logger.error(`Failed to DM ${member.firstName}: ${err.message}`)
     }
+  }
+
+  // DM everyone else — immediately if no priority data, delayed 5min otherwise
+  const sendToRest = async () => {
+    for (const member of rest) {
+      try {
+        const dmText = `🔔 *Coverage Needed — ${groupName}*\n\n` +
+          `*Shift:* ${shiftLabel}\n` +
+          `*Requested by:* ${requestedBy}\n\n` +
+          `Can you cover it? Reply *yes* to volunteer ✋`
+        await bot.sendMessage(member.dmChatId, dmText, { parse_mode: 'Markdown' })
+        await _saveOutreach(request.id, member.userId)
+        logger.bot(`DM sent to ${member.firstName}`)
+      } catch (err) {
+        logger.error(`Failed to DM ${member.firstName}: ${err.message}`)
+      }
+    }
+  }
+
+  if (topNames.size >= 2 && rest.length > 0) {
+    // Delay 5 minutes, then send to everyone else (fire-and-forget)
+    setTimeout(() => {
+      sendToRest().catch(err => logger.error(`Delayed DM blast failed: ${err.message}`))
+    }, 5 * 60 * 1000)
+    logger.bot(`${rest.length} remaining staff will be notified in 5 minutes`)
+  } else {
+    await sendToRest()
   }
 }

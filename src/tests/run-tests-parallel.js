@@ -44,6 +44,11 @@ const FAST_SUITES = [
   { id: 'unit_preference_tracker', file: 'unit/preferenceTracker.test.js', label: 'Unit — Preference Tracker', timeout: 10_000 },
   { id: 'unit_pattern_alerts', file: 'unit/patternAlerts.test.js', label: 'Unit — Pattern Alerts', timeout: 10_000 },
   { id: 'unit_morale_tracker', file: 'unit/moraleTracker.test.js', label: 'Unit — Morale Tracker', timeout: 10_000 },
+  { id: 'unit_auto_shift_log', file: 'unit/autoShiftLog.test.js', label: 'Unit — Auto Shift Log', timeout: 10_000 },
+  { id: 'unit_demand_signals', file: 'unit/demandSignals.test.js', label: 'Unit — Demand Signals', timeout: 10_000 },
+  { id: 'unit_coverage_speed', file: 'unit/coverageSpeed.test.js', label: 'Unit — Coverage Speed', timeout: 10_000 },
+  { id: 'unit_contextual_warnings', file: 'unit/contextualWarnings.test.js', label: 'Unit — Contextual Warnings', timeout: 10_000 },
+  { id: 'unit_emergency_availability', file: 'unit/emergencyAvailability.test.js', label: 'Unit — Emergency Availability', timeout: 10_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },
@@ -61,6 +66,7 @@ const LLM_SUITES = [
   { id: 'unit_copy_schedule', file: 'unit/copySchedule.test.js', label: 'Unit — Copy Schedule (LLM)', timeout: 300_000 },
   { id: 'unit_new_hire', file: 'unit/newHire.test.js', label: 'Unit — New Hire Onboarding (LLM)', timeout: 300_000 },
   { id: 'unit_partial_coverage', file: 'unit/partialCoverage.test.js', label: 'Unit — Partial Coverage (LLM)', timeout: 300_000 },
+  { id: 'unit_narrative_briefing', file: 'unit/narrativeBriefing.test.js', label: 'Unit — Narrative Briefing (LLM)', timeout: 30_000 },
 ]
 
 const args = process.argv.slice(2)
