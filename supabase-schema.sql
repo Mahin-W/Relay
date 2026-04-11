@@ -339,6 +339,75 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_group_week
   ON time_entries (group_id, clock_in);
 
 -- ═══════════════════════════════════════════════════════════════
+-- INTELLIGENCE LAYER
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS business_rules (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  subject_staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  object_staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  constraint_text TEXT NOT NULL,
+  raw_message TEXT NOT NULL,
+  day_of_week TEXT,
+  latest_end_time TEXT,
+  shift_id BIGINT REFERENCES shifts(id) ON DELETE SET NULL,
+  shift_preference TEXT,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_business_rules_group
+  ON business_rules(group_id, active);
+
+CREATE TABLE IF NOT EXISTS schedule_edit_events (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  staff_name TEXT NOT NULL,
+  from_shift_id BIGINT,
+  to_shift_id BIGINT,
+  day_of_week TEXT,
+  reason TEXT,
+  week_start DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_edit_events_group_staff
+  ON schedule_edit_events(group_id, staff_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS learned_preferences (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  staff_name TEXT NOT NULL,
+  day_of_week TEXT,
+  shift_id BIGINT,
+  confidence DECIMAL(3,2) DEFAULT 0,
+  sample_size INTEGER DEFAULT 0,
+  auto_apply BOOLEAN DEFAULT FALSE,
+  last_updated TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(group_id, type, staff_id, shift_id, day_of_week)
+);
+
+CREATE TABLE IF NOT EXISTS morale_events (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  response_minutes INTEGER,
+  sentiment TEXT,
+  week_start DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_morale_events_group_staff
+  ON morale_events(group_id, staff_id, created_at DESC);
+
+-- ═══════════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY — anon access for all tables
 -- ═══════════════════════════════════════════════════════════════
 
@@ -354,7 +423,8 @@ BEGIN
       'passive_availability', 'generated_schedules', 'schedule_assignments',
       'schedule_receipts', 'staff_reliability_events', 'on_call', 'time_off_requests',
       'noshow_warnings', 'onboarding_pending', 'payroll_records', 'weekly_revenue',
-      'labor_budgets', 'manager_log_entries', 'time_entries'
+      'labor_budgets', 'manager_log_entries', 'time_entries',
+      'business_rules', 'schedule_edit_events', 'learned_preferences', 'morale_events'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
