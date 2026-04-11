@@ -107,6 +107,9 @@ export function formatLogEntry(entry) {
   const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })
 
   let result = `${dayName}, ${monthDay} ${time}`
+  if (entry.manager_id == null) {
+    result += ` _(auto)_`
+  }
   if (entry.shift_name) {
     result += `\n\u{1F4CB} ${entry.shift_name}`
   }
@@ -224,4 +227,204 @@ export async function handleLogCommand(bot, msg, args, db = null) {
   if (isGroup) {
     await bot.sendMessage(String(msg.chat.id), '\u{1F4D3} Log sent to your DM')
   }
+}
+
+// ── Auto-generated shift log ────────────────────────────────────────────────
+
+/**
+ * Build a narrative string from shift data. Pure function — no DB/LLM.
+ * @param {object} shiftData
+ * @returns {string}
+ */
+export function buildShiftNarrative(shiftData) {
+  const {
+    shiftName, dayOfWeek, date,
+    callouts, coverageEvents, lateArrivals, noShows, fullyCovered,
+  } = shiftData
+
+  let lines = [`*${shiftName}* \u2014 ${dayOfWeek} ${date}`]
+
+  const hasEvents = (callouts?.length > 0) || (coverageEvents?.length > 0) ||
+    (lateArrivals?.length > 0) || (noShows?.length > 0)
+
+  if (!hasEvents) {
+    lines.push('\u2705 Clean shift. No issues.')
+    return lines.join('\n')
+  }
+
+  // Collect all events with timestamps for chronological sorting
+  const events = []
+
+  for (const c of (callouts ?? [])) {
+    events.push({
+      time: c.reportedAt ?? null,
+      text: `${c.staffName} called out ${c.minutesBefore}min before shift.`,
+    })
+  }
+
+  for (const cov of (coverageEvents ?? [])) {
+    if (cov.wasPartial) {
+      events.push({
+        time: cov.confirmedAt ?? cov.requestedAt ?? null,
+        text: `${cov.coveredBy} covered ${cov.partialFrom}\u2013${cov.partialTo} (${cov.fillMinutes}min to confirm).`,
+      })
+    } else {
+      events.push({
+        time: cov.confirmedAt ?? cov.requestedAt ?? null,
+        text: `${cov.coveredBy} covered (${cov.fillMinutes}min to confirm).`,
+      })
+    }
+  }
+
+  for (const la of (lateArrivals ?? [])) {
+    events.push({
+      time: null,
+      text: `${la.staffName} arrived ${la.minutesLate}min late.`,
+    })
+  }
+
+  for (const ns of (noShows ?? [])) {
+    events.push({
+      time: null,
+      text: `\u26A0\uFE0F ${ns.staffName} no-showed.`,
+    })
+  }
+
+  // Sort chronologically; null-timed events last
+  events.sort((a, b) => {
+    if (a.time && b.time) return new Date(a.time) - new Date(b.time)
+    if (a.time && !b.time) return -1
+    if (!a.time && b.time) return 1
+    return 0
+  })
+
+  for (const ev of events) {
+    lines.push(ev.text)
+  }
+
+  // Coverage summary
+  if (callouts?.length > 0 || noShows?.length > 0) {
+    if (fullyCovered) {
+      lines.push('Full coverage achieved.')
+    } else {
+      lines.push('\u26A0\uFE0F Shift ran understaffed.')
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Compile shift data from DB for narrative generation.
+ * @param {string} groupId
+ * @param {string} shiftId
+ * @param {string} shiftDate
+ * @param {string} shiftName
+ * @param {string} dayOfWeek
+ * @param {object|null} db
+ * @returns {object} shiftData suitable for buildShiftNarrative
+ */
+export async function compileShiftData(groupId, shiftId, shiftDate, shiftName, dayOfWeek, db = null) {
+  const _getAssignments = db?.getScheduleAssignments
+  const _getCoverageRequests = db?.getCoverageRequestsForShift
+  const _getReliabilityEvents = db?.getReliabilityEventsForDate
+  const _getNoShows = db?.getNoShowEventsForShift
+
+  const [assignments, coverageReqs, reliabilityEvents, noShowEvents] = await Promise.all([
+    _getAssignments ? _getAssignments(groupId, shiftId, shiftDate) : [],
+    _getCoverageRequests ? _getCoverageRequests(groupId, shiftId, shiftDate) : [],
+    _getReliabilityEvents ? _getReliabilityEvents(groupId, shiftDate) : [],
+    _getNoShows ? _getNoShows(groupId, shiftId, shiftDate) : [],
+  ])
+
+  const staffScheduled = (assignments ?? []).map(a => ({
+    staffId: a.staff_id,
+    staffName: a.staff_name,
+  }))
+
+  // Extract callouts from coverage requests (anyone who requested coverage = called out)
+  const callouts = (coverageReqs ?? [])
+    .filter(r => r.requested_by)
+    .map(r => ({
+      staffName: r.requested_by,
+      reportedAt: r.created_at,
+      minutesBefore: null, // Could be computed if shift start time known
+    }))
+
+  const coverageEvents = (coverageReqs ?? [])
+    .filter(r => r.covered_by && r.status === 'covered')
+    .map(r => {
+      const fillMinutes = (r.covered_at && r.created_at)
+        ? Math.round((new Date(r.covered_at) - new Date(r.created_at)) / 60000)
+        : null
+      return {
+        requestedBy: r.requested_by,
+        coveredBy: r.covered_by,
+        requestedAt: r.created_at,
+        confirmedAt: r.covered_at,
+        fillMinutes,
+        wasPartial: false,
+      }
+    })
+
+  const lateArrivals = (reliabilityEvents ?? [])
+    .filter(e => e.event_type === 'late_arrival')
+    .map(e => ({
+      staffName: e.metadata?.staff_name ?? 'Unknown',
+      minutesLate: e.metadata?.minutes_late ?? 0,
+    }))
+
+  const noShows = (noShowEvents ?? []).map(e => ({
+    staffName: e.staff_name,
+  }))
+
+  const hasCoverageGaps = coverageReqs?.some(r => r.status === 'open') ?? false
+  const fullyCovered = noShows.length === 0 && !hasCoverageGaps
+
+  return {
+    shiftName,
+    dayOfWeek,
+    date: shiftDate,
+    staffScheduled,
+    callouts,
+    coverageEvents,
+    lateArrivals,
+    noShows,
+    fullyCovered,
+  }
+}
+
+/**
+ * Auto-log a shift's events. Silent background operation.
+ * @param {object} bot
+ * @param {string} groupId
+ * @param {string} shiftId
+ * @param {string} shiftDate
+ * @param {string} shiftName
+ * @param {string} dayOfWeek
+ * @param {object|null} db
+ */
+export async function autoLogShift(bot, groupId, shiftId, shiftDate, shiftName, dayOfWeek, db = null) {
+  // Check for duplicate
+  const _getLogEntryForShiftDate = db?.getLogEntryForShiftDate
+  if (_getLogEntryForShiftDate) {
+    const existing = await _getLogEntryForShiftDate(groupId, shiftName, shiftDate)
+    if (existing) return
+  }
+
+  const shiftData = await compileShiftData(groupId, shiftId, shiftDate, shiftName, dayOfWeek, db)
+  const narrative = buildShiftNarrative(shiftData)
+
+  // Compute weekStart (Monday of the week containing shiftDate)
+  const d = new Date(shiftDate)
+  const day = d.getUTCDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const monday = new Date(d)
+  monday.setUTCDate(d.getUTCDate() + diff)
+  const weekStart = monday.toISOString().slice(0, 10)
+
+  const shiftRef = { shiftName, dayOfWeek, weekStart }
+  const _saveLogEntry = db?.saveLogEntry ?? saveLogEntry
+  await _saveLogEntry(groupId, null, narrative, shiftRef)
+  // Silent — no bot.sendMessage
 }
