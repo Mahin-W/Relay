@@ -26,6 +26,10 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
   const handled = await handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin)
   if (handled) return
 
+  // Skip LLM parsing for slash commands — they're handled by bot.onText in index.js
+  // or by handleGroupCommands above. Prevents double-fire and wasteful API calls.
+  if (msg.text.trim().startsWith('/')) return
+
   const pending = resolvePendingClarification(groupId, userId, msg.text)
   if (pending) {
     try {

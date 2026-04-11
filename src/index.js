@@ -264,14 +264,14 @@ bot.onText(/^\/setbudget(.*)/, async (msg, match) => {
     return bot.sendMessage(msg.chat.id, 'Usage: /setbudget 3200\nSets your weekly labor budget to $3,200')
   }
   await saveBudget(groupId, amount)
-  bot.sendMessage(msg.chat.id, `✅ Weekly labor budget set to $${amount.toFixed(2)}`)
+  await bot.sendMessage(msg.chat.id, `✅ Weekly labor budget set to $${amount.toFixed(2)}`)
 })
 
 bot.onText(/^\/budget$/, async (msg) => {
   if (!['group', 'supergroup'].includes(msg.chat.type)) return
   const b = await getBudget(String(msg.chat.id))
-  if (!b) return bot.sendMessage(msg.chat.id, 'No budget set. Use /setbudget [amount]')
-  bot.sendMessage(msg.chat.id, `💰 Weekly labor budget: $${b.weeklyBudget}`)
+  if (!b) return await bot.sendMessage(msg.chat.id, 'No budget set. Use /setbudget [amount]')
+  await bot.sendMessage(msg.chat.id, `💰 Weekly labor budget: $${b.weeklyBudget}`)
 })
 
 bot.onText(/^\/log(.*)/, async (msg, match) => {

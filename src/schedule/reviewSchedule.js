@@ -1,12 +1,12 @@
 import { groq, groqWithRetry, extractJSON } from '../parsers/groq.js'
-import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup } from '../setup/setupDb.js'
+import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup, getOvertimeSettings } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
 import { getGroupMembersWithDm } from '../db.js'
 import { logger } from '../logger.js'
 import { applyEdit } from './scheduleEditor.js'
 import { sendPersonalSchedule } from './readReceipts.js'
-import { calculateWeeklyPay } from '../payroll/payCalculator.js'
+import { calculateWeeklyPayWithOT } from '../payroll/payCalculator.js'
 import { savePeriodPayroll, getLateEventsForWeek } from '../payroll/payDb.js'
 import { sendPayReport } from '../payroll/payReport.js'
 import { sendPayrollSpreadsheet } from '../payroll/spreadsheetGenerator.js'
@@ -129,8 +129,9 @@ export async function publishSchedule(bot, schedule, managerGroup) {
     try {
       const shifts = await getShiftsForGroup(schedule.group_id)
       const rates = await getRatesForGroup(schedule.group_id)
+      const otSettings = await getOvertimeSettings(schedule.group_id)
       const lateEvents = await getLateEventsForWeek(schedule.group_id, schedule.week_start)
-      const payroll = calculateWeeklyPay(assignments, shifts, rates, lateEvents)
+      const payroll = calculateWeeklyPayWithOT(assignments, shifts, rates, otSettings ?? {}, lateEvents)
       await savePeriodPayroll(schedule.group_id, schedule.week_start, payroll)
       logger.info(`Payroll calculated for week ${schedule.week_start}`)
       await sendPayReport(bot, schedule.group_id, schedule.week_start)

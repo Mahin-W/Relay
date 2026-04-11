@@ -136,7 +136,8 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
         await bot.sendMessage(msg.chat.id, `No published schedule yet. Run */makeschedule* to generate one.`, { parse_mode: 'Markdown' })
         return true
       }
-      const hoursMap = calculateWeeklyHours(schedule.assignments ?? [], [])
+      const shifts = await getShiftsForGroup(groupId)
+      const hoursMap = calculateWeeklyHours(schedule.assignments ?? [], shifts)
       const entries = Object.values(hoursMap).sort((a, b) => b.totalHours - a.totalHours)
       if (entries.length === 0) {
         await bot.sendMessage(msg.chat.id, `No scheduled hours found for this week.`)

@@ -2,7 +2,6 @@ import cron from 'node-cron'
 import { logger } from '../logger.js'
 import { getUpcomingShifts, markWarned, wasWarned, getConfiguredGroups } from './noShowDb.js'
 import { getSetupSession } from '../setup/setupDb.js'
-import { recordEvent as liveRecordEvent } from '../reliability/reliabilityDb.js'
 
 // ── Time parsing ──────────────────────────────────────────────────────────
 
@@ -85,7 +84,6 @@ export async function checkUpcomingShifts(bot, db = null) {
   const _wasWarned = db?.wasWarned ?? wasWarned
   const _markWarned = db?.markWarned ?? markWarned
   const _getSetupSession = db?.getSetupSession ?? getSetupSession
-  const _recordEvent = db?.recordEvent ?? liveRecordEvent
 
   let checked = 0, warned = 0, skipped = 0
 
@@ -107,11 +105,6 @@ export async function checkUpcomingShifts(bot, db = null) {
         { parse_mode: 'Markdown' }
       )
       await _markWarned(assignment.id, groupId)
-      if (assignment.staff_id) {
-        _recordEvent(assignment.staff_id, groupId, 'no_call_no_show').catch(err =>
-          logger.error(`recordEvent no_call_no_show failed: ${err.message}`)
-        )
-      }
       warned++
     }
   }

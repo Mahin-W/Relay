@@ -154,12 +154,14 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     }
   }
 
-  // Manager shift log — catch manager free-text DMs before fallback
+  // Manager shift log — catch manager free-text DMs that look like shift notes
+  // Skip questions and general chat to avoid accidental logging
   const managerGroupForLog = managerGroup || await getManagerGroup(userId)
-  if (managerGroupForLog && text.length > 10 && !text.startsWith('/')) {
+  const looksLikeQuestion = /\?/.test(text) || /^(how|what|when|where|why|who|can|does|is|do|will|should|could|would|help)\b/i.test(text)
+  if (managerGroupForLog && text.length > 10 && !text.startsWith('/') && !looksLikeQuestion) {
     try {
-      await handleLogEntry(bot, msg)
-      return
+      const logged = await handleLogEntry(bot, msg)
+      if (logged) return
     } catch (err) {
       logger.error(`Log entry failed: ${err.message}`)
     }
