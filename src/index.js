@@ -19,6 +19,9 @@ import { sendPayrollSpreadsheet } from './payroll/spreadsheetGenerator.js'
 import { updateRoleRate } from './setup/setupDb.js'
 import { sendPayReport, formatStaffPayHistory } from './payroll/payReport.js'
 import { getPayrollHistory } from './payroll/payDb.js'
+import { handleRevenueInput, parseRevenueInput, getRevenueHistory, formatRevenueHistory } from './analytics/laborCost.js'
+import { saveBudget, getBudget } from './analytics/budgetAlert.js'
+import { handleLogCommand } from './managerLog/shiftLog.js'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -224,6 +227,62 @@ bot.onText(/^\/spreadsheet(.*)/, async (msg, match) => {
   const weekStart = match[1].trim() || null
   await bot.sendMessage(msg.chat.id, '📊 Generating payroll spreadsheet...')
   await sendPayrollSpreadsheet(bot, String(msg.chat.id), weekStart, null)
+})
+
+bot.onText(/^\/revenue(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const raw = match[1].trim()
+  if (!raw) return bot.sendMessage(msg.chat.id, 'Usage: /revenue [amount]\nExample: /revenue 14500')
+  const revenue = parseRevenueInput(raw)
+  if (!revenue && revenue !== 0) return bot.sendMessage(msg.chat.id, "Couldn't parse that amount. Try: /revenue 14500")
+  await handleRevenueInput(bot, msg, revenue)
+})
+
+bot.onText(/^\/labortrend/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const { getSetupSession } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(msg.from?.id)) return
+  const history = await getRevenueHistory(groupId)
+  const formatted = formatRevenueHistory(history)
+  if (session.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, '📨 Labor trend sent to your DM.')
+    await bot.sendMessage(session.dm_chat_id, formatted, { parse_mode: 'Markdown' })
+  }
+})
+
+bot.onText(/^\/setbudget(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return bot.sendMessage(msg.chat.id, '⚠️ Only admins can set the budget.')
+  const raw = match[1].trim()
+  const amount = parseFloat(raw.replace(/[$,]/g, ''))
+  if (!amount || amount <= 0) {
+    return bot.sendMessage(msg.chat.id, 'Usage: /setbudget 3200\nSets your weekly labor budget to $3,200')
+  }
+  await saveBudget(groupId, amount)
+  bot.sendMessage(msg.chat.id, `✅ Weekly labor budget set to $${amount.toFixed(2)}`)
+})
+
+bot.onText(/^\/budget$/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const b = await getBudget(String(msg.chat.id))
+  if (!b) return bot.sendMessage(msg.chat.id, 'No budget set. Use /setbudget [amount]')
+  bot.sendMessage(msg.chat.id, `💰 Weekly labor budget: $${b.weeklyBudget}`)
+})
+
+bot.onText(/^\/log(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const { getSetupSession } = await import('./setup/setupDb.js')
+  const session = await getSetupSession(groupId)
+  if (!session || String(session.manager_id) !== String(userId)) return
+  const args = (match[1] || '').trim()
+  await handleLogCommand(bot, msg, args)
 })
 
 process.on('SIGINT', () => {

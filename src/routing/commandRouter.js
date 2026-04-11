@@ -7,8 +7,8 @@ import { logger } from '../logger.js'
 import { formatClopeningWarning } from '../schedule/clopen.js'
 import { calculateWeeklyHours, formatHoursWarning } from '../schedule/hoursTracker.js'
 import { getUnconfirmedStaff } from '../schedule/readReceipts.js'
-import { handleLaborCostCommand } from '../analytics/laborCost.js'
-import { getBudgetAlertForSchedule } from '../analytics/budgetAlert.js'
+import { calculateProjectedLaborCost, formatBudgetAlert, getBudget } from '../analytics/budgetAlert.js'
+import { getShiftsForGroup, getRatesForGroup, getOvertimeSettings } from '../setup/setupDb.js'
 
 // Returns true if a command was handled, false otherwise
 export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
@@ -63,12 +63,24 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
       const formatted = formatScheduleMessage(schedule.assignments, schedule.gaps, weekStart)
       const clopeningWarn = formatClopeningWarning(schedule.clopenings ?? [])
       const hoursWarn = formatHoursWarning(schedule.hoursIssues ?? { overtime: [], underScheduled: [] })
-      const budgetAlert = await getBudgetAlertForSchedule(groupId, schedule.assignments, schedule.shifts ?? [])
-      const hasWarnings = clopeningWarn || hoursWarn || budgetAlert
+
+      // Budget alert — projected cost vs manager's budget
+      let budgetSection = ''
+      try {
+        const shifts = await getShiftsForGroup(groupId)
+        const rates = await getRatesForGroup(groupId)
+        const otSettings = await getOvertimeSettings(groupId)
+        const projected = calculateProjectedLaborCost(schedule.assignments, shifts, rates, otSettings ?? {})
+        const budgetData = await getBudget(groupId)
+        budgetSection = '\n\n' + formatBudgetAlert(projected, budgetData?.weeklyBudget ?? null, weekStart)
+      } catch (budgetErr) {
+        logger.error(`Budget alert failed (non-fatal): ${budgetErr.message}`)
+      }
+
+      const hasWarnings = clopeningWarn || hoursWarn
       const reviewPrompt = hasWarnings
         ? `Reply *approve anyway* to publish despite warnings, *approve* if you've fixed them, or *regenerate* for a different arrangement.`
         : `Reply *approve* to publish, or *regenerate* for a different arrangement.`
-      const budgetSection = budgetAlert ? `\n\n${budgetAlert}` : ''
       await bot.sendMessage(managerGroup.dm_chat_id,
         `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}\n${reviewPrompt}`,
         { parse_mode: 'Markdown' })
@@ -212,19 +224,6 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
     await bot.sendMessage(msg.chat.id,
       `Hi ${senderName}! I'll walk you through setup in a private chat.\n\n👉 [Click here to open our DM](${deepLink})\n\nOnce you've completed setup there, I'll be ready to go here.`,
       { parse_mode: 'Markdown', disable_web_page_preview: true })
-    return true
-  }
-
-  if (cmd('laborcost')) {
-    const admin = await isAuthorizedAdmin(groupId, userId)
-    if (!admin) { await bot.sendMessage(msg.chat.id, `⚠️ Only group admins can view labor costs.`); return true }
-    try {
-      const weekStart = getNextWeekStart()
-      await handleLaborCostCommand(bot, msg.chat.id, groupId, weekStart)
-    } catch (err) {
-      logger.error(`/laborcost failed: ${err.message}`)
-      await bot.sendMessage(msg.chat.id, `Something went wrong — try again.`)
-    }
     return true
   }
 
