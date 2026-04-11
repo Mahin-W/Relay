@@ -1,95 +1,340 @@
-import { test } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { MockBot, makeDMMsg } from '../helpers/mocks.js'
-import { handleManagerLogEntry, formatLogEntries } from '../../managerLog/shiftLog.js'
-import { saveLogEntry, getLogEntries } from '../../managerLog/shiftLogDb.js'
+import { MockBot, makeDMMsg, makeGroupMsg } from '../helpers/mocks.js'
+import {
+  detectShiftReference,
+  formatLogEntry,
+  formatLogBook,
+  handleLogEntry,
+  handleLogCommand,
+} from '../../managerLog/shiftLog.js'
 
-const groupId = '-100'
-const managerId = 12345
-const weekStart = '2025-01-06'
+const mockShifts = [
+  { name: 'Monday Lunch', day_of_week: 'Monday' },
+  { name: 'Friday Dinner', day_of_week: 'Friday' },
+]
 
-// formatLogEntries (pure):
-test('formatLogEntries: shows "No log entries" for empty array', () => {
-  const result = formatLogEntries([], weekStart)
-  assert.ok(result.includes('No log entries'))
+// ── detectShiftReference ─────────────────────────────────────────────────────
+
+describe('detectShiftReference', () => {
+  it('detects day + meal period combined', () => {
+    const ref = detectShiftReference('Friday dinner was rough', mockShifts)
+    assert.equal(ref.dayOfWeek, 'Friday')
+    assert.ok(ref.shiftName.toLowerCase().includes('dinner'))
+  })
+
+  it('detects day name alone', () => {
+    const ref = detectShiftReference('Monday morning prep was slow', mockShifts)
+    assert.equal(ref.dayOfWeek, 'Monday')
+  })
+
+  it('returns null for generic text', () => {
+    const ref = detectShiftReference('general note no shift mentioned', mockShifts)
+    assert.equal(ref, null)
+  })
+
+  it('returns null for empty string', () => {
+    const ref = detectShiftReference('', mockShifts)
+    assert.equal(ref, null)
+  })
+
+  it('detects meal period without day', () => {
+    const ref = detectShiftReference('lunch was great', mockShifts)
+    assert.ok(ref)
+    assert.ok(ref.shiftName.toLowerCase().includes('lunch'))
+  })
+
+  it('exact shift name match takes priority', () => {
+    const ref = detectShiftReference('Monday Lunch was amazing today', mockShifts)
+    assert.equal(ref.shiftName, 'Monday Lunch')
+    assert.equal(ref.dayOfWeek, 'Monday')
+  })
+
+  it('detects abbreviated day names', () => {
+    const ref = detectShiftReference('Fri night was busy', mockShifts)
+    assert.equal(ref.dayOfWeek, 'Friday')
+  })
+
+  it('detects time indicators like "last night"', () => {
+    const ref = detectShiftReference('last night we ran out of salmon', mockShifts)
+    assert.ok(ref)
+  })
+
+  it('detects "this morning"', () => {
+    const ref = detectShiftReference('this morning delivery was late', mockShifts)
+    assert.ok(ref)
+    assert.equal(ref.dayOfWeek, 'today')
+  })
 })
 
-test('formatLogEntries: shows entries with numbering', () => {
+// ── formatLogEntry ───────────────────────────────────────────────────────────
+
+describe('formatLogEntry', () => {
+  const baseEntry = {
+    entry_text: 'Ran out of salmon during rush',
+    shift_name: 'Friday Dinner',
+    day_of_week: 'Friday',
+    created_at: '2026-04-10T19:30:00.000Z',
+  }
+
+  it('contains entry text', () => {
+    const out = formatLogEntry(baseEntry)
+    assert.ok(out.includes('Ran out of salmon during rush'))
+  })
+
+  it('contains shift reference when present', () => {
+    const out = formatLogEntry(baseEntry)
+    assert.ok(out.includes('Friday Dinner'))
+  })
+
+  it('no shift line when shift_name is null', () => {
+    const entry = { ...baseEntry, shift_name: null, day_of_week: null }
+    const out = formatLogEntry(entry)
+    assert.ok(!out.includes('\u{1F4CB}')) // no clipboard emoji
+  })
+})
+
+// ── formatLogBook ────────────────────────────────────────────────────────────
+
+describe('formatLogBook', () => {
   const entries = [
-    { entry_text: 'Marcus called in sick', created_at: new Date().toISOString() },
-    { entry_text: 'Short on bar staff', created_at: new Date().toISOString() },
+    {
+      entry_text: 'Salmon ran out',
+      shift_name: 'Friday Dinner',
+      day_of_week: 'Friday',
+      created_at: '2026-04-10T19:30:00.000Z',
+    },
+    {
+      entry_text: 'New hire doing great',
+      shift_name: null,
+      day_of_week: null,
+      created_at: '2026-04-09T14:00:00.000Z',
+    },
   ]
-  const result = formatLogEntries(entries, weekStart)
-  assert.ok(result.includes('Marcus'))
-  assert.ok(result.includes('Short on bar staff'))
-  assert.ok(result.includes('2 entries') || result.includes('2'))
+
+  it('empty entries shows helpful message', () => {
+    const out = formatLogBook([])
+    assert.ok(out.includes('No log entries yet'))
+  })
+
+  it('single entry formats correctly', () => {
+    const out = formatLogBook([entries[0]])
+    assert.ok(out.includes('Salmon ran out'))
+  })
+
+  it('title appears in output', () => {
+    const out = formatLogBook(entries, 'My Custom Title')
+    assert.ok(out.includes('My Custom Title'))
+  })
+
+  it('multiple entries shown with timestamps', () => {
+    const out = formatLogBook(entries)
+    assert.ok(out.includes('Salmon ran out'))
+    assert.ok(out.includes('New hire doing great'))
+  })
 })
 
-test('formatLogEntries: includes week date in header', () => {
-  const result = formatLogEntries([], weekStart)
-  assert.ok(result.includes(weekStart) || result.includes('2025'))
+// ── handleLogEntry ───────────────────────────────────────────────────────────
+
+describe('handleLogEntry', () => {
+  const mockEntries = [
+    {
+      id: 1,
+      entry_text: 'Salmon ran out during Friday dinner rush',
+      shift_name: 'Friday Dinner',
+      day_of_week: 'Friday',
+      created_at: '2026-04-10T19:30:00.000Z',
+    },
+    {
+      id: 2,
+      entry_text: 'New hire doing great on Monday lunch',
+      shift_name: 'Monday Lunch',
+      day_of_week: 'Monday',
+      created_at: '2026-04-09T14:00:00.000Z',
+    },
+  ]
+
+  function makeMockDb(overrides = {}) {
+    return {
+      saveLogEntry: async (groupId, managerId, text, shiftRef) => ({
+        id: 1,
+        group_id: groupId,
+        manager_id: managerId,
+        entry_text: text,
+        shift_name: shiftRef?.shiftName ?? null,
+        day_of_week: shiftRef?.dayOfWeek ?? null,
+        created_at: new Date().toISOString(),
+      }),
+      getLogEntries: async (groupId, limit) => mockEntries,
+      searchLogEntries: async (groupId, query) =>
+        mockEntries.filter(e =>
+          e.entry_text.toLowerCase().includes(query.toLowerCase())
+        ),
+      getManagerGroup: async (userId) => ({
+        group_id: '-100999888',
+        dm_chat_id: '12345',
+      }),
+      getShiftsForGroup: async (groupId) => mockShifts,
+      ...overrides,
+    }
+  }
+
+  it('saves entry to DB', async () => {
+    const bot = new MockBot()
+    let savedArgs = null
+    const db = makeMockDb({
+      saveLogEntry: async (groupId, managerId, text, shiftRef) => {
+        savedArgs = { groupId, managerId, text, shiftRef }
+        return {
+          id: 1,
+          group_id: groupId,
+          manager_id: managerId,
+          entry_text: text,
+          shift_name: shiftRef?.shiftName ?? null,
+          day_of_week: shiftRef?.dayOfWeek ?? null,
+          created_at: new Date().toISOString(),
+        }
+      },
+    })
+    const msg = makeDMMsg({ text: 'Friday dinner was rough tonight' })
+    await handleLogEntry(bot, msg, db)
+    assert.ok(savedArgs)
+    assert.equal(savedArgs.groupId, '-100999888')
+    assert.equal(savedArgs.managerId, 12345)
+  })
+
+  it('replies with logged confirmation', async () => {
+    const bot = new MockBot()
+    const db = makeMockDb()
+    const msg = makeDMMsg({ text: 'general note about inventory' })
+    await handleLogEntry(bot, msg, db)
+    bot.assertSent('12345', '\u{1F4DD} Logged')
+  })
+
+  it('includes shift reference in reply when detected', async () => {
+    const bot = new MockBot()
+    const db = makeMockDb()
+    const msg = makeDMMsg({ text: 'Friday dinner was rough tonight' })
+    await handleLogEntry(bot, msg, db)
+    const last = bot.last
+    assert.ok(last.text.includes('Linked to'))
+  })
+
+  it('shift reference saved in DB record', async () => {
+    const bot = new MockBot()
+    let savedShiftRef = null
+    const db = makeMockDb({
+      saveLogEntry: async (groupId, managerId, text, shiftRef) => {
+        savedShiftRef = shiftRef
+        return {
+          id: 1,
+          group_id: groupId,
+          manager_id: managerId,
+          entry_text: text,
+          shift_name: shiftRef?.shiftName ?? null,
+          day_of_week: shiftRef?.dayOfWeek ?? null,
+          created_at: new Date().toISOString(),
+        }
+      },
+    })
+    const msg = makeDMMsg({ text: 'Friday dinner was rough tonight' })
+    await handleLogEntry(bot, msg, db)
+    assert.ok(savedShiftRef)
+    assert.equal(savedShiftRef.dayOfWeek, 'Friday')
+  })
 })
 
-// saveLogEntry with mock DB:
-test('saveLogEntry: calls db method when provided', async () => {
-  let saved = null
-  const db = { saveLogEntry: async (gid, mid, text, ws) => { saved = { gid, mid, text, ws }; return { id: 1 } } }
-  await saveLogEntry(groupId, managerId, 'test entry', weekStart, db)
-  assert.equal(saved.gid, groupId)
-  assert.equal(saved.text, 'test entry')
-})
+// ── handleLogCommand ─────────────────────────────────────────────────────────
 
-// getLogEntries with mock DB:
-test('getLogEntries: returns empty array when none', async () => {
-  const db = { getLogEntries: async () => [] }
-  const result = await getLogEntries(groupId, weekStart, db)
-  assert.deepEqual(result, [])
-})
+describe('handleLogCommand', () => {
+  const mockEntries = [
+    {
+      id: 1,
+      entry_text: 'Salmon ran out during Friday dinner rush',
+      shift_name: 'Friday Dinner',
+      day_of_week: 'Friday',
+      created_at: '2026-04-10T19:30:00.000Z',
+    },
+    {
+      id: 2,
+      entry_text: 'New hire doing great on Monday lunch',
+      shift_name: 'Monday Lunch',
+      day_of_week: 'Monday',
+      created_at: '2026-04-09T14:00:00.000Z',
+    },
+  ]
 
-test('getLogEntries: returns entries from db', async () => {
-  const entries = [{ id: 1, entry_text: 'Test entry', created_at: new Date().toISOString() }]
-  const db = { getLogEntries: async () => entries }
-  const result = await getLogEntries(groupId, weekStart, db)
-  assert.equal(result.length, 1)
-})
+  function makeMockDb(overrides = {}) {
+    return {
+      saveLogEntry: async () => ({}),
+      getLogEntries: async (groupId, limit) => mockEntries,
+      searchLogEntries: async (groupId, query) =>
+        mockEntries.filter(e =>
+          e.entry_text.toLowerCase().includes(query.toLowerCase())
+        ),
+      getManagerGroup: async (userId) => ({
+        group_id: '-100999888',
+        dm_chat_id: '12345',
+      }),
+      getShiftsForGroup: async (groupId) => mockShifts,
+      ...overrides,
+    }
+  }
 
-// handleManagerLogEntry:
-const mockGetManager = async (userId) => ({ group_id: groupId, dm_chat_id: '999' })
-const mockGetManagerNull = async () => null
+  it('no args sends formatted log entries via DM', async () => {
+    const bot = new MockBot()
+    const db = makeMockDb()
+    const msg = makeDMMsg({ text: '/log' })
+    await handleLogCommand(bot, msg, '', db)
+    const last = bot.last
+    assert.ok(last.text.includes('Salmon ran out'))
+  })
 
-test('handleManagerLogEntry: returns false for non-manager', async () => {
-  const bot = new MockBot()
-  const msg = makeDMMsg({ text: 'This is a long enough message' })
-  const db = {}
-  const result = await handleManagerLogEntry(bot, msg, db, mockGetManagerNull)
-  assert.equal(result, false)
-  bot.assertSilent()
-})
+  it('with search args calls searchLogEntries', async () => {
+    const bot = new MockBot()
+    let searchedQuery = null
+    const db = makeMockDb({
+      searchLogEntries: async (groupId, query) => {
+        searchedQuery = query
+        return mockEntries.filter(e =>
+          e.entry_text.toLowerCase().includes(query.toLowerCase())
+        )
+      },
+    })
+    const msg = makeDMMsg({ text: '/log salmon' })
+    await handleLogCommand(bot, msg, 'salmon', db)
+    assert.equal(searchedQuery, 'salmon')
+    const last = bot.last
+    assert.ok(last.text.includes('Search results'))
+  })
 
-test('handleManagerLogEntry: returns false for short text (<=10 chars)', async () => {
-  const bot = new MockBot()
-  const msg = makeDMMsg({ text: 'short' })
-  const db = {}
-  const result = await handleManagerLogEntry(bot, msg, db, mockGetManager)
-  assert.equal(result, false)
-})
+  it('from group msg sends DM notification to group', async () => {
+    const bot = new MockBot()
+    const db = makeMockDb()
+    const msg = makeGroupMsg({ text: '/log' })
+    await handleLogCommand(bot, msg, '', db)
+    bot.assertSent('-100999888', 'Log sent to your DM')
+  })
 
-test('handleManagerLogEntry: saves entry and replies "Logged." for valid input', async () => {
-  const bot = new MockBot()
-  const msg = makeDMMsg({ text: 'Marcus called in sick for Thursday dinner shift' })
-  let savedEntry = null
-  const db = { saveLogEntry: async (gid, mid, text, ws) => { savedEntry = text; return { id: 1 } } }
-  const result = await handleManagerLogEntry(bot, msg, db, mockGetManager)
-  assert.equal(result, true)
-  assert.ok(savedEntry !== null)
-  const reply = bot.lastMessage(msg.chat.id)
-  assert.ok(reply?.text.includes('Logged'))
-})
+  it('empty log shows helpful message', async () => {
+    const bot = new MockBot()
+    const db = makeMockDb({
+      getLogEntries: async () => [],
+    })
+    const msg = makeDMMsg({ text: '/log' })
+    await handleLogCommand(bot, msg, '', db)
+    const last = bot.last
+    assert.ok(last.text.includes('No log entries yet'))
+  })
 
-test('handleManagerLogEntry: returns true even if db save fails gracefully', async () => {
-  const bot = new MockBot()
-  const msg = makeDMMsg({ text: 'Some long manager note about the evening shift' })
-  const db = { saveLogEntry: async () => null } // simulates save failure
-  const result = await handleManagerLogEntry(bot, msg, db, mockGetManager)
-  assert.equal(result, true) // still returns true — we tried
+  it('search with no results shows helpful message', async () => {
+    const bot = new MockBot()
+    const db = makeMockDb({
+      searchLogEntries: async () => [],
+    })
+    const msg = makeDMMsg({ text: '/log zebra' })
+    await handleLogCommand(bot, msg, 'zebra', db)
+    const last = bot.last
+    assert.ok(last.text.includes('No log entries yet'))
+  })
 })
