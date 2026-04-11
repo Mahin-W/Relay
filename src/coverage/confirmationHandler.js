@@ -4,6 +4,8 @@ import { formatScheduleMessage } from '../schedule/generateSchedule.js'
 import { getShiftById, swapScheduleAssignment, getStaffForGroup } from '../setup/setupDb.js'
 import { logger } from '../logger.js'
 import { recordEvent as liveRecordEvent } from '../reliability/reliabilityDb.js'
+import { saveMoraleEvent } from '../intelligence/moraleDb.js'
+import { classifySentiment } from '../intelligence/moraleTracker.js'
 
 async function swapIfPossible(openRequest, volunteer, groupId) {
   if (!openRequest.matched_shift_id || !openRequest.week_start) return
@@ -102,6 +104,21 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
 
   await swapIfPossible(openRequest, volunteer, groupId)
 
+  // Track morale event — fire-and-forget
+  try {
+    const allStaff = await getStaffForGroup(groupId)
+    const staff = allStaff.find(s => s.name?.toLowerCase() === volunteer.toLowerCase())
+    if (staff) {
+      const sentiment = classifySentiment(msg.text || '')
+      const responseMinutes = openRequest.created_at
+        ? Math.round((Date.now() - new Date(openRequest.created_at).getTime()) / 60000)
+        : null
+      saveMoraleEvent(groupId, staff.id, {
+        type: 'coverage_accept', responseMinutes, sentiment, weekStart: openRequest.week_start,
+      }).catch(() => {})
+    }
+  } catch (_) {}
+
   const text = await buildConfirmationMessage(volunteer, openRequest)
   await bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' })
   await resendSchedule(bot, groupId)
@@ -141,6 +158,21 @@ export async function handleDmConfirmation(bot, msg) {
   }
 
   await swapIfPossible(openRequest, volunteer, request.group_id)
+
+  // Track morale event — fire-and-forget
+  try {
+    const allStaff = await getStaffForGroup(request.group_id)
+    const staff = allStaff.find(s => s.name?.toLowerCase() === volunteer.toLowerCase())
+    if (staff) {
+      const sentiment = classifySentiment(msg.text || '')
+      const responseMinutes = openRequest.created_at
+        ? Math.round((Date.now() - new Date(openRequest.created_at).getTime()) / 60000)
+        : null
+      saveMoraleEvent(request.group_id, staff.id, {
+        type: 'coverage_accept', responseMinutes, sentiment, weekStart: openRequest.week_start,
+      }).catch(() => {})
+    }
+  } catch (_) {}
 
   await bot.sendMessage(
     msg.chat.id,

@@ -10,6 +10,7 @@ import { handleGroupCommands } from './commandRouter.js'
 import { handleCopySchedule } from '../schedule/copySchedule.js'
 import { handleNewHireAnnouncement } from '../onboarding/handleNewHire.js'
 import { handlePartialCoverageOffer } from '../coverage/partialCoverage.js'
+import { handleWhoIsWorkingQuery } from '../schedule/currentShift.js'
 
 export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
   const groupName = msg.chat.title || 'Unknown Group'
@@ -103,6 +104,9 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
         break
       case 'copy_schedule_request':
         await handleCopySchedule(bot, msg)
+        break
+      case 'who_is_working_query':
+        await handleWhoIsWorkingQuery(bot, msg)
         break
       case 'schedule_update':
         logger.info(`Schedule update noted: ${intent.details}`)

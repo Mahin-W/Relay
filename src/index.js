@@ -25,6 +25,7 @@ import { handleLogCommand } from './managerLog/shiftLog.js'
 import { handleClockStatus, handleTimesheetCommand } from './timeclock/clockCommands.js'
 import { handleListRules, handleDeleteRule } from './rules/businessRules.js'
 import { generateMoraleReport, formatMoraleReport } from './intelligence/moraleTracker.js'
+import cron from 'node-cron'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
@@ -55,6 +56,7 @@ bot.getMe().then((me) => {
   startReminderJobs(bot)
   startNoShowCron(bot)
   startBriefingCron(bot)
+  startPreferenceCron(bot)
 })
 
 async function isGroupAdmin(groupId, userId) {
@@ -368,6 +370,40 @@ bot.onText(/^\/morale/, async (msg) => {
     await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
   }
 })
+
+function startPreferenceCron(bot) {
+  // Sunday at midnight — analyze edit patterns and save preferences
+  cron.schedule('0 0 * * 0', async () => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+      const { data: groups } = await supabase.from('setup_sessions').select('group_id, dm_chat_id').eq('setup_complete', true)
+      if (!groups) return
+
+      const { getEditHistory } = await import('./intelligence/preferenceDb.js')
+      const { analyzePatterns, formatNewPatternAlert } = await import('./intelligence/preferenceTracker.js')
+      const { savePreference } = await import('./intelligence/preferenceDb.js')
+
+      for (const { group_id: groupId, dm_chat_id: dmChatId } of groups) {
+        const history = await getEditHistory(groupId, 8)
+        if (history.length < 2) continue
+        const patterns = analyzePatterns(history)
+        for (const p of patterns) {
+          if (p.confidence >= 0.75) {
+            await savePreference(groupId, { type: `avoid_${p.type === 'remove' ? 'day' : 'shift'}`, staffId: p.staffId, staffName: p.staffName, dayOfWeek: p.dayOfWeek ?? null, shiftId: p.shiftId ?? null, confidence: p.confidence, sampleSize: p.count, autoApply: true })
+          } else if (p.confidence >= 0.5 && dmChatId) {
+            const alertMsg = formatNewPatternAlert(p)
+            try { await bot.sendMessage(dmChatId, alertMsg, { parse_mode: 'Markdown' }) } catch (_) {}
+          }
+        }
+      }
+      logger.info('Preference analysis cron complete')
+    } catch (err) {
+      logger.error(`Preference cron error: ${err.message}`)
+    }
+  })
+  logger.info('Preference analysis cron started (Sunday midnight)')
+}
 
 process.on('SIGINT', () => {
   logger.bot('Shutting down gracefully...')

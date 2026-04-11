@@ -98,6 +98,12 @@ COPY_SCHEDULE_REQUEST — manager wants to repeat last week's schedule as-is:
 Common copy_schedule_request phrases: 'same as last week', 'copy last week', 'repeat last week', 'just do the same schedule', 'same schedule as before', 'copy the schedule', 'use last week again'
 MUST NOT trigger on: 'can anyone cover' (coverage_request), 'my schedule' (irrelevant), 'make a new schedule' (irrelevant)
 
+WHO_IS_WORKING_QUERY — someone asking who is currently on shift or working right now:
+{"type":"who_is_working_query","person":null}
+
+Common who_is_working_query phrases: 'who is working', 'who works today', 'who is on shift', 'who is on right now', 'who is working today', 'current staff', 'current roster', 'whos on', 'who is on', 'who works right now'
+MUST NOT trigger on: 'who can cover' (coverage_request framing), 'who is free' (availability question)
+
 SCHEDULE_UPDATE — availability or schedule change, not urgent coverage:
 {"type":"schedule_update","details":"brief description"}
 

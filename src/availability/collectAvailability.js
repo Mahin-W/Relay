@@ -181,6 +181,24 @@ export async function handleAvailabilityReply(bot, msg, session) {
   const text = msg.text?.trim()
   if (!text || !userId) return
 
+  // Track morale event for availability response — fire-and-forget
+  try {
+    const { saveMoraleEvent } = await import('../intelligence/moraleDb.js')
+    const { classifySentiment } = await import('../intelligence/moraleTracker.js')
+    const { getStaffForGroup } = await import('../setup/setupDb.js')
+    const allStaff = await getStaffForGroup(session.group_id)
+    const senderName = (msg.from?.first_name || '').toLowerCase()
+    const staff = allStaff.find(s => s.name?.toLowerCase() === senderName)
+    if (staff) {
+      const responseMinutes = session.created_at
+        ? Math.round((Date.now() - new Date(session.created_at).getTime()) / 60000)
+        : null
+      saveMoraleEvent(session.group_id, staff.id, {
+        type: 'availability_response', responseMinutes, sentiment: classifySentiment(text), weekStart: session.week_start,
+      }).catch(() => {})
+    }
+  } catch (_) {}
+
   const shiftMap = session.shift_map ?? {}
   const parsed = parseAvailabilityResponse(text, shiftMap)
 

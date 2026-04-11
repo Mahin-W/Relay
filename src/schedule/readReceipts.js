@@ -119,6 +119,18 @@ export async function handleReceiptConfirmation(bot, msg, db = null) {
 
   await _updateReceiptStatus(receipt.staff_id, receipt.week_start, 'confirmed')
   await bot.sendMessage(chatId, `✅ Got it! You're confirmed for next week.`)
+
+  // Track morale event — fire-and-forget
+  try {
+    const { saveMoraleEvent } = await import('../intelligence/moraleDb.js')
+    const { classifySentiment } = await import('../intelligence/moraleTracker.js')
+    const responseMinutes = receipt.sent_at
+      ? Math.round((Date.now() - new Date(receipt.sent_at).getTime()) / 60000)
+      : null
+    saveMoraleEvent(receipt.group_id, receipt.staff_id, {
+      type: 'schedule_confirm', responseMinutes, sentiment: classifySentiment(msg.text || ''), weekStart: receipt.week_start,
+    }).catch(() => {})
+  } catch (_) {}
 }
 
 export async function getUnconfirmedStaff(groupId, weekStart, db = null) {

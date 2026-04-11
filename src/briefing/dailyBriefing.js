@@ -171,6 +171,7 @@ export async function buildBriefing(groupId, date, db = null) {
     unconfirmedSchedule: unconfirmed,
     openTrades: trades.map(r => ({ shiftName: r.shift_description, requestedBy: r.requester_name })),
     clockCompliance: null,
+    moraleAlerts: null,
   }
 
   // Clock compliance — non-fatal, never blocks the briefing
@@ -178,6 +179,19 @@ export async function buildBriefing(groupId, date, db = null) {
     result.clockCompliance = await getClockComplianceReport(groupId, date, db)
   } catch (err) {
     logger.error(`Clock compliance check failed (non-fatal): ${err.message}`)
+  }
+
+  // Morale alerts — non-fatal
+  try {
+    const { generateMoraleReport, formatMoraleAlert } = await import('../intelligence/moraleTracker.js')
+    const { getStaffForGroup } = await import('../setup/setupDb.js')
+    const allStaff = await getStaffForGroup(groupId)
+    const moraleReport = await generateMoraleReport(groupId, allStaff, db)
+    if (moraleReport.alerts.length > 0) {
+      result.moraleAlerts = moraleReport.alerts
+    }
+  } catch (err) {
+    logger.error(`Morale check failed (non-fatal): ${err.message}`)
   }
 
   return result
@@ -230,6 +244,16 @@ export function formatBriefing(briefing) {
   if (briefing.clockCompliance) {
     const complianceText = formatComplianceSection(briefing.clockCompliance)
     if (complianceText) lines.push(complianceText)
+  }
+
+  // Morale alerts section
+  if (briefing.moraleAlerts && briefing.moraleAlerts.length > 0) {
+    lines.push('')
+    lines.push('👀 *Staff engagement — heads up:*')
+    for (const alert of briefing.moraleAlerts) {
+      const reasons = alert.reasons?.join(', ') || 'declining engagement'
+      lines.push(`• ${alert.staffName}: ${reasons}. Consider checking in.`)
+    }
   }
 
   return lines.join('\n')

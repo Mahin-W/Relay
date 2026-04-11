@@ -1,4 +1,4 @@
-import { getRules, deactivateRule } from './rulesDb.js'
+import { getRules, deactivateRule, saveRule } from './rulesDb.js'
 
 // ── extractRule (LLM) ────────────────────────────────────────────────────────
 
@@ -251,4 +251,79 @@ export async function handleDeleteRule(bot, msg, ruleNumber, groupId, db = null)
 
   const constraint = rule.constraint_text || rule.constraint
   await bot.sendMessage(msg.chat.id, `✅ Rule removed: "${constraint}"`)
+}
+
+// ── Pending rule state (in-memory, per-manager) ─────────────────────────────
+
+const pendingRules = new Map()
+
+export function setPendingRule(managerId, rule, groupId) {
+  pendingRules.set(managerId, { rule, groupId, timestamp: Date.now() })
+  setTimeout(() => pendingRules.delete(managerId), 5 * 60 * 1000)
+}
+
+export function getPendingRule(managerId) {
+  const pending = pendingRules.get(managerId)
+  if (!pending) return null
+  if (Date.now() - pending.timestamp > 5 * 60 * 1000) {
+    pendingRules.delete(managerId)
+    return null
+  }
+  return pending
+}
+
+export function clearPendingRule(managerId) {
+  pendingRules.delete(managerId)
+}
+
+// ── handlePotentialRule — passive rule detection in DM ────────────────────────
+
+const RULE_TRIGGERS = ['never', 'always', 'only works', 'needs to', 'has to', 'must leave', 'must be', "don't schedule", 'do not schedule', 'no scheduling', 'can\'t work', 'cannot work', 'off on', 'day off']
+
+export async function handlePotentialRule(bot, msg, groupId, db = null) {
+  const text = msg.text?.trim()
+  if (!text || text.length < 10) return false
+
+  // Fast keyword check to avoid LLM on every message
+  const lower = text.toLowerCase()
+  if (!RULE_TRIGGERS.some(t => lower.includes(t))) return false
+
+  try {
+    const { getStaffForGroup, getShiftsForGroup } = await import('../setup/setupDb.js')
+    const [staff, shifts] = await Promise.all([
+      getStaffForGroup(groupId),
+      getShiftsForGroup(groupId),
+    ])
+    const result = await extractRule(text, staff, shifts, groupId)
+    if (!result.isRule) return false
+
+    setPendingRule(msg.from.id, result.rule, groupId)
+    const constraint = result.rule.constraint || text
+    await bot.sendMessage(msg.chat.id,
+      `📋 Got it — I'll remember this rule:\n*${constraint}*\n\nReply *yes* to save, or *no* to cancel.`,
+      { parse_mode: 'Markdown' })
+    return true
+  } catch (err) {
+    return false
+  }
+}
+
+export async function handleRuleConfirmation(bot, msg, db = null) {
+  const userId = msg.from?.id
+  const pending = getPendingRule(userId)
+  if (!pending) return false
+
+  const lower = (msg.text || '').trim().toLowerCase()
+  if (['yes', 'yep', 'yeah', 'yea', 'confirm', 'save', 'y'].includes(lower)) {
+    clearPendingRule(userId)
+    await saveRule(pending.groupId, pending.rule, db)
+    await bot.sendMessage(msg.chat.id, `✅ Rule saved. I'll apply this to every schedule from now on.`)
+    return true
+  }
+  if (['no', 'nope', 'cancel', 'nah', 'n', 'nevermind'].includes(lower)) {
+    clearPendingRule(userId)
+    await bot.sendMessage(msg.chat.id, `Got it, rule discarded.`)
+    return true
+  }
+  return false
 }

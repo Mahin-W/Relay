@@ -18,6 +18,7 @@ import { handleLogEntry } from '../managerLog/shiftLog.js'
 import { detectClockIntent } from '../timeclock/clockDetector.js'
 import { handleClockIn, handleClockOut } from '../timeclock/clockHandler.js'
 import { handleWhoIsWorkingQuery } from '../schedule/currentShift.js'
+import { getPendingRule, handleRuleConfirmation, handlePotentialRule } from '../rules/businessRules.js'
 
 export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   const text = msg.text.trim()
@@ -106,7 +107,17 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
 
   const managerGroup = await getManagerGroup(userId)
   if (managerGroup) {
-    // Check time-off approval/denial first
+    // Check pending rule confirmation first (yes/no to "save this rule?")
+    if (getPendingRule(userId)) {
+      try {
+        const handled = await handleRuleConfirmation(bot, msg)
+        if (handled) return
+      } catch (err) {
+        logger.error(`Rule confirmation failed: ${err.message}`)
+      }
+    }
+
+    // Check time-off approval/denial
     if (/^(approve|deny)\s+\S+/i.test(text)) {
       try {
         const handled = await handleManagerTimeOffReply(bot, msg)
@@ -185,9 +196,20 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     return
   }
 
+  // Passive business rule detection — manager DMs that sound like scheduling rules
+  const managerGroupForRules = managerGroup || await getManagerGroup(userId)
+  if (managerGroupForRules && text.length > 10 && !text.startsWith('/')) {
+    try {
+      const wasRule = await handlePotentialRule(bot, msg, managerGroupForRules.group_id)
+      if (wasRule) return
+    } catch (err) {
+      logger.error(`Potential rule detection failed: ${err.message}`)
+    }
+  }
+
   // Manager shift log — catch manager free-text DMs that look like shift notes
   // Skip questions and general chat to avoid accidental logging
-  const managerGroupForLog = managerGroup || await getManagerGroup(userId)
+  const managerGroupForLog = managerGroupForRules || await getManagerGroup(userId)
   const looksLikeQuestion = /\?/.test(text) || /^(how|what|when|where|why|who|can|does|is|do|will|should|could|would|help)\b/i.test(text)
   if (managerGroupForLog && text.length > 10 && !text.startsWith('/') && !looksLikeQuestion) {
     try {
