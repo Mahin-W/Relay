@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { logger } from '../logger.js'
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null
 
 /**
  * Save a shift log entry.

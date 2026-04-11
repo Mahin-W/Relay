@@ -165,11 +165,13 @@ export async function handleLogEntry(bot, msg, db = null) {
   const userId = msg.from?.id
   const text = msg.text?.trim() ?? ''
 
+  if (text.length <= 10) return false
+
   const _getManagerGroup = db?.getManagerGroup ?? getManagerGroup
   const _getShiftsForGroup = db?.getShiftsForGroup ?? getShiftsForGroup
 
   const managerGroup = await _getManagerGroup(userId)
-  if (!managerGroup) return
+  if (!managerGroup) return false
 
   const groupId = managerGroup.group_id
   const shifts = await _getShiftsForGroup(groupId).catch(() => [])
@@ -184,6 +186,7 @@ export async function handleLogEntry(bot, msg, db = null) {
   }
 
   await bot.sendMessage(msg.chat.id, reply)
+  return true
 }
 
 /**
