@@ -297,3 +297,37 @@ export function startBriefingCron(bot) {
   })
   logger.info('Daily briefing cron started (8am daily)')
 }
+
+export function startSundayBriefingCron(bot) {
+  cron.schedule('0 19 * * 0', async () => {
+    try {
+      const { generateNarrativeBriefing, formatSundayBriefing } = await import('../intelligence/narrativeBriefing.js')
+      const groups = await getConfiguredGroups()
+
+      for (const groupId of groups) {
+        try {
+          const session = await liveGetSetupSession(groupId)
+          if (!session?.dm_chat_id) continue
+
+          const now = new Date()
+          const day = now.getDay()
+          const diff = day === 0 ? -6 : 1 - day
+          const monday = new Date(now)
+          monday.setDate(now.getDate() + diff)
+          const weekStart = monday.toISOString().split('T')[0]
+
+          const result = await generateNarrativeBriefing(groupId, weekStart)
+          if (!result?.narrative) continue
+
+          const message = formatSundayBriefing(result.narrative, result.stats)
+          await bot.sendMessage(session.dm_chat_id, message, { parse_mode: 'Markdown' })
+        } catch (err) {
+          logger.error(`Sunday briefing for ${groupId} failed: ${err.message}`)
+        }
+      }
+    } catch (err) {
+      logger.error(`Sunday briefing cron error: ${err.message}`)
+    }
+  })
+  logger.info('Sunday narrative briefing cron started (7pm Sundays)')
+}

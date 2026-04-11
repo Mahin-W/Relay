@@ -120,12 +120,34 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
         logger.error(`Pattern alerts failed (non-fatal): ${alertErr.message}`)
       }
 
+      // Demand-aware recommendations
+      let demandSection = ''
+      try {
+        const { generateDemandRecommendations, formatDemandRecommendations } = await import('../intelligence/demandSignals.js')
+        const demandRecs = await generateDemandRecommendations(groupId, weekStart, schedule.assignments)
+        const demandStr = formatDemandRecommendations(demandRecs)
+        if (demandStr) demandSection = '\n\n' + demandStr
+      } catch (demandErr) {
+        logger.error(`Demand recommendations failed (non-fatal): ${demandErr.message}`)
+      }
+
+      // Contextual warnings from history
+      let contextSection = ''
+      try {
+        const { generateContextualWarnings, formatContextualWarnings } = await import('../intelligence/contextualWarnings.js')
+        const { warnings, notes } = await generateContextualWarnings(groupId, schedule.assignments)
+        const contextStr = formatContextualWarnings(warnings, notes)
+        if (contextStr) contextSection = '\n\n' + contextStr
+      } catch (contextErr) {
+        logger.error(`Contextual warnings failed (non-fatal): ${contextErr.message}`)
+      }
+
       const hasWarnings = clopeningWarn || hoursWarn || rulesSection
       const reviewPrompt = hasWarnings
         ? `Reply *approve anyway* to publish despite warnings, *approve* if you've fixed them, or *regenerate* for a different arrangement.`
         : `Reply *approve* to publish, or *regenerate* for a different arrangement.`
       await bot.sendMessage(managerGroup.dm_chat_id,
-        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}\n${reviewPrompt}`,
+        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}${demandSection}${contextSection}\n${reviewPrompt}`,
         { parse_mode: 'Markdown' })
       await bot.sendMessage(msg.chat.id, `📋 Draft schedule sent to the manager for review.`)
     } catch (err) {

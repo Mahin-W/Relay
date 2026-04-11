@@ -117,4 +117,19 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
   } catch (err) {
     logger.error(`Message handling failed: ${err.message}`)
   }
+
+  // Passive demand signal detection — fire and forget
+  try {
+    const { extractDemandSignal, saveDemandSignal } = await import('../intelligence/demandSignals.js')
+    const signal = extractDemandSignal(msg.text)
+    if (signal) {
+      const now = new Date()
+      const day = now.getDay()
+      const diff = day === 0 ? -6 : 1 - day
+      const monday = new Date(now)
+      monday.setDate(now.getDate() + diff)
+      const weekStart = monday.toISOString().split('T')[0]
+      saveDemandSignal(groupId, weekStart, signal, msg.text, msg.from?.id).catch(() => {})
+    }
+  } catch (_) {}
 }

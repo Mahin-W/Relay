@@ -9,7 +9,7 @@ import { shouldSkip } from './preFilter.js'
 import { startNoShowCron } from './noshow/noShowWarning.js'
 import { getReliabilityScores } from './reliability/reliabilityDb.js'
 import { formatReliabilityReport } from './reliability/reliabilityScore.js'
-import { startBriefingCron, sendDailyBriefing } from './briefing/dailyBriefing.js'
+import { startBriefingCron, sendDailyBriefing, startSundayBriefingCron } from './briefing/dailyBriefing.js'
 import { handleRotationCommand } from './fairness/rotationTracker.js'
 import { handleCopySchedule } from './schedule/copySchedule.js'
 import { handleWelcomeCommand } from './onboarding/handleNewHire.js'
@@ -56,6 +56,7 @@ bot.getMe().then((me) => {
   startReminderJobs(bot)
   startNoShowCron(bot)
   startBriefingCron(bot)
+  startSundayBriefingCron(bot)
   startPreferenceCron(bot)
 })
 
