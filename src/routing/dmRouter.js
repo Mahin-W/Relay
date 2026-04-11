@@ -14,6 +14,7 @@ import { getOutreachByUser } from '../db.js'
 import { handleNewHireRegistration } from '../onboarding/handleNewHire.js'
 import { logger } from '../logger.js'
 import { isReceiptConfirmation, handleReceiptConfirmation } from '../schedule/readReceipts.js'
+import { handleManagerLogEntry } from '../managerLog/shiftLog.js'
 
 export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   const text = msg.text.trim()
@@ -151,6 +152,14 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     } catch (err) {
       logger.error(`DM trade offer handling failed: ${err.message}`)
     }
+  }
+
+  // Manager shift log — catch manager free-text DMs before fallback
+  try {
+    const logHandled = await handleManagerLogEntry(bot, msg)
+    if (logHandled) return
+  } catch (err) {
+    logger.error(`Manager log entry failed: ${err.message}`)
   }
 
   await bot.sendMessage(msg.chat.id,

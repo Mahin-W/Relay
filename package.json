@@ -12,7 +12,7 @@
     "test:fast": "node --env-file=.env src/tests/run-tests-parallel.js --skip-llm",
     "test:llm": "node --env-file=.env src/tests/run-tests-parallel.js --llm-only",
     "test:seq": "node --env-file=.env src/tests/run-tests.js",
-    "test:unit": "node --env-file=.env --test src/tests/unit/availabilityParser.test.js src/tests/unit/shiftMatcher.test.js src/tests/unit/scheduleGenerator.test.js src/tests/unit/botAdmins.test.js src/tests/unit/tradeFlow.test.js",
+    "test:unit": "node --env-file=.env --test src/tests/unit/availabilityParser.test.js src/tests/unit/shiftMatcher.test.js src/tests/unit/scheduleGenerator.test.js src/tests/unit/botAdmins.test.js src/tests/unit/tradeFlow.test.js src/tests/unit/laborCost.test.js src/tests/unit/budgetAlert.test.js src/tests/unit/shiftLog.test.js",
     "test:unit:groq": "node --env-file=.env --test src/tests/unit/parseMessage.test.js",
     "test:integration": "node --env-file=.env --test src/tests/integration/coverageFlow.test.js src/tests/integration/setupFlow.test.js src/tests/integration/botAdminFlow.test.js src/tests/integration/scheduleFlow.test.js",
     "test:e2e": "node --env-file=.env --test src/tests/e2e/fullWeekFlow.test.js",
