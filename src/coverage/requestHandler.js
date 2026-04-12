@@ -136,14 +136,19 @@ export async function handleCoverageRequest(bot, msg, intent, db = null) {
   // DM priority responders immediately
   for (const member of priority) {
     try {
-      const tag = member.isOnCall ? 'on call — first dibs' : 'top responder'
-      const dmText = `🔔 *Coverage Needed — ${groupName}*\n\n` +
-        `*Shift:* ${shiftLabel}\n` +
-        `*Requested by:* ${requestedBy}\n\n` +
-        `Can you cover it? Reply *yes* to volunteer ✋`
+      const dmText = member.isOnCall
+        ? `🔔 *You're on call — first dibs!*\n\n` +
+          `*Shift:* ${shiftLabel}\n` +
+          `*Requested by:* ${requestedBy}\n\n` +
+          `Can you cover it? Reply *yes* to volunteer ✋`
+        : `🔔 *Coverage Needed — ${groupName}*\n\n` +
+          `*Shift:* ${shiftLabel}\n` +
+          `*Requested by:* ${requestedBy}\n\n` +
+          `Can you cover it? Reply *yes* to volunteer ✋`
       await bot.sendMessage(member.dmChatId, dmText, { parse_mode: 'Markdown' })
       await _saveOutreach(request.id, member.userId)
-      logger.bot(`DM sent to ${member.firstName} (${tag} — priority)`)
+      const tag = member.isOnCall ? 'on-call priority' : 'top responder'
+      logger.bot(`DM sent to ${member.firstName} (${tag})`)
     } catch (err) {
       logger.error(`Failed to DM ${member.firstName}: ${err.message}`)
     }
