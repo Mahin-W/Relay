@@ -142,12 +142,52 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
         logger.error(`Contextual warnings failed (non-fatal): ${contextErr.message}`)
       }
 
+      // Staffing pattern recommendations
+      let staffingSection = ''
+      try {
+        const { analyzeAllShifts, generateStaffingRecommendations, formatStaffingPatternAlert } = await import('../intelligence/staffingPatterns.js')
+        const patterns = await analyzeAllShifts(groupId, 8)
+        const recs = generateStaffingRecommendations(patterns)
+        const staffingStr = formatStaffingPatternAlert(recs)
+        if (staffingStr) staffingSection = '\n\n' + staffingStr
+      } catch (staffingErr) {
+        logger.error(`Staffing patterns failed (non-fatal): ${staffingErr.message}`)
+      }
+
+      // Callout risk prediction
+      let calloutSection = ''
+      try {
+        const { predictCalloutRisks, formatCalloutRiskSection } = await import('../intelligence/calloutPredictor.js')
+        const risks = await predictCalloutRisks(groupId, schedule.assignments)
+        const calloutStr = formatCalloutRiskSection(risks, 8)
+        if (calloutStr) calloutSection = '\n\n' + calloutStr
+      } catch (calloutErr) {
+        logger.error(`Callout prediction failed (non-fatal): ${calloutErr.message}`)
+      }
+
+      // Pairing optimization insight
+      let pairingSection = ''
+      try {
+        const { getPairingRecommendations, applyPairingOptimization, formatPairingInsight } = await import('../intelligence/pairingOptimizer.js')
+        const pairingData = await getPairingRecommendations(groupId, 8)
+        if (pairingData.positivePairs.length > 0 || pairingData.negativePairs.length > 0) {
+          const { newAssignments, applied } = applyPairingOptimization(schedule.assignments, pairingData)
+          if (applied.length > 0) {
+            schedule.assignments = newAssignments
+            const pairingStr = formatPairingInsight(applied)
+            if (pairingStr) pairingSection = '\n\n' + pairingStr
+          }
+        }
+      } catch (pairingErr) {
+        logger.error(`Pairing optimization failed (non-fatal): ${pairingErr.message}`)
+      }
+
       const hasWarnings = clopeningWarn || hoursWarn || rulesSection
       const reviewPrompt = hasWarnings
         ? `Reply *approve anyway* to publish despite warnings, *approve* if you've fixed them, or *regenerate* for a different arrangement.`
         : `Reply *approve* to publish, or *regenerate* for a different arrangement.`
       await bot.sendMessage(managerGroup.dm_chat_id,
-        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}${demandSection}${contextSection}\n${reviewPrompt}`,
+        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}${demandSection}${contextSection}${staffingSection}${calloutSection}${pairingSection}\n${reviewPrompt}`,
         { parse_mode: 'Markdown' })
       await bot.sendMessage(msg.chat.id, `📋 Draft schedule sent to the manager for review.`)
     } catch (err) {

@@ -316,10 +316,34 @@ export function startSundayBriefingCron(bot) {
           monday.setDate(now.getDate() + diff)
           const weekStart = monday.toISOString().split('T')[0]
 
+          // Calculate and store schedule quality score for the completed week
+          try {
+            const { calculateWeeklyQualityScore } = await import('../intelligence/scheduleQuality.js')
+            await calculateWeeklyQualityScore(groupId, weekStart)
+          } catch (qErr) {
+            logger.error(`Quality score calc failed (non-fatal): ${qErr.message}`)
+          }
+
           const result = await generateNarrativeBriefing(groupId, weekStart)
           if (!result?.narrative) continue
 
-          const message = formatSundayBriefing(result.narrative, result.stats)
+          // Append quality summary to briefing
+          let qualitySuffix = ''
+          try {
+            const { formatQualitySummary, detectQualityTrend } = await import('../intelligence/scheduleQuality.js')
+            const { getQualityHistory } = await import('../intelligence/scheduleQualityDb.js')
+            const history = await getQualityHistory(groupId, 12)
+            if (history.length > 0) {
+              const current = history[history.length - 1]
+              const trend = detectQualityTrend(history)
+              const summary = formatQualitySummary(current, trend)
+              if (summary) qualitySuffix = '\n\n' + summary
+            }
+          } catch (qErr) {
+            logger.error(`Quality summary failed (non-fatal): ${qErr.message}`)
+          }
+
+          const message = formatSundayBriefing(result.narrative, result.stats) + qualitySuffix
           await bot.sendMessage(session.dm_chat_id, message, { parse_mode: 'Markdown' })
         } catch (err) {
           logger.error(`Sunday briefing for ${groupId} failed: ${err.message}`)

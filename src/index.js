@@ -433,6 +433,47 @@ bot.onText(/^\/retention/, async (msg) => {
   }
 })
 
+bot.onText(/^\/quality/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  try {
+    const { handleQualityCommand } = await import('./intelligence/scheduleQuality.js')
+    await handleQualityCommand(bot, msg)
+  } catch (err) {
+    logger.error(`/quality failed: ${err.message}`)
+  }
+})
+
+bot.onText(/^\/patterns/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  const managerDm = await getManagerGroup(userId)
+  if (!managerDm?.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+    return
+  }
+  try {
+    const { analyzeAllShifts, generateStaffingRecommendations, formatStaffingPatternAlert, detectSeasonalPatterns, formatSeasonalInsight } = await import('./intelligence/staffingPatterns.js')
+    const patterns = await analyzeAllShifts(groupId, 8)
+    const recs = generateStaffingRecommendations(patterns)
+    let report = formatStaffingPatternAlert(recs) || 'No staffing patterns detected yet. Need 6+ weeks of schedule data.'
+    const seasonal = await detectSeasonalPatterns(groupId)
+    const seasonalText = formatSeasonalInsight(seasonal, new Date().getMonth())
+    if (seasonalText) report += '\n\n' + seasonalText
+    await bot.sendMessage(managerDm.dm_chat_id, report, { parse_mode: 'Markdown' })
+    await bot.sendMessage(msg.chat.id, '📨 Staffing patterns report sent to your DM.')
+  } catch (err) {
+    logger.error(`/patterns failed: ${err.message}`)
+    await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
+  }
+})
+
 function startPreferenceCron(bot) {
   // Sunday at midnight — analyze edit patterns and save preferences
   cron.schedule('0 0 * * 0', async () => {
