@@ -407,6 +407,22 @@ CREATE TABLE IF NOT EXISTS morale_events (
 CREATE INDEX IF NOT EXISTS idx_morale_events_group_staff
   ON morale_events(group_id, staff_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS demand_signals (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  week_start DATE NOT NULL,
+  day_of_week TEXT,
+  is_week_level BOOLEAN DEFAULT FALSE,
+  signal_type TEXT NOT NULL CHECK (signal_type IN ('high', 'low', 'normal')),
+  raw_mention TEXT NOT NULL,
+  source_user_id BIGINT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(group_id, week_start, day_of_week)
+);
+
+CREATE INDEX IF NOT EXISTS idx_demand_signals_group_week
+  ON demand_signals(group_id, week_start);
+
 -- ═══════════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY — anon access for all tables
 -- ═══════════════════════════════════════════════════════════════
@@ -424,7 +440,8 @@ BEGIN
       'schedule_receipts', 'staff_reliability_events', 'on_call', 'time_off_requests',
       'noshow_warnings', 'onboarding_pending', 'payroll_records', 'weekly_revenue',
       'labor_budgets', 'manager_log_entries', 'time_entries',
-      'business_rules', 'schedule_edit_events', 'learned_preferences', 'morale_events'
+      'business_rules', 'schedule_edit_events', 'learned_preferences', 'morale_events',
+      'demand_signals'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
