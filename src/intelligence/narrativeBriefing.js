@@ -1,5 +1,6 @@
 import { groq, groqWithRetry } from '../parsers/groq.js'
 import { logger } from '../logger.js'
+import { generateTurnoverRiskReport, formatTurnoverRiskAlert } from './turnoverRisk.js'
 
 // Default functions returning empty/zero values
 const emptyStats = () => ({ total: 0, avgFillMinutes: 0, fastestFillMinutes: 0, fullyFilled: 0, partial: 0 })
@@ -38,6 +39,13 @@ export async function compileWeeklyStats(groupId, weekStart, db = null) {
 
   const shiftsWithIssues = (lateArrivals?.count ?? 0) + (noShows?.count ?? 0)
 
+  let turnoverRisk = null
+  try {
+    turnoverRisk = await generateTurnoverRiskReport(groupId, db)
+  } catch (e) {
+    turnoverRisk = null
+  }
+
   return {
     weekStart,
     totalShifts,
@@ -52,6 +60,7 @@ export async function compileWeeklyStats(groupId, weekStart, db = null) {
     payrollTotal,
     laborPercent,
     moraleAlerts,
+    turnoverRisk,
   }
 }
 
@@ -138,6 +147,14 @@ export function formatSundayBriefing(narrative, stats) {
     for (const alert of stats.moraleAlerts) {
       lines.push('')
       lines.push(`\u{1F440} ${alert.staffName} may need a check-in \u{2014} ${alert.reasons.join(', ')}.`)
+    }
+  }
+
+  if (stats.turnoverRisk) {
+    const riskAlert = formatTurnoverRiskAlert(stats.turnoverRisk)
+    if (riskAlert) {
+      lines.push('')
+      lines.push(riskAlert)
     }
   }
 
