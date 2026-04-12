@@ -4,6 +4,7 @@ import { handleWelcomeStep, handleAddStaffStep, resetStaffStep } from './staffSt
 import { handleAddShiftsStep, handleShiftRolesStep, resetShiftStep, resetShiftRolesStep, moveToStaffStepShared } from './shiftSteps.js'
 import { handleRoleRatesStep } from './roleRatesSteps.js'
 import { handleOvertimeStep } from './overtimeSteps.js'
+import { handleTipSettingsStep } from './tipSettingsSteps.js'
 
 export async function startSetupDM(bot, msg, groupId) {
   const managerId = msg.from.id
@@ -55,6 +56,9 @@ export async function handleSetupMessage(bot, msg, session) {
       break
     case 'add_staff':
       await handleAddStaffStep(bot, msg, session, text)
+      break
+    case 'tip_settings':
+      await handleTipSettingsStep(bot, msg, session, text)
       break
     case 'overtime_setup':
       await handleOvertimeStep(bot, msg, session, text)
