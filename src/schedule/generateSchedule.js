@@ -5,6 +5,7 @@ import { getGroupMembersWithDm, getGroupMemberName } from '../db.js'
 import { logger } from '../logger.js'
 import { detectClopenings } from './clopen.js'
 import { calculateWeeklyHours, detectHoursIssues } from './hoursTracker.js'
+import { getCrossTrainedForRole } from '../intelligence/crossTrainingDb.js'
 
 const DAY_ORDER = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 }
 
@@ -188,16 +189,60 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
 
         if (picked.length < req.count) {
           gaps.push({
+            shiftId: shift.id,
             shiftName: shift.name,
             dayOfWeek: shift.day_of_week,
             startTime: shift.start_time,
             endTime: shift.end_time,
             roleName: req.role,
+            roleId: req.roleId ?? null,
             needed: req.count,
             found: picked.length,
             shortfall: req.count - picked.length,
           })
         }
+      }
+    }
+
+    // ── Cross-training gap-filling ──────────────────────────────────────────────
+    const crossTrainingUsed = []
+    const ctDb = mockData?.crossTrainingDb ?? null
+    for (const gap of gaps) {
+      if (gap.shortfall <= 0) continue
+      // Need roleId to look up cross-trained staff; use gap.roleId if available
+      const roleId = gap.roleId
+      if (!roleId) continue
+      let crossTrained
+      try {
+        crossTrained = await getCrossTrainedForRole(groupId, roleId, ctDb)
+      } catch { continue }
+      for (const ct of crossTrained) {
+        if (gap.shortfall <= 0) break
+        // Check: not already assigned this shift+day
+        const alreadyAssigned = assignments.some(a =>
+          a.staffId === ct.staffId && a.dayOfWeek === gap.dayOfWeek && a.shiftId === gap.shiftId
+        )
+        if (alreadyAssigned) continue
+        // Check availability
+        const ctStaff = resolvedStaff.find(s => s.staffId === ct.staffId)
+        if (!ctStaff) continue
+        if (!isAvailable(ctStaff.userId, gap.shiftId)) continue
+        // Assign via cross-training
+        assignments.push({
+          shiftId: gap.shiftId,
+          shiftName: gap.shiftName,
+          dayOfWeek: gap.dayOfWeek,
+          startTime: gap.startTime,
+          endTime: gap.endTime,
+          staffId: ct.staffId,
+          staffName: ct.staffName,
+          roleName: gap.roleName,
+          userId: ctStaff.userId,
+          dmChatId: ctStaff.dmChatId,
+        })
+        gap.shortfall--
+        gap.found++
+        crossTrainingUsed.push(`${ct.staffName} assigned as ${gap.roleName} via cross-training`)
       }
     }
 
@@ -244,7 +289,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     // ── Persist draft (skipped in test/mock mode) ─────────────────────────────
     const saved = mockData ? null : await saveGeneratedSchedule(groupId, weekStart, assignments, gaps)
 
-    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts }
+    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed }
   } catch (err) {
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
     return { assignments: [], gaps: [], weekStart, scheduleId: null }
