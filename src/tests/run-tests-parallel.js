@@ -49,6 +49,10 @@ const FAST_SUITES = [
   { id: 'unit_coverage_speed', file: 'unit/coverageSpeed.test.js', label: 'Unit — Coverage Speed', timeout: 10_000 },
   { id: 'unit_contextual_warnings', file: 'unit/contextualWarnings.test.js', label: 'Unit — Contextual Warnings', timeout: 10_000 },
   { id: 'unit_emergency_availability', file: 'unit/emergencyAvailability.test.js', label: 'Unit — Emergency Availability', timeout: 10_000 },
+  { id: 'unit_tip_pool', file: 'unit/tipPool.test.js', label: 'Unit — Tip Pool Calculator', timeout: 10_000 },
+  { id: 'unit_recognition', file: 'unit/recognition.test.js', label: 'Unit — Staff Recognition', timeout: 10_000 },
+  { id: 'unit_earned_wage', file: 'unit/earnedWage.test.js', label: 'Unit — Earned Wage Visibility', timeout: 10_000 },
+  { id: 'unit_turnover_risk', file: 'unit/turnoverRisk.test.js', label: 'Unit — Turnover Risk Score', timeout: 10_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },
@@ -67,6 +71,7 @@ const LLM_SUITES = [
   { id: 'unit_new_hire', file: 'unit/newHire.test.js', label: 'Unit — New Hire Onboarding (LLM)', timeout: 300_000 },
   { id: 'unit_partial_coverage', file: 'unit/partialCoverage.test.js', label: 'Unit — Partial Coverage (LLM)', timeout: 300_000 },
   { id: 'unit_narrative_briefing', file: 'unit/narrativeBriefing.test.js', label: 'Unit — Narrative Briefing (LLM)', timeout: 30_000 },
+  { id: 'unit_cross_training', file: 'unit/crossTraining.test.js', label: 'Unit — Cross Training Tracker (LLM)', timeout: 65_000 },
 ]
 
 const args = process.argv.slice(2)
