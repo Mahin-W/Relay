@@ -52,14 +52,14 @@ Here is how a typical week works from start to finish:
 
 1. **Collect availability** -- Type `/availability` in the group. The bot sends every registered staff member a private message with a numbered list of shifts and asks which ones they can work.
 2. **Staff respond** -- Each person replies in their private chat with shift numbers (like "1 3 5"), "all", or "off".
-3. **Generate the schedule** -- Type `/makeschedule` in the group. The bot builds a draft schedule using availability, role requirements, fairness rotation, and cross-training data. It flags problems like clopenings (less than 10 hours of rest between shifts) and overtime risks (40+ hours). If a role cannot be filled by the primary staff, cross-trained staff are considered automatically.
-4. **Review the draft** -- The bot sends the draft to the manager in a private message. You can type "approve", "approve anyway" (to publish despite warnings), "regenerate" (for a different arrangement), or make edits in plain English like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch". If cross-trained staff were used, you will see a note about it.
+3. **Generate the schedule** -- Type `/makeschedule` in the group. The bot builds a draft schedule using availability, role requirements, fairness rotation, cross-training data, and staff pairing optimization. It flags problems like clopenings (less than 10 hours of rest between shifts), overtime risks (40+ hours), callout risk predictions, and staffing pattern recommendations. If a role cannot be filled by the primary staff, cross-trained staff are considered automatically.
+4. **Review the draft** -- The bot sends the draft to the manager in a private message with intelligence sections: staffing pattern insights, callout risk predictions, and pairing optimization notes. You can type "approve", "approve anyway" (to publish despite warnings), "regenerate" (for a different arrangement), or make edits in plain English like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch".
 5. **Publish** -- Once you approve, the schedule is posted to the group.
 6. **Staff get their schedules** -- Each staff member receives a private message showing only their shifts for the week. They reply "got it" to confirm they have seen it.
 7. **Track confirmations** -- Type `/receipts` to see who has not confirmed yet.
 8. **Payroll** -- Payroll is calculated automatically when the schedule is published. You get a text summary and an Excel spreadsheet.
 9. **Daily briefings** -- Every morning at 8am, the manager gets a private message with today's shifts and anything that needs attention.
-10. **Sunday briefing** -- Every Sunday the manager gets an AI-written narrative summary of the week: coverage stats, late arrivals, no-shows, overtime, morale alerts, and staff retention flags.
+10. **Sunday briefing** -- Every Sunday the manager gets an AI-written narrative summary of the week: coverage stats, late arrivals, no-shows, overtime, morale alerts, staff retention flags, and a schedule quality score tracking how Relay is improving over time.
 11. **Shift reminders** -- Staff get a reminder the night before their shift and again two hours before. If someone has not confirmed 15 minutes before their shift, the manager gets a warning.
 
 ---
@@ -82,7 +82,7 @@ These are the commands you can type in your restaurant's Telegram group.
 |---------|---------------|--------------|
 | `/availability` | Admin | Sends a private message to every registered staff member asking which shifts they can work next week. |
 | `/resetavailability` | Admin | Clears all availability responses so you can start fresh. |
-| `/makeschedule` | Admin | Generates next week's schedule based on availability, role requirements, cross-training, and fairness rotation. |
+| `/makeschedule` | Admin | Generates next week's schedule with cross-training, pairing optimization, callout risk prediction, and staffing pattern insights. |
 | `/schedule` | Anyone | Shows the current published schedule in the group. |
 | `/copyschedule` | Admin | Copies last week's schedule as a starting draft for next week (removes staff who are no longer active). |
 | `/hours` | Admin | Shows total scheduled hours for each staff member this week. |
@@ -125,6 +125,8 @@ These are the commands you can type in your restaurant's Telegram group.
 | `/kudos [name]` | Anyone | Shows a specific person's recognition history. |
 | `/crosstraining` | Admin | Shows the cross-training roster (who can work which additional roles). |
 | `/retention` | Admin | Sends a private retention risk report to your DMs. Never posted to the group. |
+| `/quality` | Admin | Shows schedule quality score trend (last 12 weeks). Sent to your DMs. |
+| `/patterns` | Admin | Shows staffing pattern insights and seasonal trends. Sent to your DMs. |
 
 ### Time Tracking
 
@@ -288,6 +290,12 @@ These run on their own with no command needed.
 | Demand signal detection | Every group message | The bot captures staffing demand signals ("we were slammed") for scheduling |
 | Preference learning | Sunday midnight | Analyzes manager's schedule edits to learn patterns (auto-applies high-confidence ones) |
 | Turnover risk assessment | Sunday briefing | Flags staff who may be disengaging, based on morale, reliability, hours, and recognition |
+| Schedule quality scoring | Sunday briefing | Scores each week 0-100 based on draft edits, coverage requests, no-shows, fill time, and confirmations |
+| Staffing pattern analysis | During schedule generation | Detects chronically understaffed or overstaffed shifts and recommends requirement changes |
+| Availability learning | Continuously | Tracks stated vs actual availability per staff per day, flags unreliable patterns |
+| Callout risk prediction | During schedule generation | Predicts per-assignment callout probability using historical, morale, and behavioral signals |
+| Implicit constraint discovery | Every 4 weeks | Surfaces unwritten rules the manager follows (never-together pairs, always-on-shift staff) |
+| Shift pairing optimization | During schedule generation | Identifies staff pairs that correlate with smooth or rough shifts, optimizes pairings |
 
 ---
 
@@ -397,7 +405,64 @@ Use `/crosstraining` to see the full roster.
 
 ## Intelligence Layer
 
-These features run behind the scenes to help managers make better decisions.
+These features run behind the scenes to help managers make better decisions. Every feature requires a minimum amount of history before it activates -- Relay gets smarter the longer your restaurant uses it.
+
+### Schedule Quality Score
+
+After each week, Relay scores the schedule quality 0-100 based on: how many draft edits the manager made, how many coverage requests were filed, no-shows, average fill time for coverage, and how many staff confirmed their schedules. The score appears in the Sunday briefing and trends over time so managers can see Relay improving.
+
+Grades: A (90-100), B (80-89), C (70-79), D (60-69), F (below 60). Use `/quality` for the full trend over the last 12 weeks.
+
+Trend detection requires at least 3 weeks of history.
+
+### Staffing Pattern Memory
+
+After 6 or more weeks, Relay detects shifts that are chronically understaffed or overstaffed compared to their requirements. For example: "Your Tuesday Lunch has been understaffed 6 of 8 weeks. Consider bumping the server requirement from 2 to 3."
+
+These recommendations appear in the draft schedule when you run `/makeschedule`. Use `/patterns` for the full report including seasonal trends (requires 12+ weeks).
+
+### Availability Learning
+
+Relay tracks each staff member's stated availability versus what actually happens. If someone says they are available on Mondays but calls out or requests off 80% of the time, Relay flags this as an availability risk. The manager sees these flags in the draft schedule review.
+
+Recent behavior is weighted more heavily than older data (last 3 weeks count double). Minimum 4 weeks of data required before any flags appear. This data is never shown to staff.
+
+### Predictive Callout Risk
+
+Before the manager approves a draft schedule, Relay predicts the callout probability for each assignment using multiple signals:
+
+- Historical callout rate for that staff member on that specific day and shift (35% weight)
+- Historical callout rate on that specific shift (25% weight)
+- Recent callout spike (3+ in last 3 weeks)
+- Current morale score and trend
+- Consecutive days scheduled that week
+
+Risk levels: low (under 20%), medium (20-40%), high (40-60%), critical (over 60%). New staff with fewer than 3 data points are capped at medium risk to avoid false flags.
+
+These predictions appear in the draft schedule DM after at least 4 weeks of data.
+
+### Implicit Constraint Discovery
+
+Every 4 weeks, Relay analyzes schedule history to find unwritten rules the manager follows but never explicitly stated:
+
+- **Never together**: Two staff members who are never scheduled on the same shift.
+- **Always on shift**: A staff member who appears on a specific shift 80%+ of the time.
+- **Never on day**: A staff member who is never scheduled on a certain day (and is not marked unavailable).
+- **Always together**: Two staff members who are consistently paired together.
+
+When Relay detects a pattern with high confidence (after 6-8 weeks of data), it asks the manager: "I've noticed you never schedule Maria and Carlos together -- should I make this a permanent rule?" The manager can confirm (converts to a business rule) or dismiss (Relay will not ask again).
+
+Maximum 2 discovery questions per cycle to avoid overwhelming the manager.
+
+### Shift Pairing Optimization
+
+Relay tracks which staff combinations correlate with smooth operations (no coverage events, no late arrivals, positive recognition) versus rough shifts. After enough data (3+ shifts together), it identifies positive and negative pairs.
+
+During schedule generation, Relay automatically:
+- Separates negative pairs by swapping staff to different shifts on the same day (only if a same-role swap is available that does not create a new negative pair).
+- Notes positive pairs that are kept together.
+
+These optimizations appear as notes in the draft schedule DM. Pairing data is manager-only and invisible to staff.
 
 ### Morale Tracking
 
