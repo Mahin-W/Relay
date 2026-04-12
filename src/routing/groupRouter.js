@@ -118,6 +118,22 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
     logger.error(`Message handling failed: ${err.message}`)
   }
 
+  // Passive recognition detection — fire and forget
+  try {
+    const { handleRecognition } = await import('../engagement/recognition.js')
+    handleRecognition(bot, msg, groupId).catch(err => {
+      logger.error(`Recognition handler error: ${err.message}`)
+    })
+  } catch (_) {}
+
+  // Passive cross-training detection — fire and forget
+  try {
+    const { handleCrossTrainingMention } = await import('../intelligence/crossTraining.js')
+    handleCrossTrainingMention(bot, msg, groupId).catch(err => {
+      logger.error(`Cross-training handler error: ${err.message}`)
+    })
+  } catch (_) {}
+
   // Passive demand signal detection — fire and forget
   try {
     const { extractDemandSignal, saveDemandSignal } = await import('../intelligence/demandSignals.js')

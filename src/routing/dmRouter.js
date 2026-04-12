@@ -19,6 +19,8 @@ import { detectClockIntent } from '../timeclock/clockDetector.js'
 import { handleClockIn, handleClockOut } from '../timeclock/clockHandler.js'
 import { handleWhoIsWorkingQuery } from '../schedule/currentShift.js'
 import { getPendingRule, handleRuleConfirmation, handlePotentialRule } from '../rules/businessRules.js'
+import { isEarnedWageQuery, handleEarnedWageQuery } from '../engagement/earnedWage.js'
+import { handleTipMessage } from '../operations/tipPool.js'
 
 export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   const text = msg.text.trim()
@@ -136,6 +138,14 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     }
   }
 
+  // Earned wage query — staff asks "how much have I made"
+  if (isEarnedWageQuery(text)) {
+    try { await handleEarnedWageQuery(bot, msg) } catch (err) {
+      logger.error(`Earned wage query failed: ${err.message}`)
+    }
+    return
+  }
+
   if (isHistoryQuery(text)) {
     try { await handleStaffHistoryQuery(bot, msg) } catch (err) {
       logger.error(`Staff pay history query failed: ${err.message}`)
@@ -220,6 +230,16 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
       if (wasRule) return
     } catch (err) {
       logger.error(`Potential rule detection failed: ${err.message}`)
+    }
+  }
+
+  // Tip message — manager says "tips were $840 tonight"
+  if (managerGroupForRules) {
+    try {
+      const tipHandled = await handleTipMessage(bot, msg)
+      if (tipHandled) return
+    } catch (err) {
+      logger.error(`Tip message handling failed: ${err.message}`)
     }
   }
 

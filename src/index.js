@@ -25,6 +25,10 @@ import { handleLogCommand } from './managerLog/shiftLog.js'
 import { handleClockStatus, handleTimesheetCommand } from './timeclock/clockCommands.js'
 import { handleListRules, handleDeleteRule } from './rules/businessRules.js'
 import { generateMoraleReport, formatMoraleReport } from './intelligence/moraleTracker.js'
+import { handleTipModeCommand, handleTipHistory } from './operations/tipPool.js'
+import { handleRecognitionHistory } from './engagement/recognition.js'
+import { formatCrossTrainingRoster } from './intelligence/crossTraining.js'
+import { generateTurnoverRiskReport, formatTurnoverRiskCommand } from './intelligence/turnoverRisk.js'
 import cron from 'node-cron'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
@@ -369,6 +373,63 @@ bot.onText(/^\/morale/, async (msg) => {
     await bot.sendMessage(session.dm_chat_id, formatted, { parse_mode: 'Markdown' })
   } else {
     await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+  }
+})
+
+bot.onText(/^\/tipmode(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  const args = (match[1] || '').trim().split(/\s+/).filter(Boolean)
+  await handleTipModeCommand(bot, msg, args)
+})
+
+bot.onText(/^\/tips$/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  await handleTipHistory(bot, msg)
+})
+
+bot.onText(/^\/kudos(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const name = (match[1] || '').trim()
+  await handleRecognitionHistory(bot, msg, name)
+})
+
+bot.onText(/^\/crosstraining/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  const roster = await formatCrossTrainingRoster(groupId)
+  await bot.sendMessage(msg.chat.id, roster, { parse_mode: 'Markdown' })
+})
+
+bot.onText(/^\/retention/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  const managerDm = await getManagerGroup(userId)
+  if (!managerDm?.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+    return
+  }
+  try {
+    const report = await generateTurnoverRiskReport(groupId)
+    const formatted = formatTurnoverRiskCommand(report)
+    await bot.sendMessage(managerDm.dm_chat_id, formatted, { parse_mode: 'Markdown' })
+    await bot.sendMessage(msg.chat.id, '📨 Retention report sent to your DM.')
+  } catch (err) {
+    logger.error(`/retention failed: ${err.message}`)
+    await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
   }
 })
 
