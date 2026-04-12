@@ -16,6 +16,9 @@ Staff only need Telegram. There is no extra app to install.
 - [Automatic Features](#automatic-features)
 - [Notifications Staff Receive](#notifications-staff-receive)
 - [Pay and Overtime](#pay-and-overtime)
+- [Tips](#tips)
+- [Staff Engagement](#staff-engagement)
+- [Intelligence Layer](#intelligence-layer)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -32,6 +35,7 @@ Staff only need Telegram. There is no extra app to install.
    - How many of each role you need per shift (for example, "Saturday Lunch: 2 servers, 1 cook")
    - Hourly pay rates for each role
    - Staff names and roles
+   - Tip settings (pooled, individual, or cash)
    - Overtime settings
 4. Type `/register` in the group and have each staff member tap the link that appears. This lets the bot send them private messages.
 5. You are ready to go.
@@ -48,14 +52,15 @@ Here is how a typical week works from start to finish:
 
 1. **Collect availability** -- Type `/availability` in the group. The bot sends every registered staff member a private message with a numbered list of shifts and asks which ones they can work.
 2. **Staff respond** -- Each person replies in their private chat with shift numbers (like "1 3 5"), "all", or "off".
-3. **Generate the schedule** -- Type `/makeschedule` in the group. The bot builds a draft schedule using availability, role requirements, and fairness rotation. It flags problems like clopenings (less than 10 hours of rest between shifts) and overtime risks (40+ hours).
-4. **Review the draft** -- The bot sends the draft to the manager in a private message. You can type "approve", "approve anyway" (to publish despite warnings), "regenerate" (for a different arrangement), or make edits in plain English like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch".
+3. **Generate the schedule** -- Type `/makeschedule` in the group. The bot builds a draft schedule using availability, role requirements, fairness rotation, and cross-training data. It flags problems like clopenings (less than 10 hours of rest between shifts) and overtime risks (40+ hours). If a role cannot be filled by the primary staff, cross-trained staff are considered automatically.
+4. **Review the draft** -- The bot sends the draft to the manager in a private message. You can type "approve", "approve anyway" (to publish despite warnings), "regenerate" (for a different arrangement), or make edits in plain English like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch". If cross-trained staff were used, you will see a note about it.
 5. **Publish** -- Once you approve, the schedule is posted to the group.
 6. **Staff get their schedules** -- Each staff member receives a private message showing only their shifts for the week. They reply "got it" to confirm they have seen it.
 7. **Track confirmations** -- Type `/receipts` to see who has not confirmed yet.
 8. **Payroll** -- Payroll is calculated automatically when the schedule is published. You get a text summary and an Excel spreadsheet.
 9. **Daily briefings** -- Every morning at 8am, the manager gets a private message with today's shifts and anything that needs attention.
-10. **Shift reminders** -- Staff get a reminder the night before their shift and again two hours before. If someone has not confirmed 15 minutes before their shift, the manager gets a warning.
+10. **Sunday briefing** -- Every Sunday the manager gets an AI-written narrative summary of the week: coverage stats, late arrivals, no-shows, overtime, morale alerts, and staff retention flags.
+11. **Shift reminders** -- Staff get a reminder the night before their shift and again two hours before. If someone has not confirmed 15 minutes before their shift, the manager gets a warning.
 
 ---
 
@@ -77,7 +82,7 @@ These are the commands you can type in your restaurant's Telegram group.
 |---------|---------------|--------------|
 | `/availability` | Admin | Sends a private message to every registered staff member asking which shifts they can work next week. |
 | `/resetavailability` | Admin | Clears all availability responses so you can start fresh. |
-| `/makeschedule` | Admin | Generates next week's schedule based on availability, role requirements, and fairness rotation. |
+| `/makeschedule` | Admin | Generates next week's schedule based on availability, role requirements, cross-training, and fairness rotation. |
 | `/schedule` | Anyone | Shows the current published schedule in the group. |
 | `/copyschedule` | Admin | Copies last week's schedule as a starting draft for next week (removes staff who are no longer active). |
 | `/hours` | Admin | Shows total scheduled hours for each staff member this week. |
@@ -95,6 +100,56 @@ These are the commands you can type in your restaurant's Telegram group.
 | `/spreadsheet` | Admin | Sends you an Excel file with the schedule, payroll, and late arrivals. |
 | `/briefing` | Admin | Sends you a daily summary: today's shifts, open requests, pending approvals. |
 | `/reliability` | Manager | Shows staff reliability scores (internal, last 90 days). |
+| `/morale` | Manager | Shows team morale report based on engagement signals. |
+
+### Tips
+
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/tipmode` | Admin | Shows current tip settings (pool mode, split method, BOH inclusion). |
+| `/tipmode pool` | Admin | Switches to pooled tips (Relay calculates the split). |
+| `/tipmode individual` | Admin | Switches to individual tips (staff keep their own). |
+| `/tipmode cash` | Admin | Switches to cash tips (Relay logs only, no split). |
+| `/tipmode hours` | Admin | Sets split method to hours worked. |
+| `/tipmode equal` | Admin | Sets split method to equal split. |
+| `/tipmode points` | Admin | Sets split method to role-weighted points. |
+| `/tipmode boh on` | Admin | Includes back-of-house staff in tip pool. |
+| `/tipmode boh off` | Admin | Excludes back-of-house staff from tip pool. |
+| `/tips` | Admin | Shows recent tip records (last 4 weeks). |
+
+### Staff and Intelligence
+
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/kudos` | Anyone | Shows the recognition leaderboard for the last 4 weeks. |
+| `/kudos [name]` | Anyone | Shows a specific person's recognition history. |
+| `/crosstraining` | Admin | Shows the cross-training roster (who can work which additional roles). |
+| `/retention` | Admin | Sends a private retention risk report to your DMs. Never posted to the group. |
+
+### Time Tracking
+
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/clockstatus` | Admin | Shows who is currently clocked in. |
+| `/timesheet [name]` | Admin | Shows a staff member's time entries. |
+
+### Financial
+
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/revenue [amount]` | Manager | Logs weekly revenue for labor cost percentage tracking. |
+| `/labortrend` | Manager | Shows labor cost trend over recent weeks. |
+| `/setbudget [amount]` | Admin | Sets your weekly labor budget. |
+| `/budget` | Anyone | Shows the current weekly labor budget. |
+
+### Rules and Settings
+
+| Command | Who can use it | What it does |
+|---------|---------------|--------------|
+| `/rules` | Admin | Lists active business rules (scheduling constraints). |
+| `/delrule [number]` | Admin | Deletes a business rule by number. |
+| `/setmaxshifts [1-5]` | Admin | Limits how many shifts one person can work per day. |
+| `/log [text]` | Manager | Views or adds to the manager shift log. |
 
 ### Admin Management
 
@@ -122,6 +177,8 @@ Staff can send private messages to the bot at any time. Here is what works:
 | "my hours" or "how many hours" | Shows your total hours. |
 | "my pay" or "my paycheck" | Shows this week's pay breakdown. |
 | "pay history" | Shows your last 4 weeks of pay. |
+| "how much have I made" or "my earnings" | Shows real-time earned wages: completed shifts, current mid-shift earnings, and projected week total. |
+| "clock in" or "clock out" | Starts or stops your time entry. |
 | "got it" | Confirms you have seen your schedule (read receipt). |
 
 Managers also get extra options in their private chat:
@@ -133,6 +190,11 @@ Managers also get extra options in their private chat:
 | "regenerate" | Asks the bot to build a different schedule arrangement. |
 | Natural language edits (like "remove Sarah from Friday Dinner" or "add Mike to Saturday Lunch") | The bot updates the draft accordingly. |
 | "approve [name]" or "deny [name]" | Approves or denies a time-off request. |
+| "tips were $840 tonight" | Calculates the tip split based on your tip settings and shows who gets what. |
+| "split $1,200 from Friday dinner" | Same as above, tied to a specific shift. |
+| "Marcus can also work prep" | Records cross-training (the bot detects this automatically). |
+| "who can work now" or "emergency coverage" | Shows who is available right now, ranked by response speed. |
+| "who is working" | Shows who is currently on shift. |
 
 ---
 
@@ -146,7 +208,7 @@ When someone cannot make their shift:
 
 | What to say | What happens |
 |-------------|--------------|
-| "I can't come in tonight" | The bot posts a coverage request to the group and sends private messages to all registered staff asking who can cover. On-call staff get notified first. |
+| "I can't come in tonight" | The bot posts a coverage request to the group and sends private messages to all registered staff asking who can cover. On-call staff and top responders get notified first. |
 | "need someone to cover my evening shift" | Same as above. |
 | "can't work Friday" | Same as above. |
 
@@ -171,6 +233,19 @@ Other responses:
 |-------------|--------------|
 | "I want to trade my Friday dinner shift" | The bot posts a trade offer to the group and sends private messages to staff. |
 | "trade my Saturday lunch" (in response to a trade or coverage request) | The bot executes a two-way shift swap and updates the schedule. |
+
+### Recognition and Shoutouts
+
+The bot listens for recognition language in the group and amplifies it:
+
+| What to say | What happens |
+|-------------|--------------|
+| "shoutout Marcus for covering last minute" | The bot posts a formatted shoutout and logs it to Marcus's recognition history. |
+| "great job everyone tonight" | The bot posts a team-wide shoutout. |
+| "kudos to Sarah" | Individual recognition, logged and formatted. |
+| "props to the kitchen crew" | Role-based recognition. |
+
+Recognition is passive -- the bot watches for phrases like "shoutout", "great job", "well done", "kudos", "props to", "crushed it", "MVP", "stepped up", and similar. No special command needed.
 
 ### Other Things You Can Say
 
@@ -202,9 +277,17 @@ These run on their own with no command needed.
 | Shift reminders (2 hours before) | Checked every 30 minutes | Staff with upcoming shifts |
 | No-show early warning | Checked every 15 minutes | Manager gets a private message if staff have not confirmed close to shift time |
 | Daily manager briefing | 8am daily | Manager |
+| Sunday weekly briefing | Sunday morning | Manager gets an AI narrative summary of the week |
 | Reliability tracking | Automatically on every coverage, no-show, and trade event | Stored internally, visible with `/reliability` |
+| Morale tracking | Tracks engagement signals (response times, coverage patterns, recognition received) | Manager, via `/morale` and Sunday briefing |
 | Rotation fairness | During schedule generation | Automatically balances who gets the desirable shifts |
+| Cross-training gap filling | During schedule generation | If a role is short-staffed, cross-trained staff fill the gap automatically |
 | Payroll calculation | When the schedule is published | Manager gets a text summary and an Excel spreadsheet |
+| Recognition detection | Every group message | The bot watches for shoutouts and praise and amplifies them |
+| Cross-training detection | Every group message | The bot listens for phrases like "Marcus can also work prep" and records them |
+| Demand signal detection | Every group message | The bot captures staffing demand signals ("we were slammed") for scheduling |
+| Preference learning | Sunday midnight | Analyzes manager's schedule edits to learn patterns (auto-applies high-confidence ones) |
+| Turnover risk assessment | Sunday briefing | Flags staff who may be disengaging, based on morale, reliability, hours, and recognition |
 
 ---
 
@@ -221,6 +304,8 @@ Here is every private message staff might get from the bot and what to do about 
 | 2 hours before your shift | "Heads up -- your [shift] starts in about 2 hours" | No reply needed |
 | Time off approved or denied | "Your time-off for [date] has been approved/denied" | No reply needed |
 | New hire registration | Welcome message with setup instructions | Follow the link to register |
+| Tip split (if enabled) | "Your tips for [shift]: $[amount]" | No reply needed |
+| Recognition received | "You got a shoutout from [manager]" (via group post) | No reply needed |
 
 ---
 
@@ -230,8 +315,131 @@ Here is every private message staff might get from the bot and what to do about 
 - The manager receives a text summary in a private message showing each staff member's hours and gross pay.
 - The manager also receives an Excel spreadsheet with three tabs: Schedule, Payroll, and Late Arrivals.
 - Staff can message the bot "my pay" to see this week's breakdown, or "pay history" for the last four weeks.
+- Staff can message "how much have I made" to see real-time earnings including mid-shift progress.
 - Overtime settings are configured during setup or with `/setovertime`. You can set weekly thresholds, daily thresholds, and multipliers.
 - Late arrival deductions are factored into payroll automatically.
+- Labor cost percentage tracking is available with `/revenue` and `/labortrend`.
+
+---
+
+## Tips
+
+Relay handles tip distribution based on how your restaurant works. Tip settings are configured during setup and can be changed anytime with `/tipmode`.
+
+### Three Modes
+
+| Mode | How it works |
+|------|-------------|
+| **Pool** (default) | Manager says "tips were $840 tonight" and Relay splits them across eligible staff. |
+| **Individual** | Staff keep their own tips. Relay logs the total for your records but does not split. |
+| **Cash** | Tips are paid in cash manually. Relay logs the total only. |
+
+### Split Methods (Pool Mode)
+
+| Method | How it splits |
+|--------|--------------|
+| **Hours worked** (default) | Proportional to hours worked. Someone who worked 6 hours gets more than someone who worked 4. |
+| **Equal** | Everyone gets the same amount regardless of hours. |
+| **Role points** | Weighted by role. Servers and bartenders get 3 points per hour, cooks get 2, runners and bussers get 1.5, hosts get 1. |
+
+### BOH Inclusion
+
+By default, back-of-house staff (cooks, prep, dishwashers) are excluded from the tip pool. Use `/tipmode boh on` to include them.
+
+### How It Works
+
+1. Manager sends a DM like "tips were $840 tonight" or "split $1,200 from Friday dinner".
+2. Relay identifies the shift, looks up who worked it, and calculates the split.
+3. The manager sees a formatted breakdown with each person's name, role, hours, and tip amount.
+4. Optionally, each staff member can be DMed their individual amount.
+
+The split always adds up to the exact total -- rounding cents are given to the highest earner.
+
+---
+
+## Staff Engagement
+
+### Recognition and Shoutouts
+
+Relay listens for praise and recognition in the group chat. When a manager says something like "shoutout Marcus for covering last minute" or "great job everyone tonight", the bot:
+
+1. Posts a formatted shoutout in the group.
+2. Logs it to the person's recognition history.
+3. Factors it into their morale score (recognition reduces turnover risk).
+
+Use `/kudos` to see the recognition leaderboard, or `/kudos [name]` for someone's history.
+
+### Earned Wage Visibility
+
+Staff can DM the bot "how much have I made" at any time to see:
+
+- What they have earned from completed shifts this week.
+- What they are earning right now if they are mid-shift (updates in real time).
+- Their projected total for the full week based on remaining scheduled shifts.
+
+This builds trust and transparency. No manager involvement required.
+
+### Cross-Training
+
+When a manager says something like "Marcus can also work prep if needed" in the group or a DM, Relay records it with a proficiency level:
+
+| Level | When it is used |
+|-------|----------------|
+| **Training** | "Marcus is learning prep" or "training on bar" |
+| **Competent** (default) | "Marcus can also work prep" |
+| **Proficient** | "Marcus is fully certified on prep" or "expert on all stations" |
+
+Cross-trained staff are automatically considered when the schedule generator cannot fill a role with primary staff. Only competent and proficient staff are used (not those still in training).
+
+Use `/crosstraining` to see the full roster.
+
+---
+
+## Intelligence Layer
+
+These features run behind the scenes to help managers make better decisions.
+
+### Morale Tracking
+
+The bot tracks engagement signals for each staff member: how quickly they respond to availability and coverage requests, whether they accept or decline coverage, and whether they receive recognition. Use `/morale` to see the team report.
+
+### Turnover Risk
+
+Every Sunday, Relay calculates a retention risk score for each staff member based on:
+
+- Morale score and trend
+- Reliability score
+- Hours volatility (sudden drops in scheduled hours)
+- Coverage decline rate
+- Consecutive days worked
+- Late arrival frequency
+- Recognition received (reduces risk)
+
+Staff flagged as medium risk or higher appear in the Sunday briefing with a recommendation (check-in, 1:1 conversation, etc.). Use `/retention` for the full report -- it is always sent to your DMs, never posted to the group.
+
+New staff (less than 2 weeks of data) are protected from false flags -- their risk score is capped until enough data accumulates.
+
+### Pattern Detection
+
+Relay analyzes coverage and scheduling patterns to surface insights:
+
+- Which staff frequently call out on specific days or shifts.
+- Which staff are the most reliable coverage responders.
+- Suggested on-call candidates based on response speed and reliability.
+
+These appear as alerts when you generate the schedule with `/makeschedule`.
+
+### Preference Learning
+
+Relay watches when managers edit draft schedules (removing someone from a shift, adding someone to another). After enough consistent edits, it learns the pattern and auto-applies it to future schedules. Medium-confidence patterns are surfaced as suggestions.
+
+### Demand Signals
+
+When staff mention things like "we were slammed Saturday" or "dead on Monday", Relay captures these demand signals and factors them into scheduling recommendations.
+
+### Contextual Warnings
+
+When generating the schedule, Relay checks the manager's shift log, recent coverage history, and other context to surface relevant warnings (for example, "last week's Friday dinner was short-staffed").
 
 ---
 
@@ -242,11 +450,13 @@ Here is every private message staff might get from the bot and what to do about 
 | Bot does not respond in the group | Make sure the bot is a member of the group and has permission to send messages. |
 | Staff did not get a private message | They need to register first. Type `/register` in the group and have them tap the link. |
 | `/makeschedule` says no availability | Run `/availability` first to collect staff responses. |
-| Schedule has unfilled positions | Not enough available staff for those shifts. Check `/hours` to see the gaps. |
+| Schedule has unfilled positions | Not enough available staff for those shifts. Cross-trained staff are used automatically. Check `/crosstraining` to see who can fill additional roles. |
 | Staff says "I can cover" but nothing happens | They need to be registered. Use `/register` to get them connected. |
 | Payroll numbers look wrong | Check `/setrate` to verify hourly rates and `/setovertime` for overtime settings. |
+| Tip split does not add up | It always adds up exactly. Check `/tipmode` to verify your settings. |
 | Bot sends too many reminders | Reminders are automatic -- one the night before and one two hours before each shift. |
 | Need to redo part of setup | Type "reset" during any setup step to clear that section and start over. |
+| `/retention` shows up in group | It never does -- retention data is always sent to DMs only. |
 
 ---
 
