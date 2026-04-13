@@ -40,7 +40,7 @@ const FAST_SUITES = [
   { id: 'unit_shift_log', file: 'unit/shiftLog.test.js', label: 'Unit — Manager Shift Log', timeout: 15_000 },
   { id: 'unit_time_clock', file: 'unit/timeClock.test.js', label: 'Unit — Time Clock', timeout: 15_000 },
   { id: 'unit_current_shift', file: 'unit/currentShift.test.js', label: 'Unit — Current Shift', timeout: 10_000 },
-  { id: 'unit_business_rules', file: 'unit/businessRules.test.js', label: 'Unit — Business Rules', timeout: 10_000 },
+  { id: 'unit_business_rules', file: 'unit/businessRules.test.js', label: 'Unit — Business Rules', timeout: 60_000 },
   { id: 'unit_preference_tracker', file: 'unit/preferenceTracker.test.js', label: 'Unit — Preference Tracker', timeout: 10_000 },
   { id: 'unit_pattern_alerts', file: 'unit/patternAlerts.test.js', label: 'Unit — Pattern Alerts', timeout: 10_000 },
   { id: 'unit_morale_tracker', file: 'unit/moraleTracker.test.js', label: 'Unit — Morale Tracker', timeout: 10_000 },

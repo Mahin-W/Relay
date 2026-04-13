@@ -474,6 +474,41 @@ bot.onText(/^\/patterns/, async (msg) => {
   }
 })
 
+bot.onText(/^\/staffinsight(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const groupId = String(msg.chat.id)
+  const userId = msg.from?.id
+  const isAdmin = await isAuthorizedAdmin(groupId, userId)
+  if (!isAdmin) return
+  const managerDm = await getManagerGroup(userId)
+  if (!managerDm?.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports.`)
+    return
+  }
+  const name = (match[1] || '').trim()
+  if (!name) {
+    await bot.sendMessage(msg.chat.id, 'Usage: /staffinsight [name]')
+    return
+  }
+  try {
+    const { getStaffForGroup } = await import('./setup/setupDb.js')
+    const allStaff = await getStaffForGroup(groupId)
+    const matched = allStaff.find(s => s.name?.toLowerCase().includes(name.toLowerCase()))
+    if (!matched) {
+      await bot.sendMessage(msg.chat.id, `Could not find staff member "${name}".`)
+      return
+    }
+    const { calculateReliableAvailability, formatAvailabilityInsight } = await import('./intelligence/availabilityLearning.js')
+    const reliability = await calculateReliableAvailability(matched.id, groupId, 8)
+    const text = formatAvailabilityInsight(matched.name, reliability)
+    await bot.sendMessage(managerDm.dm_chat_id, text, { parse_mode: 'Markdown' })
+    await bot.sendMessage(msg.chat.id, `📨 Staff insight for ${matched.name} sent to your DM.`)
+  } catch (err) {
+    logger.error(`/staffinsight failed: ${err.message}`)
+    await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
+  }
+})
+
 function startPreferenceCron(bot) {
   // Sunday at midnight — analyze edit patterns and save preferences
   cron.schedule('0 0 * * 0', async () => {

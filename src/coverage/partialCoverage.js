@@ -103,10 +103,10 @@ export function calculateRemainingCoverage(shift, partialCoverages) {
     return [{ from: decimalToTimeStr(shiftStart), until: decimalToTimeStr(shiftEnd) }]
   }
 
-  // Convert all partials to decimal ranges
+  // Convert all partials to decimal ranges (handle both camelCase and snake_case)
   const covered = partialCoverages.map(p => {
-    const s = parseHour(p.coverFrom)
-    const e = parseHour(p.coverUntil)
+    const s = parseHour(p.coverFrom ?? p.cover_from)
+    const e = parseHour(p.coverUntil ?? p.cover_until)
     return [Math.max(s, shiftStart), Math.min(e < s ? e + 24 : e, shiftEnd)]
   }).filter(([s, e]) => s < e)
 

@@ -345,6 +345,73 @@ export function startSundayBriefingCron(bot) {
 
           const message = formatSundayBriefing(result.narrative, result.stats) + qualitySuffix
           await bot.sendMessage(session.dm_chat_id, message, { parse_mode: 'Markdown' })
+
+          // Record availability outcomes for the completed week
+          try {
+            const { saveAvailabilityOutcome } = await import('../intelligence/availabilityLearningDb.js')
+            const { createClient } = await import('@supabase/supabase-js')
+            const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+            // Get assignments for this week
+            const { data: assignments } = await sb
+              .from('schedule_assignments').select('staff_id, shift_id')
+              .eq('group_id', groupId).eq('week_start', weekStart)
+            // Get shifts for day mapping
+            const { data: shiftList } = await sb
+              .from('shifts').select('id, day_of_week').eq('group_id', groupId)
+            // Get coverage requests (callouts) this week
+            const { data: coverageReqs } = await sb
+              .from('coverage_requests').select('requester_telegram_id, created_at')
+              .eq('group_id', groupId).gte('created_at', weekStart)
+            const calloutTelegramIds = new Set((coverageReqs ?? []).map(r => String(r.requester_telegram_id)))
+            // Get staff DMs for telegram ID mapping
+            const { data: staffDms } = await sb.from('staff_dms').select('user_id, dm_chat_id')
+            const telegramByStaff = new Map()
+            for (const sd of (staffDms ?? [])) telegramByStaff.set(String(sd.user_id), String(sd.user_id))
+            // Get availability records
+            const { data: avail } = await sb
+              .from('availability').select('user_id, available_shift_ids, available_all, unavailable')
+              .eq('group_id', groupId).eq('week_start', weekStart)
+            const availByUser = new Map()
+            for (const a of (avail ?? [])) availByUser.set(String(a.user_id), a)
+            const shiftDayMap = new Map()
+            for (const s of (shiftList ?? [])) shiftDayMap.set(s.id, s.day_of_week)
+            for (const a of (assignments ?? [])) {
+              const dayOfWeek = shiftDayMap.get(a.shift_id)
+              if (!dayOfWeek) continue
+              const userAvail = availByUser.get(String(a.staff_id))
+              const statedAvailable = userAvail ? (userAvail.available_all || (userAvail.available_shift_ids ?? []).includes(a.shift_id)) : false
+              const telegramId = telegramByStaff.get(String(a.staff_id))
+              const wasCallout = telegramId && calloutTelegramIds.has(telegramId)
+              const outcome = wasCallout ? 'callout' : 'worked'
+              await saveAvailabilityOutcome(groupId, a.staff_id, weekStart, dayOfWeek, statedAvailable, outcome).catch(() => {})
+            }
+          } catch (aoErr) {
+            logger.error(`Availability outcome recording failed (non-fatal): ${aoErr.message}`)
+          }
+
+          // Implicit constraint discovery (every 4 weeks)
+          try {
+            const { shouldRunDiscovery, analyzeAssignmentPatterns, filterAlreadyKnownConstraints,
+              generateDiscoveryPrompts, saveDiscoveredPattern, getDismissedPatterns } = await import('../intelligence/implicitConstraints.js')
+            if (await shouldRunDiscovery(groupId, weekStart)) {
+              const { getRules } = await import('../rules/rulesDb.js')
+              const patterns = await analyzeAssignmentPatterns(groupId, 10)
+              if (patterns.length > 0) {
+                const rules = await getRules(groupId)
+                const dismissed = await getDismissedPatterns(groupId)
+                const newPatterns = filterAlreadyKnownConstraints(patterns, rules, dismissed)
+                const prompts = generateDiscoveryPrompts(newPatterns)
+                for (const prompt of prompts) {
+                  await saveDiscoveredPattern(groupId, prompt.patternData)
+                  await bot.sendMessage(session.dm_chat_id,
+                    `💡 *Pattern noticed:*\n\n${prompt.question}`,
+                    { parse_mode: 'Markdown' })
+                }
+              }
+            }
+          } catch (icErr) {
+            logger.error(`Implicit constraint discovery failed (non-fatal): ${icErr.message}`)
+          }
         } catch (err) {
           logger.error(`Sunday briefing for ${groupId} failed: ${err.message}`)
         }
