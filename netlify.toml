@@ -1,11 +1,29 @@
+# ⚠️ TEMPORARY SETUP — Netlify Functions as API backend
+# When you move to Railway/Render, replace the /api/* redirects below with:
+#   [[redirects]]
+#     from = "/api/*"
+#     to = "https://YOUR_RAILWAY_OR_RENDER_URL/api/:splat"
+#     status = 200
+#     force = true
+# ...and DELETE the netlify/functions/ folder entirely.
+
 [build]
   publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# ⚠️ TEMPORARY — route API calls to Netlify Functions (delete when using Railway/Render)
+[[redirects]]
+  from = "/api/auth/*"
+  to = "/.netlify/functions/auth/:splat"
+  status = 200
 
 [[redirects]]
-  from = "/api/*"
-  to = "https://YOUR_RAILWAY_URL.up.railway.app/api/:splat"
+  from = "/api/dashboard/*"
+  to = "/.netlify/functions/dashboard/:splat"
   status = 200
-  force = true
 
 [[redirects]]
   from = "/login"
