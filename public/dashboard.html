@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relay Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="relay-favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #FAF7F2;
+      --surface: #FFFFFF;
+      --surface-alt: #F4EFE6;
+      --surface-border: #E8DFD0;
+      --text: #1C1410;
+      --text-secondary: #4A3F35;
+      --text-muted: #9A8880;
+      --accent: #D95F2B;
+      --accent-hover: #B84D20;
+      --accent-light: #FDF0E8;
+      --success: #2D7D5A;
+      --success-light: #E6F4ED;
+      --sidebar-bg: #1C1410;
+      --sidebar-text: rgba(250,247,242,0.5);
+      --sidebar-text-hover: rgba(250,247,242,0.8);
+      --sidebar-text-active: #D95F2B;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app-layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 220px;
+      background: var(--sidebar-bg);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 100;
+      transition: width 0.2s ease;
+    }
+
+    .sidebar-brand {
+      padding: 24px 20px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-brand-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-brand-name {
+      color: #fff;
+      font-weight: 800;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .sidebar-brand-restaurant {
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.3;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 8px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      color: var(--sidebar-text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      color: var(--sidebar-text-hover);
+    }
+
+    .nav-item.active {
+      color: var(--sidebar-text-active);
+      border-left-color: var(--sidebar-text-active);
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .nav-item-label {
+      white-space: nowrap;
+    }
+
+    .sidebar-bottom {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(250,247,242,0.08);
+    }
+
+    .logout-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: none;
+      color: rgba(250,247,242,0.4);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 6px 0;
+      transition: color 0.15s;
+    }
+
+    .logout-btn:hover {
+      color: rgba(250,247,242,0.7);
+    }
+
+    .logout-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* ── Main Content ── */
+    .main-content {
+      flex: 1;
+      margin-left: 220px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      transition: margin-left 0.2s ease;
+    }
+
+    .top-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .top-bar h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .week-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .refresh-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--surface-border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .refresh-btn:hover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+
+    .refresh-btn svg {
+      width: 16px;
+      height: 16px;
+      color: var(--text-secondary);
+    }
+
+    .refresh-btn.spinning svg {
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .content-area {
+      flex: 1;
+      padding: 24px;
+    }
+
+    /* ── Stat Cards ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 20px;
+      border: 1px solid var(--surface-border);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .stat-sub.green { color: var(--success); }
+    .stat-sub.orange { color: var(--accent); }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border-radius: 10px;
+      border: 1px solid var(--surface-border);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--surface-border);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .card-body {
+      padding: 16px 20px;
+    }
+
+    /* ── Schedule Table ── */
+    .schedule-wrapper {
+      margin-bottom: 24px;
+    }
+
+    .schedule-wrapper.compact .schedule-scroll {
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .schedule-scroll {
+      overflow-x: auto;
+    }
+
+    .schedule-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .schedule-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .schedule-table th {
+      background: var(--surface-alt);
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+      border-bottom: 1px solid var(--surface-border);
+      white-space: nowrap;
+    }
+
+    .schedule-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--surface-border);
+      vertical-align: top;
+    }
+
+    .schedule-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .staff-name {
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .staff-role {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .shift-pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      margin: 1px 0;
+    }
+
+    .shift-pill.lunch { background: #FDF0E8; color: #B84D20; }
+    .shift-pill.dinner { background: rgba(217,95,43,0.1); color: #9A3E18; }
+    .shift-pill.brunch { background: #E6F4ED; color: #1A5C3E; }
+    .shift-pill.other { background: #F4EFE6; color: #4A3F35; }
+
+    .hours-total {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    /* ── Two panels ── */
+    .panels-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    /* ── Activity / Insights ── */
+    .event-list, .insight-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .event-item, .insight-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .event-dot, .insight-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    .dot-orange { background: var(--accent); }
+    .dot-green { background: var(--success); }
+    .dot-yellow { background: #E5A100; }
+    .dot-blue { background: #229ED9; }
+    .dot-gray { background: var(--text-muted); }
+
+    .event-text { flex: 1; color: var(--text-secondary); }
+    .event-time { font-size: 12px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+
+    .insight-text { flex: 1; color: var(--text-secondary); }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px 16px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .empty-state svg {
+      margin-bottom: 8px;
+    }
+
+    .empty-state.green { color: var(--success); }
+
+    /* ── Schedule Nav ── */
+    .schedule-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--surface-border);
+    }
+
+    .schedule-nav-btn {
+      background: none;
+      border: 1px solid var(--surface-border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .schedule-nav-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .schedule-nav-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 160px;
+      text-align: center;
+    }
+
+    /* ── Placeholder pages ── */
+    .placeholder-page {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+    }
+
+    .placeholder-card {
+      max-width: 400px;
+      padding: 48px;
+      text-align: center;
+      background: var(--surface);
+      border-radius: 10px;
+      border: 1px solid var(--surface-border);
+    }
+
+    .placeholder-card svg {
+      width: 48px;
+      height: 48px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .placeholder-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .placeholder-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* ── Skeleton ── */
+    .skeleton {
+      background: var(--surface-border);
+      border-radius: 4px;
+      animation: pulse 1.5s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .skeleton-stat {
+      height: 28px;
+      width: 80px;
+      margin-top: 8px;
+    }
+
+    .skeleton-row {
+      height: 40px;
+      width: 100%;
+      margin-bottom: 8px;
+      border-radius: 4px;
+    }
+
+    .skeleton-line {
+      height: 14px;
+      width: 80%;
+      margin-bottom: 12px;
+    }
+
+    /* ── Error state ── */
+    .error-state {
+      text-align: center;
+      padding: 32px 16px;
+    }
+
+    .error-state p {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: 1px solid var(--surface-border);
+      border-radius: 6px;
+      background: var(--surface);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .retry-btn:hover {
+      border-color: var(--accent);
+    }
+
+    /* ── Hamburger (mobile) ── */
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .hamburger svg {
+      width: 22px;
+      height: 22px;
+      color: var(--text);
+    }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(28,20,16,0.5);
+      z-index: 90;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 60px;
+      }
+
+      .sidebar-brand-text,
+      .nav-item-label,
+      .sidebar-bottom span {
+        display: none;
+      }
+
+      .sidebar-brand {
+        padding: 20px 16px;
+        justify-content: center;
+      }
+
+      .nav-item {
+        padding: 10px 0;
+        justify-content: center;
+        border-left: none;
+        border-right: 3px solid transparent;
+      }
+
+      .nav-item.active {
+        border-right-color: var(--sidebar-text-active);
+        border-left-color: transparent;
+      }
+
+      .logout-btn {
+        justify-content: center;
+      }
+
+      .main-content {
+        margin-left: 60px;
+      }
+
+      .stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .panels-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .sidebar {
+        width: 220px;
+        transform: translateX(-220px);
+        transition: transform 0.25s ease;
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar-overlay.visible {
+        display: block;
+      }
+
+      .sidebar-brand-text,
+      .nav-item-label,
+      .sidebar-bottom span {
+        display: unset;
+      }
+
+      .nav-item {
+        padding: 10px 20px;
+        justify-content: flex-start;
+        border-left: 3px solid transparent;
+        border-right: none;
+      }
+
+      .nav-item.active {
+        border-left-color: var(--sidebar-text-active);
+        border-right-color: transparent;
+      }
+
+      .main-content {
+        margin-left: 0;
+      }
+
+      .hamburger {
+        display: block;
+      }
+
+      .stat-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .content-area {
+        padding: 16px;
+      }
+
+      .top-bar {
+        padding: 12px 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20">
+            <path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/>
+            <polyline points="6,9 10,13 6,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.4"/>
+            <polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
+            <polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="1"/>
+          </svg>
+        </div>
+        <div class="sidebar-brand-text">
+          <div class="sidebar-brand-name">Relay</div>
+          <div class="sidebar-brand-restaurant" id="restaurant-name">Loading...</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-page="overview" onclick="navigateTo('overview')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="nav-item-label">Overview</span>
+        </a>
+        <a class="nav-item" data-page="schedule" onclick="navigateTo('schedule')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="nav-item-label">Schedule</span>
+        </a>
+        <a class="nav-item" data-page="staff" onclick="navigateTo('staff')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span class="nav-item-label">Staff</span>
+        </a>
+        <a class="nav-item" data-page="payroll" onclick="navigateTo('payroll')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span class="nav-item-label">Payroll</span>
+        </a>
+        <a class="nav-item" data-page="settings" onclick="navigateTo('settings')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="nav-item-label">Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button class="logout-btn" onclick="handleLogout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span>Log out</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-bar">
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h2 id="page-title">Overview</h2>
+        </div>
+        <div class="top-bar-right">
+          <span class="week-label" id="week-label"></span>
+          <button class="refresh-btn" id="refresh-btn" onclick="handleRefresh()" title="Refresh data">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-area" id="page-content"></div>
+    </main>
+  </div>
+
+  <script>
+    // ── State ──
+    let currentPage = 'overview';
+    let currentScheduleWeek = getCurrentWeekStart();
+    let dashboardData = {};
+    let refreshInterval = null;
+
+    const PAGE_TITLES = {
+      overview: 'Overview',
+      schedule: 'Schedule',
+      staff: 'Staff',
+      payroll: 'Payroll',
+      settings: 'Settings'
+    };
+
+    // ── Helpers ──
+    function getCurrentWeekStart() {
+      const now = new Date();
+      const day = now.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + diff);
+      return formatDate(monday);
+    }
+
+    function formatDate(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function parseDate(str) {
+      const [y, m, d] = str.split('-').map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    function formatWeekRange(weekStartStr) {
+      const start = parseDate(weekStartStr);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const startMonth = months[start.getMonth()];
+      const endMonth = months[end.getMonth()];
+      if (startMonth === endMonth) {
+        return `${startMonth} ${start.getDate()} \u2013 ${end.getDate()}`;
+      }
+      return `${startMonth} ${start.getDate()} \u2013 ${endMonth} ${end.getDate()}`;
+    }
+
+    function relativeTime(timestamp) {
+      if (!timestamp) return '';
+      const now = Date.now();
+      const then = new Date(timestamp).getTime();
+      const diff = now - then;
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+
+      if (seconds < 60) return 'just now';
+      if (minutes < 60) return `${minutes}min ago`;
+      if (hours < 24) return `${hours}hr ago`;
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      return new Date(timestamp).toLocaleDateString();
+    }
+
+    function shiftPillClass(name) {
+      const n = (name || '').toLowerCase();
+      if (n.includes('lunch')) return 'lunch';
+      if (n.includes('dinner')) return 'dinner';
+      if (n.includes('brunch')) return 'brunch';
+      return 'other';
+    }
+
+    function eventDotClass(type) {
+      switch (type) {
+        case 'callout': return 'dot-orange';
+        case 'coverage_filled': return 'dot-green';
+        case 'late': return 'dot-yellow';
+        case 'recognition': return 'dot-blue';
+        default: return 'dot-gray';
+      }
+    }
+
+    function insightDotClass(type) {
+      switch (type) {
+        case 'good': return 'dot-green';
+        case 'warning': return 'dot-orange';
+        default: return 'dot-gray';
+      }
+    }
+
+    function formatCurrency(n) {
+      return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    // ── API ──
+    async function apiFetch(url) {
+      const res = await fetch(url, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    // ── Auth ──
+    async function checkAuth() {
+      try {
+        const data = await apiFetch('/api/auth/me');
+        document.getElementById('restaurant-name').textContent = data.restaurantName || 'My Restaurant';
+      } catch {
+        // redirect handled in apiFetch
+      }
+    }
+
+    async function handleLogout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch {}
+      window.location.href = '/login';
+    }
+
+    // ── Data Loading ──
+    async function loadOverviewData() {
+      const [overview, activity, insights, schedule] = await Promise.all([
+        apiFetch('/api/dashboard/overview'),
+        apiFetch('/api/dashboard/activity'),
+        apiFetch('/api/dashboard/intelligence'),
+        apiFetch('/api/dashboard/schedule?week=' + currentScheduleWeek)
+      ]);
+      dashboardData = { overview, activity, insights, schedule };
+      return dashboardData;
+    }
+
+    async function loadScheduleData(week) {
+      const schedule = await apiFetch('/api/dashboard/schedule?week=' + week);
+      dashboardData.schedule = schedule;
+      return schedule;
+    }
+
+    // ── Skeleton Renderers ──
+    function renderOverviewSkeleton() {
+      return `
+        <div class="stat-grid">
+          ${[1,2,3,4].map(() => `
+            <div class="stat-card">
+              <div class="skeleton" style="height:10px;width:100px;margin-bottom:12px"></div>
+              <div class="skeleton skeleton-stat"></div>
+              <div class="skeleton" style="height:10px;width:60px;margin-top:10px"></div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="card schedule-wrapper compact" style="margin-bottom:24px">
+          <div class="card-header">This Week's Schedule</div>
+          <div class="card-body">
+            ${[1,2,3,4].map(() => '<div class="skeleton skeleton-row"></div>').join('')}
+          </div>
+        </div>
+        <div class="panels-grid">
+          <div class="card">
+            <div class="card-header">Recent Activity</div>
+            <div class="card-body">
+              ${[1,2,3].map(() => '<div class="skeleton skeleton-line"></div>').join('')}
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">Relay's Insights</div>
+            <div class="card-body">
+              ${[1,2,3].map(() => '<div class="skeleton skeleton-line"></div>').join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderScheduleSkeleton() {
+      return `
+        <div class="card">
+          <div class="schedule-nav">
+            <button class="schedule-nav-btn" disabled>&larr; Prev</button>
+            <span class="schedule-nav-label">Loading...</span>
+            <button class="schedule-nav-btn" disabled>Next &rarr;</button>
+          </div>
+          <div class="card-body">
+            ${[1,2,3,4,5].map(() => '<div class="skeleton skeleton-row"></div>').join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // ── Error Renderer ──
+    function renderError(retryFn) {
+      return `
+        <div class="error-state">
+          <p>Failed to load data</p>
+          <button class="retry-btn" onclick="${retryFn}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Tap to retry
+          </button>
+        </div>
+      `;
+    }
+
+    // ── Page Renderers ──
+    function renderStatCards(data) {
+      const d = data || {};
+      const coverageSub = d.coverageRequests > 0
+        ? `<span class="stat-sub orange">Avg ${d.avgFillTime || '?'}min to fill</span>`
+        : `<span class="stat-sub green">&#10003; None this week</span>`;
+      const laborSub = d.revenuePercent
+        ? `<span class="stat-sub ${d.revenuePercent > 30 ? 'orange' : 'green'}">${d.revenuePercent}% of revenue</span>`
+        : `<span class="stat-sub orange">Enter revenue for %</span>`;
+
+      return `
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Staff Scheduled</div>
+            <div class="stat-value">${d.staffCount ?? '—'}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Shifts This Week</div>
+            <div class="stat-value">${d.shiftsThisWeek ?? '—'}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Coverage Requests</div>
+            <div class="stat-value">${d.coverageRequests ?? '0'}</div>
+            ${coverageSub}
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Labor Cost</div>
+            <div class="stat-value">${d.laborCost != null ? formatCurrency(d.laborCost) : '—'}</div>
+            ${laborSub}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderScheduleTable(schedule, compact) {
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const staff = schedule?.staff || [];
+      const showHours = !compact;
+
+      let html = `<div class="card schedule-wrapper${compact ? ' compact' : ''}">`;
+
+      if (!compact) {
+        html += `
+          <div class="schedule-nav">
+            <button class="schedule-nav-btn" onclick="changeScheduleWeek(-7)">&larr; Prev</button>
+            <span class="schedule-nav-label">Week of ${formatWeekRange(currentScheduleWeek)}</span>
+            <button class="schedule-nav-btn" onclick="changeScheduleWeek(7)">Next &rarr;</button>
+          </div>
+        `;
+      } else {
+        html += `<div class="card-header">This Week's Schedule</div>`;
+      }
+
+      html += `<div class="schedule-scroll"><table class="schedule-table"><thead><tr>
+        <th>Staff</th>`;
+      days.forEach(d => { html += `<th>${d}</th>`; });
+      if (showHours) html += `<th>Total</th>`;
+      html += `</tr></thead><tbody>`;
+
+      if (staff.length === 0) {
+        html += `<tr><td colspan="${showHours ? 9 : 8}" style="text-align:center;padding:24px;color:var(--text-muted)">No schedule data</td></tr>`;
+      }
+
+      staff.forEach(member => {
+        html += `<tr><td><div class="staff-name">${escapeHtml(member.name)}</div>`;
+        if (member.role) html += `<div class="staff-role">${escapeHtml(member.role)}</div>`;
+        html += `</td>`;
+
+        days.forEach(day => {
+          const shifts = member.shifts?.[day.toLowerCase()] || member.shifts?.[day] || [];
+          html += `<td>`;
+          if (Array.isArray(shifts)) {
+            shifts.forEach(s => {
+              const label = typeof s === 'string' ? s : s.name || '';
+              html += `<div class="shift-pill ${shiftPillClass(label)}">${escapeHtml(label)}</div>`;
+            });
+          }
+          html += `</td>`;
+        });
+
+        if (showHours) {
+          html += `<td><span class="hours-total">${member.totalHours != null ? member.totalHours + 'h' : '—'}</span></td>`;
+        }
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table></div></div>`;
+      return html;
+    }
+
+    function renderActivity(events) {
+      if (!events || events.length === 0) {
+        return `<div class="empty-state">No recent activity</div>`;
+      }
+      let html = '<ul class="event-list">';
+      events.forEach(e => {
+        html += `
+          <li class="event-item">
+            <span class="event-dot ${eventDotClass(e.type)}"></span>
+            <span class="event-text">${escapeHtml(e.text || e.message || '')}</span>
+            <span class="event-time">${relativeTime(e.timestamp || e.created_at)}</span>
+          </li>`;
+      });
+      html += '</ul>';
+      return html;
+    }
+
+    function renderInsights(insights) {
+      if (!insights || insights.length === 0) {
+        return `<div class="empty-state green">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2D7D5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div>Everything looks good this week</div>
+        </div>`;
+      }
+      let html = '<ul class="insight-list">';
+      insights.forEach(i => {
+        html += `
+          <li class="insight-item">
+            <span class="insight-dot ${insightDotClass(i.type || i.level)}"></span>
+            <span class="insight-text">${escapeHtml(i.text || i.message || '')}</span>
+          </li>`;
+      });
+      html += '</ul>';
+      return html;
+    }
+
+    function renderOverview(data) {
+      const { overview, activity, insights, schedule } = data;
+      let html = renderStatCards(overview);
+      html += renderScheduleTable(schedule, true);
+      html += `
+        <div class="panels-grid">
+          <div class="card">
+            <div class="card-header">Recent Activity</div>
+            <div class="card-body">${renderActivity(activity?.events || activity)}</div>
+          </div>
+          <div class="card">
+            <div class="card-header">Relay's Insights</div>
+            <div class="card-body">${renderInsights(insights?.insights || insights)}</div>
+          </div>
+        </div>
+      `;
+      return html;
+    }
+
+    function renderSchedulePage(schedule) {
+      return renderScheduleTable(schedule, false);
+    }
+
+    function renderPlaceholder(name, iconSvg) {
+      return `
+        <div class="placeholder-page">
+          <div class="placeholder-card">
+            ${iconSvg}
+            <h3>${escapeHtml(name)} coming soon</h3>
+            <p>This will be available in a future update.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ── Navigation ──
+    function navigateTo(page) {
+      currentPage = page;
+      window.location.hash = page;
+
+      // Update active nav
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.page === page);
+      });
+
+      document.getElementById('page-title').textContent = PAGE_TITLES[page] || page;
+
+      // Close sidebar on mobile
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebar-overlay').classList.remove('visible');
+
+      loadPage(page);
+    }
+
+    async function loadPage(page) {
+      const content = document.getElementById('page-content');
+
+      switch (page) {
+        case 'overview':
+          content.innerHTML = renderOverviewSkeleton();
+          try {
+            const data = await loadOverviewData();
+            content.innerHTML = renderOverview(data);
+          } catch {
+            content.innerHTML = renderError("loadPage('overview')");
+          }
+          break;
+
+        case 'schedule':
+          content.innerHTML = renderScheduleSkeleton();
+          try {
+            const schedule = await loadScheduleData(currentScheduleWeek);
+            content.innerHTML = renderSchedulePage(schedule);
+          } catch {
+            content.innerHTML = renderError("loadPage('schedule')");
+          }
+          break;
+
+        case 'staff':
+          content.innerHTML = renderPlaceholder('Staff', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`);
+          break;
+
+        case 'payroll':
+          content.innerHTML = renderPlaceholder('Payroll', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`);
+          break;
+
+        case 'settings':
+          content.innerHTML = renderPlaceholder('Settings', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`);
+          break;
+      }
+    }
+
+    async function changeScheduleWeek(delta) {
+      const d = parseDate(currentScheduleWeek);
+      d.setDate(d.getDate() + delta);
+      currentScheduleWeek = formatDate(d);
+
+      const content = document.getElementById('page-content');
+      content.innerHTML = renderScheduleSkeleton();
+      try {
+        const schedule = await loadScheduleData(currentScheduleWeek);
+        content.innerHTML = renderSchedulePage(schedule);
+      } catch {
+        content.innerHTML = renderError(`changeScheduleWeek(0)`);
+      }
+    }
+
+    function handleRefresh() {
+      const btn = document.getElementById('refresh-btn');
+      btn.classList.add('spinning');
+      loadPage(currentPage).finally(() => {
+        btn.classList.remove('spinning');
+      });
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('visible');
+    }
+
+    // ── Init ──
+    (async function init() {
+      // Set week label
+      document.getElementById('week-label').textContent = 'Week of ' + formatWeekRange(getCurrentWeekStart());
+
+      // Overlay click closes sidebar
+      document.getElementById('sidebar-overlay').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebar-overlay').classList.remove('visible');
+      });
+
+      // Check auth
+      await checkAuth();
+
+      // Route from hash
+      const hash = window.location.hash.replace('#', '');
+      if (hash && PAGE_TITLES[hash]) {
+        navigateTo(hash);
+      } else {
+        navigateTo('overview');
+      }
+
+      // Auto-refresh every 5 minutes
+      refreshInterval = setInterval(() => {
+        loadPage(currentPage);
+      }, 5 * 60 * 1000);
+    })();
+
+    // Handle hash changes
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && PAGE_TITLES[hash] && hash !== currentPage) {
+        navigateTo(hash);
+      }
+    });
+  </script>
+</body>
+</html>

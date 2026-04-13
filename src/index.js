@@ -31,6 +31,7 @@ import { formatCrossTrainingRoster } from './intelligence/crossTraining.js'
 import { generateTurnoverRiskReport, formatTurnoverRiskCommand } from './intelligence/turnoverRisk.js'
 import { UnifiedBot } from './platform/UnifiedBot.js'
 import { TelegramAdapter } from './platform/TelegramAdapter.js'
+import { startWebServer } from './server/webServer.js'
 import cron from 'node-cron'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
@@ -48,6 +49,10 @@ bot.registerAdapter('telegram', new TelegramAdapter(_telegramBot))
 bot.deleteWebHook({ drop_pending_updates: true })
   .catch(() => {})
   .finally(() => bot.startPolling())
+
+// Start web dashboard server
+const WEB_PORT = process.env.PORT || 3001
+startWebServer(bot, WEB_PORT)
 
 let BOT_USERNAME = ''
 

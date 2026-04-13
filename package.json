@@ -21,9 +21,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
     "dotenv": "latest",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "groq-sdk": "latest",
+    "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "node-telegram-bot-api": "latest",
     "openai": "^6.34.0"
