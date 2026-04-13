@@ -451,3 +451,18 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+-- Platform contacts (multi-platform identity mapping)
+CREATE TABLE IF NOT EXISTS platform_contacts (
+  id BIGSERIAL PRIMARY KEY,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('telegram','sms','whatsapp')),
+  platform_user_id TEXT NOT NULL,
+  platform_chat_id TEXT,
+  display_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(platform, platform_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_platform_contacts_staff ON platform_contacts(staff_id);
+
+ALTER TABLE platform_contacts ENABLE ROW LEVEL SECURITY;

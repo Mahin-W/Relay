@@ -29,6 +29,8 @@ import { handleTipModeCommand, handleTipHistory } from './operations/tipPool.js'
 import { handleRecognitionHistory } from './engagement/recognition.js'
 import { formatCrossTrainingRoster } from './intelligence/crossTraining.js'
 import { generateTurnoverRiskReport, formatTurnoverRiskCommand } from './intelligence/turnoverRisk.js'
+import { UnifiedBot } from './platform/UnifiedBot.js'
+import { TelegramAdapter } from './platform/TelegramAdapter.js'
 import cron from 'node-cron'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
@@ -39,7 +41,9 @@ if (missing.length > 0) {
   process.exit(1)
 }
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false })
+const _telegramBot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false })
+const bot = new UnifiedBot()
+bot.registerAdapter('telegram', new TelegramAdapter(_telegramBot))
 
 bot.deleteWebHook({ drop_pending_updates: true })
   .catch(() => {})

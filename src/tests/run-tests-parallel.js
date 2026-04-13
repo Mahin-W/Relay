@@ -59,6 +59,7 @@ const FAST_SUITES = [
   { id: 'unit_callout_predictor', file: 'unit/calloutPredictor.test.js', label: 'Unit — Callout Predictor', timeout: 10_000 },
   { id: 'unit_implicit_constraints', file: 'unit/implicitConstraints.test.js', label: 'Unit — Implicit Constraints', timeout: 10_000 },
   { id: 'unit_pairing_optimizer', file: 'unit/pairingOptimizer.test.js', label: 'Unit — Pairing Optimizer', timeout: 10_000 },
+  { id: 'unit_platform', file: 'unit/platform.test.js', label: 'Unit — Platform Abstraction', timeout: 10_000 },
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },

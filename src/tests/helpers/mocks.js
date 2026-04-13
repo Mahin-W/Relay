@@ -71,6 +71,21 @@ export class MockBot {
     this.members[`${chatId}:${userId}`] = { status: 'administrator' }
   }
 
+  // Platform abstraction compatibility — safe defaults that tests can override
+  getMe() {
+    return Promise.resolve({ id: 0, username: 'test_bot', first_name: 'TestBot' })
+  }
+
+  sendDocument(chatId, document, options = {}) {
+    const msg = { chatId: String(chatId), text: '[document]', options, document }
+    this.sentMessages.push(msg)
+    return Promise.resolve({ message_id: this.sentMessages.length })
+  }
+
+  getChat(chatId) {
+    return Promise.resolve({ id: chatId, title: 'Test Group', type: 'supergroup' })
+  }
+
   clear() {
     this.sentMessages = []
     this.editedMessages = []
