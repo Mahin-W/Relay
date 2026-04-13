@@ -113,9 +113,10 @@ export function calculateTipSplit(totalTips, staff, splitMethod) {
   // Round each to 2 decimals
   const rounded = rawAmounts.map(a => Math.round(a * 100) / 100)
 
-  // Fix rounding remainder: adjust highest earner
-  const sum = rounded.reduce((a, b) => a + b, 0)
-  const diff = Math.round((totalTips - sum) * 100) / 100
+  // Fix rounding remainder: adjust highest earner (integer cents to avoid float errors)
+  const sumCents = rounded.reduce((a, b) => a + Math.round(b * 100), 0)
+  const totalCents = Math.round(totalTips * 100)
+  const diff = (totalCents - sumCents) / 100
 
   if (diff !== 0) {
     // Find highest earner index
