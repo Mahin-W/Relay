@@ -112,10 +112,43 @@ function assertContains(haystack, needle, msg = '') {
 
 const JWT = signJWT({ groupId: GROUP_ID })
 
-// Build mockData for generateWeeklySchedule — pulls availability + shifts from db
+// Build mockData for generateWeeklySchedule — pulls availability + shifts from db.
+// Expands shifts with recurringDays into one shift entry per day so the scheduler sees
+// e.g. separate Mon/Tue/Wed/Thu/Fri entries for "Mon-Fri Dinner".
 function buildScheduleMockData(weekStart) {
+  const baseShifts = db.shifts.filter(s => s.group_id === GROUP_ID)
+  const expandedShifts = []
+  let nextSyntheticId = 9000
+  for (const sh of baseShifts) {
+    const days = sh.recurringDays ?? [sh.day_of_week]
+    for (const day of days) {
+      if (day === sh.day_of_week) {
+        expandedShifts.push(sh)
+      } else {
+        // Synthetic per-day variant — use a deterministic id offset
+        const dayIdx = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].indexOf(day)
+        const synId = sh.id * 10 + dayIdx
+        expandedShifts.push({ ...sh, id: synId, day_of_week: day })
+        // Mirror requirements for the synthetic shift
+        const existingReqs = db.shiftRequirements.filter(r => r.shift_id === sh.id)
+        for (const req of existingReqs) {
+          if (!db.shiftRequirements.some(r => r.shift_id === synId && r.role === req.role)) {
+            db.shiftRequirements.push({ id: ++nextSyntheticId, shift_id: synId, role: req.role, count: req.count })
+          }
+        }
+        // Mirror availability: if staff are available for sh.id, treat them as available for synId too
+        for (const av of db.availability) {
+          if (av.available_shift_ids?.map(Number).includes(sh.id)) {
+            if (!av.available_shift_ids.map(Number).includes(synId)) {
+              av.available_shift_ids.push(synId)
+            }
+          }
+        }
+      }
+    }
+  }
   return {
-    shifts: db.shifts.filter(s => s.group_id === GROUP_ID),
+    shifts: expandedShifts,
     staff: db.staff.filter(s => s.group_id === GROUP_ID && s.active !== false).map(s => ({
       id: s.id, name: s.name, role: s.role, userId: s.user_id, dmChatId: s.dm_chat_id,
     })),

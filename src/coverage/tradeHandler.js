@@ -6,6 +6,8 @@ import { resolveShift } from './shiftResolver.js'
 import { getPublishedSchedule } from '../availability/availabilityDb.js'
 import { formatScheduleMessage } from '../schedule/generateSchedule.js'
 import { matchShift, getCurrentWeekStart } from '../shiftMatcher.js'
+import { getRecurringConstraints } from '../timeOff/recurringTimeOffDb.js'
+import { getSetupSession } from '../setup/db/sessions.js'
 
 // Finds a staff record by display name. Tries exact match first, then
 // falls back to starts-with so "Mike" matches "Mike Chen" in the staff table.
@@ -29,6 +31,77 @@ async function resendSchedule(bot, groupId) {
   } catch (err) {
     logger.error(`resendSchedule failed: ${err.message}`)
   }
+}
+
+/**
+ * Check whether a staff member has a recurring constraint that blocks them
+ * from working the given shift.
+ * Returns null if ok, or a human-readable reason string if blocked.
+ */
+async function checkConstraintViolation(staffId, shift, db = null) {
+  try {
+    const _getConstraints = db?.getRecurringConstraints
+      ? (id) => db.getRecurringConstraints(id)
+      : (id) => getRecurringConstraints(id, null)
+    const constraints = await _getConstraints(staffId)
+    if (!constraints || constraints.length === 0) return null
+
+    const shiftDay = shift.day_of_week
+
+    for (const c of constraints) {
+      if (!c.active && c.active !== undefined) continue
+
+      if (c.type === 'day_off') {
+        // days can be stored as array field or day_of_week string
+        const blockedDays = c.days ?? (c.day_of_week ? [c.day_of_week] : [])
+        if (blockedDays.some(d => d?.toLowerCase() === shiftDay?.toLowerCase())) {
+          return { reason: `a recurring day-off on ${shiftDay}`, constraintType: 'day_off', day: shiftDay }
+        }
+      }
+
+      if (c.type === 'available_days') {
+        const allowedDays = c.days ?? (c.day_of_week ? [c.day_of_week] : [])
+        if (allowedDays.length > 0 && !allowedDays.some(d => d?.toLowerCase() === shiftDay?.toLowerCase())) {
+          return { reason: `an availability constraint (not available on ${shiftDay})`, constraintType: 'available_days', day: shiftDay }
+        }
+      }
+
+      if (c.type === 'time_constraint') {
+        const latestEnd = c.latest_end ?? c.afterTime ?? null
+        if (latestEnd && shift.end_time) {
+          // Simple string comparison works for HH:MM format; end_time may be "5:00 PM" style
+          const shiftEndNorm = normalizeTime(shift.end_time)
+          const latestNorm = normalizeTime(latestEnd)
+          if (shiftEndNorm && latestNorm && shiftEndNorm > latestNorm) {
+            return { reason: `a time constraint (shift ends ${shift.end_time}, must finish by ${latestEnd})`, constraintType: 'time_constraint', day: shiftDay }
+          }
+        }
+      }
+    }
+    return null
+  } catch (err) {
+    logger.error(`checkConstraintViolation failed: ${err.message}`)
+    return null
+  }
+}
+
+/** Normalize time strings to 24h "HH:MM" for comparison. Returns null if unparseable. */
+function normalizeTime(timeStr) {
+  if (!timeStr) return null
+  // Already HH:MM or HH:MM:SS
+  const hhmm = timeStr.match(/^(\d{1,2}):(\d{2})/)
+  if (hhmm) return hhmm[1].padStart(2, '0') + ':' + hhmm[2]
+  // 12h format like "5:00 PM"
+  const ampm = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (ampm) {
+    let h = parseInt(ampm[1], 10)
+    const m = ampm[2]
+    const period = ampm[3].toUpperCase()
+    if (period === 'PM' && h !== 12) h += 12
+    if (period === 'AM' && h === 12) h = 0
+    return String(h).padStart(2, '0') + ':' + m
+  }
+  return null
 }
 
 export async function handleTradeRequest(bot, msg, intent, db = null) {
@@ -84,7 +157,7 @@ export async function handleTradeRequest(bot, msg, intent, db = null) {
   }
 }
 
-export async function handleTradeOffer(bot, msg, intent, openTrade) {
+export async function handleTradeOffer(bot, msg, intent, openTrade, db = null) {
   const groupId = String(msg.chat.id)
   const offererName = intent.person || msg.from?.first_name || 'Someone'
   const offererId = msg.from?.id
@@ -117,6 +190,43 @@ export async function handleTradeOffer(bot, msg, intent, openTrade) {
   if (!requesterStaff || !offererStaff) {
     logger.bot(`Trade swap failed — staff record not found (requester: ${openTrade.requester_name}, offerer: ${offererName})`)
     await bot.sendMessage(msg.chat.id, `⚠️ Trade couldn't be completed — couldn't match staff records. Please try again or contact your manager.`)
+    return
+  }
+
+  // ── Recurring-constraint gate ──────────────────────────────────────────────
+  // Offerer moves TO requestedShift; requester moves TO offeredShift.
+  const offererViolation = await checkConstraintViolation(offererStaff.id, requestedShift, db)
+  const requesterViolation = await checkConstraintViolation(requesterStaff.id, offeredShift, db)
+
+  if (offererViolation || requesterViolation) {
+    const violation = offererViolation ?? requesterViolation
+    const blockedName = offererViolation ? offererName : openTrade.requester_name
+    const blockedShift = offererViolation ? requestedShift : offeredShift
+    const rejectMsg =
+      `You have ${violation.reason} — can't trade into that shift. Manager must override.`
+    await bot.sendMessage(msg.chat.id, `⚠️ ${rejectMsg}`)
+
+    // DM the blocked person
+    const blockedStaff = offererViolation ? offererStaff : requesterStaff
+    if (blockedStaff.dm_chat_id) {
+      await bot.sendMessage(String(blockedStaff.dm_chat_id), rejectMsg).catch(() => {})
+    }
+
+    // DM the manager
+    try {
+      const _getSession = db?.getSetupSession
+        ? (id) => db.getSetupSession(id)
+        : (id) => getSetupSession(id)
+      const session = await _getSession(groupId)
+      if (session?.dm_chat_id) {
+        await bot.sendMessage(
+          String(session.dm_chat_id),
+          `⚠️  ${blockedName} tried to trade into ${blockedShift.day_of_week} ${blockedShift.name} but has a ${violation.constraintType} constraint — not executed.`
+        )
+      }
+    } catch (sessionErr) {
+      logger.error(`constraint-gate manager DM failed: ${sessionErr.message}`)
+    }
     return
   }
 
