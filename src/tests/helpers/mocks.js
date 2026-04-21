@@ -146,8 +146,12 @@ export class MockDB {
 
   async markCovered(id, coveredBy) {
     const r = this.coverageRequests.find(r => r.id === id)
-    if (r) { r.status = 'covered'; r.covered_by = coveredBy }
-    return r ?? null
+    // Atomic: only flip status if currently 'open' — first-writer-wins
+    if (!r || r.status !== 'open') return null
+    r.status = 'covered'
+    r.covered_by = coveredBy
+    r.covered_at = new Date().toISOString()
+    return r
   }
 
   async updateCoverageRequestShift(requestId, shiftId, weekStart) {

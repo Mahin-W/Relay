@@ -192,6 +192,25 @@ export class SimulationDb extends MockDB {
   async getAvailabilityForGroup(groupId, weekStart) { return this.getAvailability(groupId, weekStart) }
 
   // ── Coverage (extending MockDB) ──────────────────────────────────────────
+
+  // Atomic markCovered override: uses a synchronous in-progress Set so that
+  // even 500 concurrent JS promises (BH.05 / BH.20) can only flip one caller.
+  async markCovered(id, coveredBy) {
+    try {
+      if (!this._markCoveredLocks) this._markCoveredLocks = new Set()
+      const r = this.coverageRequests.find(r => r.id === id)
+      // Only the first caller whose request is still 'open' wins.
+      if (!r || r.status !== 'open' || this._markCoveredLocks.has(id)) return null
+      this._markCoveredLocks.add(id)
+      r.status = 'covered'
+      r.covered_by = coveredBy
+      r.covered_at = this._ts()
+      return r
+    } catch (err) {
+      return null
+    }
+  }
+
   async getCoverageRequestsForGroup(groupId, weeksBack = 4) {
     const nowT = (this._now ?? new Date()).getTime()
     const cutoff = nowT - weeksBack * 7 * 86400000
@@ -220,6 +239,13 @@ export class SimulationDb extends MockDB {
 
   // ── Clock / time entries ─────────────────────────────────────────────────
   async clockIn(data) {
+    // BH.32: idempotency — reject if an open entry already exists for this user/staff
+    const existingOpen = this.timeEntries.find(e =>
+      e.user_id === data.user_id &&
+      e.group_id === String(data.group_id) &&
+      !e.clock_out
+    )
+    if (existingOpen) return null
     const row = { id: this._nextId(), ...data, clock_in: data.clock_in ?? this._ts(), clock_out: null, created_at: this._ts() }
     this.timeEntries.push(row); return row
   }

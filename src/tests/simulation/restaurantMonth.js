@@ -536,9 +536,41 @@ async function week1() {
   await step('1.20 Jordan (no role) offering coverage must be blocked or escalated', 'Coverage', async () => {
     const jordan = staffByName('Jordan')
     assert.equal(jordan.role, null, 'Jordan starts role-unset')
-    // Attempt coverage confirmation — current system has no role-validation on confirmation.
-    // Correct behavior: bot rejects OR DMs manager for approval.
-    missing('role-validation on coverage confirm (blocks role-unset or role-mismatched staff)')
+
+    // Get the open coverage request created in step 1.19
+    const openReq = await db.getOpenRequest(GROUP_ID)
+    assert.ok(openReq, 'open coverage request must exist from step 1.19')
+
+    const { handleCoverageConfirmation } = await import('../../coverage/confirmationHandler.js')
+
+    // Shim with matched_shift_id + shift requirements so role-null path triggers.
+    // getStaffForGroup ignores groupId so GROUP_CHAT_ID vs GROUP_ID mismatch doesn't hide Jordan.
+    const patchedReq = { ...openReq, matched_shift_id: SHIFTS[0].id }
+    const dbShim = {
+      getOpenRequest: async () => patchedReq,
+      markCovered: db.markCovered.bind(db),
+      recordEvent: async () => {},
+      getShiftRequirements: async () => [{ role: 'Cook', count: 1 }],
+      getStaffForGroup: async () => db.staff,   // return all staff regardless of group_id
+      getManagerDmChatId: db.getManagerDmChatId.bind(db),
+    }
+
+    const preMark = db.coverageRequests.filter(r => r.status === 'covered').length
+
+    const msg = makeGroupMsg({
+      chat: { id: GROUP_CHAT_ID, type: 'supergroup', title: 'Mesa Verde Kitchen' },
+      from: { id: jordan.user_id, first_name: jordan.name },
+    })
+
+    await handleCoverageConfirmation(bot, msg, { person: jordan.name }, dbShim)
+
+    // markCovered must NOT have been called — count of covered stays the same
+    const postMark = db.coverageRequests.filter(r => r.status === 'covered').length
+    assert.equal(postMark, preMark, 'Role-unset volunteer must not mark coverage')
+
+    // Manager must have been DMed
+    const managerMsgs = bot.sentMessages.filter(m => String(m.chatId) === String(MANAGER_DM))
+    assert.ok(managerMsgs.length > 0, 'Manager must be DMed when no-role volunteer tries to cover')
   }, { severity: 'HIGH' })
 
   // ── FRIDAY ───────────────────────────────────────────────────────────────
@@ -548,9 +580,71 @@ async function week1() {
     const constraints = await db.getRecurringConstraints(staffByName('Tiffany').id)
     const hasMondayOff = constraints.some(c => c.type === 'day_off' && c.days?.includes('Monday'))
     assert.ok(hasMondayOff, 'Tiffany has Monday constraint')
-    // Correct behavior: saveTradeRequest (or a pre-flight check) refuses to save a trade
-    // where the requester is offering a day they have a hard constraint against.
-    missing('trade validation against recurring constraints (Tiffany offering Monday with Monday-off)')
+
+    const { handleTradeOffer } = await import('../../coverage/tradeHandler.js')
+
+    const tiffany = staffByName('Tiffany')
+    const someOtherStaff = staffByName('Devon') // Devon has no Monday constraint
+
+    // Seed the staff + shifts into the db so getStaffForGroup (module-level) sees them
+    // We use a db shim that delegates staff/shift lookups to the sim db
+    const mondayShift = db.shifts.find(s => s.day_of_week === 'Monday')
+    const thursdayShift = db.shifts.find(s => s.day_of_week === 'Thursday') ?? db.shifts[1]
+
+    assert.ok(mondayShift, 'Monday shift must exist in seed data')
+
+    // openTrade: Devon posted wanting to trade their Thursday shift; Tiffany offers to swap
+    // → Tiffany would move into Monday (Devon's shift) — must be rejected
+    const preTradeCount = db.tradeRequests.filter(t => t.status === 'completed').length
+
+    const msg = makeGroupMsg({
+      chat: { id: GROUP_CHAT_ID, type: 'supergroup', title: 'Mesa Verde Kitchen' },
+      from: { id: tiffany.user_id, first_name: tiffany.name },
+      text: `trade my thursday dinner`,
+    })
+
+    const openTrade = {
+      id: db._nextId(),
+      group_id: GROUP_ID,
+      requester_id: someOtherStaff.user_id,
+      requester_name: someOtherStaff.name,
+      shift_id: mondayShift.id,
+      shift_description: mondayShift.name,
+      week_start: WEEK_STARTS.week1,
+      status: 'open',
+    }
+
+    const intent = {
+      type: 'trade_offer',
+      person: tiffany.name,
+      shift: thursdayShift?.name ?? 'Thursday Dinner',
+      _preResolvedShift: thursdayShift ?? mondayShift,
+      _preResolvedWeekStart: WEEK_STARTS.week1,
+    }
+
+    bot.clear()
+
+    // We need getShiftById to resolve mondayShift — override it in the db shim
+    const dbShim = {
+      getRecurringConstraints: db.getRecurringConstraints.bind(db),
+      getSetupSession: db.getSetupSession.bind(db),
+    }
+
+    await handleTradeOffer(bot, msg, intent, openTrade, dbShim)
+
+    // Trade must NOT have been completed
+    const postTradeCount = db.tradeRequests.filter(t => t.status === 'completed').length
+    assert.equal(postTradeCount, preTradeCount, 'Trade should NOT have been completed')
+
+    // Rejection message must have been sent to the group
+    const groupMsgs = bot.sentMessages.filter(m => String(m.chatId) === String(GROUP_CHAT_ID))
+    const rejected = groupMsgs.some(m => /constraint|day.?off|override|recurring/i.test(m.text))
+    assert.ok(rejected, `Group must see rejection message; got: ${groupMsgs.map(m => m.text).join(' | ')}`)
+
+    // Manager must have been DM'd
+    const managerNotified = bot.sentMessages.some(m => String(m.chatId) === String(MANAGER_DM))
+    assert.ok(managerNotified, 'Manager must be DM\'d about constraint violation')
+    markFeature('Trade')
   }, { severity: 'HIGH' })
 
   // ── SATURDAY ─────────────────────────────────────────────────────────────

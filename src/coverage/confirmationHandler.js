@@ -1,7 +1,7 @@
 import { getOpenRequest, markCovered, getOutreachByUser } from '../db.js'
 import { getPublishedSchedule, swapPublishedScheduleAssignment } from '../availability/availabilityDb.js'
 import { formatScheduleMessage } from '../schedule/generateSchedule.js'
-import { getShiftById, swapScheduleAssignment, getStaffForGroup } from '../setup/setupDb.js'
+import { getShiftById, swapScheduleAssignment, getStaffForGroup, getShiftRequirements } from '../setup/setupDb.js'
 import { logger } from '../logger.js'
 import { recordEvent as liveRecordEvent } from '../reliability/reliabilityDb.js'
 import { saveMoraleEvent } from '../intelligence/moraleDb.js'
@@ -64,10 +64,55 @@ async function buildConfirmationMessage(volunteer, openRequest) {
   )
 }
 
+// Validate that a volunteer's role qualifies them to cover a shift.
+// Returns { ok: true } if qualified, or { ok: false, reason, requiredRoles } if not.
+async function checkVolunteerRole(openRequest, volunteerName, groupId, db) {
+  try {
+    const _getStaffForGroup = db?.getStaffForGroup ?? getStaffForGroup
+    const _getShiftRequirements = db?.getShiftRequirements ?? getShiftRequirements
+
+    // Only check if the request has a matched shift
+    if (!openRequest.matched_shift_id) return { ok: true }
+
+    const requirements = await _getShiftRequirements(openRequest.matched_shift_id)
+    if (!requirements || requirements.length === 0) return { ok: true }
+
+    const requiredRoles = [...new Set(requirements.map(r => r.role).filter(Boolean))]
+    if (requiredRoles.length === 0) return { ok: true }
+
+    const allStaff = await _getStaffForGroup(groupId)
+    const volunteerStaff = allStaff.find(s => s.name?.toLowerCase() === volunteerName.toLowerCase())
+    if (!volunteerStaff) return { ok: true }  // unknown volunteer, let it through
+
+    // Check manager pre-approval
+    const preApproved = openRequest.manager_approved_volunteers
+    if (Array.isArray(preApproved) && preApproved.includes(volunteerName)) return { ok: true }
+
+    // Null role — not qualified
+    if (volunteerStaff.role == null) {
+      return { ok: false, reason: 'no_role', requiredRoles }
+    }
+
+    // Check primary role match
+    if (requiredRoles.includes(volunteerStaff.role)) return { ok: true }
+
+    // Check cross-training (stored as array of role strings on staff, or via crossTraining table)
+    const crossTraining = volunteerStaff.cross_training ?? []
+    const hasCrossTraining = crossTraining.some(ct => requiredRoles.includes(ct))
+    if (hasCrossTraining) return { ok: true }
+
+    return { ok: false, reason: 'role_mismatch', volunteerRole: volunteerStaff.role, requiredRoles }
+  } catch (err) {
+    logger.error(`checkVolunteerRole failed: ${err.message}`)
+    return { ok: true }  // fail-open: don't block coverage on role-check errors
+  }
+}
+
 export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
   const _getOpenRequest = db?.getOpenRequest ?? getOpenRequest
   const _markCovered = db?.markCovered ?? markCovered
   const _recordEvent = db?.recordEvent ?? liveRecordEvent
+  const _getManagerDmChatId = db?.getManagerDmChatId ?? null
 
   const groupId = String(msg.chat.id)
   const volunteer = intent.person || msg.from?.first_name || 'Someone'
@@ -86,6 +131,40 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
 
   if (isRequester) {
     await bot.sendMessage(msg.chat.id, `You can't cover your own shift, ${volunteer} 😅`)
+    return
+  }
+
+  // ── E2: role validation ──────────────────────────────────────────────────
+  const roleCheck = await checkVolunteerRole(openRequest, volunteer, groupId, db)
+  if (!roleCheck.ok) {
+    const managerChatId = _getManagerDmChatId
+      ? await _getManagerDmChatId(groupId)
+      : null
+
+    if (roleCheck.reason === 'no_role') {
+      await bot.sendMessage(
+        msg.from?.id ?? msg.chat.id,
+        `You don't have a role set yet — ask Tony to set your role first.`
+      )
+      if (managerChatId) {
+        await bot.sendMessage(
+          managerChatId,
+          `${volunteer} offered to cover but has no role set. Please approve manually or set their role first.`
+        )
+      }
+    } else {
+      const needed = roleCheck.requiredRoles.join(', ')
+      await bot.sendMessage(
+        msg.from?.id ?? msg.chat.id,
+        `You're a ${roleCheck.volunteerRole} but this shift needs ${needed} — manager approval needed.`
+      )
+      if (managerChatId) {
+        await bot.sendMessage(
+          managerChatId,
+          `${volunteer} (${roleCheck.volunteerRole}) offered to cover a ${needed} shift. Approve manually if OK.`
+        )
+      }
+    }
     return
   }
 
@@ -153,7 +232,7 @@ export async function handleDmConfirmation(bot, msg) {
 
   const marked = await markCovered(request.id, volunteer)
   if (!marked) {
-    await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
+    await bot.sendMessage(msg.chat.id, 'That shift was already covered by someone else — thanks for offering! 🙏')
     return
   }
 

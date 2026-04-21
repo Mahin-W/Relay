@@ -52,12 +52,17 @@ export async function markCovered(requestId, coveredBy) {
       .from('coverage_requests')
       .update({ status: 'covered', covered_by: coveredBy, covered_at: new Date().toISOString() })
       .eq('id', requestId)
-      .eq('status', 'open')
+      .eq('status', 'open')   // only update if still open — atomic first-writer-wins
       .select()
-      .maybeSingle()
+      .single()
 
+    if (error && error.code === 'PGRST116') {
+      // PGRST116 = no rows matched — someone else already covered it
+      logger.db(`Request id=${requestId} already covered by someone else`)
+      return null
+    }
     if (error) throw error
-    logger.db(`Request id=${requestId} marked covered`)
+    logger.db(`Request id=${requestId} marked covered by ${coveredBy}`)
     return data
   } catch (err) {
     logger.error(`markCovered failed: ${err.message}`)
