@@ -39,6 +39,9 @@ export function parseTipMessage(text) {
   let totalTips = null
   let shiftReference = null
 
+  // BH.11: reject if a minus/negative sign appears directly before the number
+  if (/[-−]\s*\$?\d/.test(t)) return null
+
   // Try $Nk pattern first: $1.2k, $2.5k
   const kMatch = t.match(/\$(\d+(?:\.\d+)?)k\b/i)
   if (kMatch) {
@@ -78,6 +81,8 @@ export function parseTipMessage(text) {
 // ── calculateTipSplit (pure) ─────────────────────────────────────────────────
 
 export function calculateTipSplit(totalTips, staff, splitMethod) {
+  // BH.11: guard against invalid or negative totals
+  if (!Number.isFinite(totalTips) || totalTips <= 0) return []
   if (!staff || staff.length === 0) return []
   if (staff.length === 1) {
     return [{ ...staff[0], amount: totalTips }]
@@ -104,9 +109,8 @@ export function calculateTipSplit(totalTips, staff, splitMethod) {
     // 'hours' (default)
     const totalHours = staff.reduce((s, x) => s + (x.hoursWorked || 0), 0)
     if (totalHours === 0) {
-      rawAmounts = staff.map(() => 0)
-      // give all to first person to maintain sum
-      rawAmounts[0] = totalTips
+      // BH.11: zero-hour fallback → equal split to avoid NaN/Infinity
+      rawAmounts = staff.map(() => totalTips / staff.length)
     } else {
       rawAmounts = staff.map(s => ((s.hoursWorked || 0) / totalHours) * totalTips)
     }

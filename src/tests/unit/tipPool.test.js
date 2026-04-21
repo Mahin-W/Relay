@@ -361,6 +361,66 @@ describe('handleTipModeCommand', { concurrency: true }, () => {
   })
 })
 
+// ── BH.11 — negative-tip guard ───────────────────────────────────────────────
+
+describe('parseTipMessage — negative amounts (BH.11)', { concurrency: true }, () => {
+  it('"$-500" → null (negative dollar amount)', () => {
+    assert.equal(parseTipMessage('$-500'), null)
+  })
+
+  it('"tips were -500" → null (negative bare number)', () => {
+    assert.equal(parseTipMessage('tips were -500'), null)
+  })
+
+  it('"−$300" (Unicode minus) → null', () => {
+    assert.equal(parseTipMessage('−$300'), null)
+  })
+
+  it('"- $200 tips" → null (spaced minus before dollar)', () => {
+    assert.equal(parseTipMessage('- $200 tips'), null)
+  })
+
+  it('"$500" still works after guard is added', () => {
+    const result = parseTipMessage('$500')
+    assert.ok(result && result.totalTips === 500)
+  })
+})
+
+describe('calculateTipSplit — negative/invalid totals (BH.11)', { concurrency: true }, () => {
+  it('calculateTipSplit(-500, [...], "hours") → [] (negative total)', () => {
+    const staff = [{ staffId: 1, staffName: 'X', roleName: 'Server', hoursWorked: 6 }]
+    const splits = calculateTipSplit(-500, staff, 'hours')
+    assert.deepEqual(splits, [])
+  })
+
+  it('calculateTipSplit(0, [...], "hours") → [] (zero total)', () => {
+    const staff = [{ staffId: 1, staffName: 'X', roleName: 'Server', hoursWorked: 6 }]
+    const splits = calculateTipSplit(0, staff, 'hours')
+    assert.deepEqual(splits, [])
+  })
+
+  it('calculateTipSplit(NaN, [...], "hours") → []', () => {
+    const staff = [{ staffId: 1, staffName: 'X', roleName: 'Server', hoursWorked: 6 }]
+    const splits = calculateTipSplit(NaN, staff, 'hours')
+    assert.deepEqual(splits, [])
+  })
+
+  it('zero-hour staff with hours method → equal split, no NaN (BH.11)', () => {
+    const staff = [
+      { staffId: 1, staffName: 'A', roleName: 'Server', hoursWorked: 0 },
+      { staffId: 2, staffName: 'B', roleName: 'Server', hoursWorked: 0 },
+    ]
+    const splits = calculateTipSplit(100, staff, 'hours')
+    assert.equal(splits.length, 2)
+    assert.ok(splits.every(s => Number.isFinite(s.amount)), 'No NaN amounts')
+    assert.ok(splits.every(s => s.amount >= 0), 'No negative amounts')
+    assert.equal(splits.find(s => s.staffName === 'A').amount, 50)
+    assert.equal(splits.find(s => s.staffName === 'B').amount, 50)
+    const sum = splits.reduce((a, b) => a + b.amount, 0)
+    assert.equal(sum, 100)
+  })
+})
+
 // ── handleTipHistory ──────────────────────────────────────────────────────────
 
 describe('handleTipHistory', { concurrency: true }, () => {
