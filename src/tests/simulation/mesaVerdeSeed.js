@@ -71,6 +71,7 @@ export const RECURRING_CONSTRAINTS = [
 ]
 
 export const OT_SETTINGS = {
+  overtime_enabled: true,
   weekly_threshold: 40,
   weekly_multiplier: 1.5,
   daily_threshold: 0,

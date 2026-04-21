@@ -50,11 +50,10 @@ const failed = []
 const featuresTested = new Set()
 const intelligenceFired = new Set()
 const confirmedBugs = []
-const expectedButNotReproduced = []
-const notBuilt = []
 
-const SEVERITY = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 }
-
+// STRICT MODE: "correct output not produced, or doesn't exist yet" ⇒ failure.
+// step() no longer accepts expectedBug/flagNotBuilt lenience — if the assertion
+// doesn't match real expected behavior, it fails and the bug is confirmed.
 async function step(name, feature, fn, opts = {}) {
   const ctx = { week: currentWeek, day: currentDay, name }
   try {
@@ -62,19 +61,17 @@ async function step(name, feature, fn, opts = {}) {
     process.stdout.write(`  ✅ W${currentWeek} ${name}\n`)
     passed.push(ctx)
     featuresTested.add(feature)
-    if (opts.expectedBug) {
-      expectedButNotReproduced.push({ ...ctx, bug: opts.expectedBug })
-    }
   } catch (err) {
     process.stdout.write(`  ❌ W${currentWeek} ${name}: ${err.message}\n`)
     failed.push({ ...ctx, error: err.message })
-    if (opts.expectedBug) {
-      confirmedBugs.push({ ...ctx, bug: opts.expectedBug, severity: opts.severity || 'MEDIUM', error: err.message })
-    } else {
-      confirmedBugs.push({ ...ctx, bug: `Unexpected failure: ${name}`, severity: opts.severity || 'HIGH', error: err.message })
-    }
+    const severity = opts.severity || (err.message.startsWith('MISSING FEATURE') ? 'HIGH' : err.message.startsWith('BUG') ? 'HIGH' : 'HIGH')
+    confirmedBugs.push({ ...ctx, name, severity, error: err.message, label: opts.label || name })
   }
 }
+
+// Throw this when correct output is not produced OR the feature does not exist yet.
+function missing(feature) { throw new Error(`MISSING FEATURE: ${feature}`) }
+function wrongOutput(what, got, expected) { throw new Error(`BUG: ${what} — got ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`) }
 
 function setClock(isoish) {
   now = new Date(isoish)
@@ -83,7 +80,6 @@ function setClock(isoish) {
 function advance(mins) { setClock(new Date(now.getTime() + mins * 60000)) }
 function markFeature(f) { featuresTested.add(f) }
 function markIntel(f) { intelligenceFired.add(f) }
-function flagNotBuilt(feature, stepName) { notBuilt.push({ feature, step: stepName, week: currentWeek }) }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function staffByName(n) { return db.staff.find(s => s.name === n) }
@@ -215,12 +211,12 @@ async function week1() {
     assert.deepEqual(a.available_shift_ids.map(Number).sort(), [2001, 2002, 2003, 2004, 2005])
   })
 
-  await step('1.03b Jake wrong format "fri sat sun"', 'Availability', async () => {
+  await step('1.03b Jake "fri sat sun" must map to [2004,2005,2006]', 'Availability', async () => {
     const parsed = parseAvailabilityResponse('fri sat sun', shiftMap)
-    assert.equal(parsed.type, 'unclear', `expected unclear for NL text, got ${parsed.type}`)
-    await bot.sendMessage(String(staffByName('Jake').dm_chat_id), 'Please reply with shift numbers like: 1 3 5')
-    flagNotBuilt('typo/NL text availability parser (needs LLM fallback)', '1.03b')
-  }, { expectedBug: 'NL day names "fri sat sun" not parsed without LLM', severity: 'LOW' })
+    const ids = idsFromParse(parsed)
+    if (ids.length === 0) missing('NL day-name parsing ("fri sat sun" → [Fri,Sat,Sun] shift IDs)')
+    assert.deepEqual(ids.sort(), [2004, 2005, 2006])
+  }, { severity: 'MEDIUM' })
 
   await step('1.03c Jake corrects with "4 5 6"', 'Availability', async () => {
     const parsed = parseAvailabilityResponse('4 5 6', shiftMap)
@@ -231,26 +227,17 @@ async function week1() {
     assert.deepEqual(a.available_shift_ids.map(Number).sort(), [2004, 2005, 2006])
   })
 
-  await step('1.03d Marcus typo "all excpet monday" parsed as unclear', 'Availability', async () => {
+  await step('1.03d Marcus "all excpet monday" must map to Tue-Sun shifts', 'Availability', async () => {
     const parsed = parseAvailabilityResponse('all excpet monday', shiftMap)
-    assert.equal(parsed.type, 'unclear', `parser correctly flags typo as unclear: ${parsed.type}`)
-    flagNotBuilt('typo-tolerant availability parser (would need LLM)', '1.03d')
-    // Fallback: save Marcus's intent manually
-    await db.saveAvailability(staffByName('Marcus').user_id, GROUP_ID, WEEK_STARTS.week1,
-      { available_shift_ids: [2003, 2004, 2005, 2006], raw_response: 'all excpet monday (manual)' })
-    assert.ok((await db.getAvailability(GROUP_ID, WEEK_STARTS.week1)).find(x => x.user_id === staffByName('Marcus').user_id))
-  })
+    const ids = idsFromParse(parsed)
+    if (ids.length === 0) missing('typo-tolerant parser ("excpet" → "except")')
+    assert.deepEqual(ids.sort(), [2003, 2004, 2005, 2006])
+  }, { severity: 'LOW' })
 
-  await step('1.03e Mike ambiguous "yeah all good" → unclear', 'Availability', async () => {
+  await step('1.03e Mike "yeah all good" must parse as all_week', 'Availability', async () => {
     const parsed = parseAvailabilityResponse('yeah all good', shiftMap)
-    // "all good" contains "all" as a substring but parseAvailability needs exact match
-    // likely unclear — document
-    if (parsed.type !== 'all_week') flagNotBuilt('substring "all" in "all good" not parsed as all-week', '1.03e')
-    await db.saveAvailability(staffByName('Mike').user_id, GROUP_ID, WEEK_STARTS.week1,
-      { available_all: true, raw_response: 'yeah all good' })
-    const a = (await db.getAvailability(GROUP_ID, WEEK_STARTS.week1)).find(x => x.user_id === staffByName('Mike').user_id)
-    assert.ok(a.available_all)
-  })
+    if (parsed.type !== 'all_week') missing('"all good" / "yeah all good" parsed as all_week')
+  }, { severity: 'LOW' })
 
   await step('1.03f Rosa "3 6" (brunch only)', 'Availability', async () => {
     const parsed = parseAvailabilityResponse('3 6', shiftMap)
@@ -337,21 +324,30 @@ async function week1() {
   currentDay = 'Tuesday'; setClock('2025-02-04T09:00:00Z')
 
   let draft = null
-  await step('1.06 /makeschedule generates draft', 'Schedule', async () => {
+  await step('1.06 /makeschedule draft must respect business rules', 'Schedule', async () => {
     const mockData = buildScheduleMockData(WEEK_STARTS.week1)
     draft = await generateWeeklySchedule(GROUP_ID, WEEK_STARTS.week1, mockData)
     assert.ok(Array.isArray(draft.assignments), 'assignments returned')
-    assert.ok(draft.assignments.length > 0, 'expected at least some assignments')
-    // Note: live DB path enforces rules; mockData path does NOT (documented in code).
-    // We verify rules separately in step 1.08.
+    assert.ok(draft.assignments.length > 0, 'expected assignments')
+    // RULE: Marcus and Devon never together — rules must be enforced (or exposed in ruleConflicts).
     const marcusIds = new Set(draft.assignments.filter(a => staffByName('Marcus')?.id === a.staffId).map(a => `${a.shiftId}|${a.dayOfWeek}`))
     const devonIds = new Set(draft.assignments.filter(a => staffByName('Devon')?.id === a.staffId).map(a => `${a.shiftId}|${a.dayOfWeek}`))
     const overlap = [...marcusIds].filter(k => devonIds.has(k))
-    if (overlap.length > 0) {
-      flagNotBuilt('rules enforced during mockData path of generateWeeklySchedule', '1.06')
+    const flagged = (draft.ruleConflicts ?? []).some(c => /marcus|devon/i.test(c.description ?? ''))
+    if (overlap.length > 0 && !flagged) {
+      missing('business rules enforced (or surfaced) during mockData-path schedule generation')
+    }
+    // RULE: Aaliyah always Saturday dinner — when she's available, she must be assigned
+    const aaliyahSatDinner = draft.assignments.some(a => staffByName('Aaliyah')?.id === a.staffId && a.shiftId === 2004)
+    if (!aaliyahSatDinner) missing('"Aaliyah always Sat dinner" rule application')
+    // RULE: no one works more than 5 days/week
+    const daysByStaff = {}
+    for (const a of draft.assignments) (daysByStaff[a.staffId] ??= new Set()).add(a.dayOfWeek)
+    for (const [id, days] of Object.entries(daysByStaff)) {
+      if (days.size > 5) missing(`"no >5 days/week" rule (staff ${id} has ${days.size} days)`)
     }
     markIntel('Schedule generation')
-  }, { expectedBug: 'generateWeeklySchedule mockData path skips business rules', severity: 'MEDIUM' })
+  }, { severity: 'HIGH' })
 
   await step('1.07 Schedule edit: move Sarah to Thursday lunch', 'Schedule', async () => {
     // Plain-English edit via applyEdit would need LLM — simulate manually
@@ -434,14 +430,11 @@ async function week1() {
   })
 
   setClock('2025-02-05T17:23:00Z')
-  await step('1.14 Sarah late for lunch that ended at 4pm (edge case)', 'LateArrival', async () => {
-    // Lunch ended 4pm; it's 5:23pm
-    const shiftEndTime = new Date('2025-02-05T16:00:00Z')
-    const isPast = now.getTime() > shiftEndTime.getTime()
-    assert.ok(isPast, 'shift has ended')
-    // Flag as edge-case: late arrival for past-ended shift
-    flagNotBuilt('late-arrival validation (shift already ended)', '1.14')
-  }, { expectedBug: 'System accepts late-arrival report for shift already ended', severity: 'LOW' })
+  await step('1.14 Late-arrival for already-ended shift must be rejected', 'LateArrival', async () => {
+    // Lunch ended 4pm; it's 5:23pm. System should reject or redirect.
+    // There's no handleLateArrival wired that validates shift state → feature missing.
+    missing('late-arrival validation: reject reports for shifts already ended')
+  }, { severity: 'MEDIUM' })
 
   await step('1.15 Tony logs shift note — auto-attributed to Wed dinner', 'ManagerLog', async () => {
     const entry = await db.saveLogEntry(GROUP_ID, MANAGER_ID,
@@ -508,28 +501,25 @@ async function week1() {
     assert.equal((await db.getOpenCoverageRequests(GROUP_ID)).length, 1)
   })
 
-  await step('1.20 Jordan offers Saturday dinner — role unset', 'Coverage', async () => {
-    // Jordan has null role — can they cover a Server slot?
+  await step('1.20 Jordan (no role) offering coverage must be blocked or escalated', 'Coverage', async () => {
     const jordan = staffByName('Jordan')
-    if (!jordan.role) {
-      flagNotBuilt('role-validation on coverage confirm for untrained staff', '1.20')
-      await bot.sendMessage(String(MANAGER_DM), `Jordan offered to cover Saturday Dinner but has no role set. Confirm?`)
-    }
-    assert.equal(jordan.role, null, 'Jordan still has no role')
-  }, { expectedBug: 'Coverage confirm accepts staff with no role set', severity: 'MEDIUM' })
+    assert.equal(jordan.role, null, 'Jordan starts role-unset')
+    // Attempt coverage confirmation — current system has no role-validation on confirmation.
+    // Correct behavior: bot rejects OR DMs manager for approval.
+    missing('role-validation on coverage confirm (blocks role-unset or role-mismatched staff)')
+  }, { severity: 'HIGH' })
 
   // ── FRIDAY ───────────────────────────────────────────────────────────────
   currentDay = 'Friday'; setClock('2025-02-07T14:00:00Z')
 
-  await step('1.21 Tiffany→Carmen trade conflict (Tiffany Monday constraint)', 'Trade', async () => {
-    // Tiffany offers Monday for Carmen's Thursday dinner
-    // But Tiffany has recurring Monday day_off
+  await step('1.21 Trade must fail when target staff has recurring day-off', 'Trade', async () => {
     const constraints = await db.getRecurringConstraints(staffByName('Tiffany').id)
     const hasMondayOff = constraints.some(c => c.type === 'day_off' && c.days?.includes('Monday'))
     assert.ok(hasMondayOff, 'Tiffany has Monday constraint')
-    // System should catch this conflict
-    flagNotBuilt('trade validation against recurring constraints', '1.21')
-  }, { expectedBug: 'Trade can execute despite recurring day-off constraint', severity: 'MEDIUM' })
+    // Correct behavior: saveTradeRequest (or a pre-flight check) refuses to save a trade
+    // where the requester is offering a day they have a hard constraint against.
+    missing('trade validation against recurring constraints (Tiffany offering Monday with Monday-off)')
+  }, { severity: 'HIGH' })
 
   // ── SATURDAY ─────────────────────────────────────────────────────────────
   currentDay = 'Saturday'; setClock('2025-02-08T09:45:00Z')
@@ -683,18 +673,17 @@ async function week2() {
     assert.equal(sam.hourlyRate, 21)
   })
 
-  await step('2.05b Retroactive pay correction — feature not built', 'Payroll', async () => {
-    // Tony DMs "Sam's pay was wrong last week, fix it"
-    // There's no retroactive fix flow — document
+  await step('2.05b Retroactive pay correction must recalculate Week 1 at $21', 'Payroll', async () => {
     const prevWeek = WEEK_STARTS.week1
     const samPrevPay = await db.getPayrollHistory(GROUP_ID, staffByName('Sam').id)
     const prevRow = samPrevPay.find(p => p.week_start === prevWeek)
-    // Check Week 1 Sam was at $19
-    assert.ok(prevRow, `previous payroll row for Sam on ${prevWeek}: ${JSON.stringify(samPrevPay.map(x=>x.week_start))}`)
-    const hoursAt19 = Math.round((prevRow.total_gross_pay / 19) * 100) / 100
-    const hoursAt21 = Math.round((prevRow.total_gross_pay / 21) * 100) / 100
-    flagNotBuilt('retroactive payroll correction after rate change', '2.05b')
-  }, { expectedBug: 'No way to retroactively correct past-week payroll after rate change', severity: 'HIGH' })
+    assert.ok(prevRow, `Sam has Week 1 payroll row`)
+    // Expected: after the rate PATCH, Week 1 gross_pay should now reflect $21/hr
+    const expectedAt21 = Math.round(prevRow.total_hours * 21 * 100) / 100
+    if (Math.abs(prevRow.total_gross_pay - expectedAt21) > 0.01) {
+      missing(`retroactive payroll correction (Week 1 still at old rate: $${prevRow.total_gross_pay} for ${prevRow.total_hours}h, should be $${expectedAt21})`)
+    }
+  }, { severity: 'HIGH' })
 
   // ── TUESDAY — Double callout
   currentDay = 'Tuesday'; setClock('2025-02-11T15:30:00Z')
@@ -723,14 +712,18 @@ async function week2() {
     markIntel('Coverage escalation')
   })
 
-  await step('2.09 Tony frustrated message — wellbeing detection', 'NLRouting', async () => {
+  await step('2.09 "fire him right now" must require explicit confirmation', 'NLRouting', async () => {
     const angry = "this is ridiculous devon keeps doing this i want to fire him right now"
-    // Should NOT be processed as a removal command without confirmation
-    // Document: bot would need friction step before removing
+    // Correct behavior: bot identifies removal intent, confirms "Remove Devon? Reply 'yes remove Devon'"
+    // We can't call dmRouter directly without full handler wiring. Verify the friction pattern exists:
+    // the codebase should have a staff-removal confirmation flow.
+    // Search for confirmation keywords
+    const { handleRemoveStaff } = await import('../../setup/staffManager.js').catch(() => ({}))
+    if (!handleRemoveStaff) missing('handleRemoveStaff not exported — removal flow may bypass confirmation')
+    // Additional check: our own dmRouter routes angry messages — test against the intent
     const sentiment = classifySentiment(angry)
-    assert.ok(['neutral', 'negative'].includes(sentiment))
-    flagNotBuilt('friction step before staff removal via anger message', '2.09')
-  }, { expectedBug: 'NL "fire him" may process as removal command without friction', severity: 'HIGH' })
+    assert.equal(sentiment, 'negative', `strong anger should classify negative: ${sentiment}`)
+  }, { severity: 'HIGH' })
 
   await step('2.10 Devon reliability score recalculated', 'Reliability', async () => {
     const events = await db.getReliabilityEvents(GROUP_ID, staffByName('Devon').id, 12)
@@ -777,10 +770,15 @@ async function week2() {
     db.staff.push(alex)
   })
 
-  await step('2.15 Alex unregistered message — routing', 'Routing', async () => {
-    // Alex has no group yet — bot should handle gracefully
-    flagNotBuilt('graceful handling of DM from unregistered user outside any group', '2.15')
-  }, { expectedBug: 'New user from outside group not handled gracefully', severity: 'LOW' })
+  await step('2.15 Unregistered-user DM must be handled gracefully', 'Routing', async () => {
+    // Simulated Alex message: no dm_chat_id, no group association
+    // Expected: router detects unregistered user, sends polite rejection/onboarding prompt
+    // Since we can't test live dmRouter easily, check routing module exists and has the path
+    const dmRouter = await import('../../routing/dmRouter.js').catch(e => ({ _err: e }))
+    if (dmRouter._err) missing('dmRouter module missing')
+    // Probe: is there a routeDM export? If so, we trust the routing exists.
+    if (!dmRouter.routeDM && !dmRouter.default) missing('dmRouter has no routeDM export — unregistered user handling uncertain')
+  }, { severity: 'MEDIUM' })
 
   await step('2.16 Carlos registered via POST /api/staff', 'Dashboard', async () => {
     const res = await simulateDashboardRequest(db, 'POST', '/api/staff',
@@ -808,16 +806,13 @@ async function week2() {
     assert.ok(detected >= 1, `expected at least 1 high-demand signal, got ${detected}`)
   })
 
-  await step('2.18 Emma wellbeing message — CRITICAL morale event', 'Morale', async () => {
+  await step('2.18 "hard time / not sure I can keep doing this" must classify as negative', 'Morale', async () => {
     const text = "I've been having a really hard time lately and I'm not sure I can keep doing this"
     const sentiment = classifySentiment(text)
-    // Likely neutral (no keyword match) — real system would need NL sentiment
-    await db.saveMoraleEvent(GROUP_ID, staffByName('Emma').id, { type: 'distress_signal', sentiment: 'negative', week_start: WEEK_STARTS.week2 })
-    await bot.sendMessage(String(MANAGER_DM), `⚠️ Emma sent a concerning message. Check in with her personally.`)
     if (sentiment !== 'negative') {
-      flagNotBuilt('sentiment detection for nuanced distress signals', '2.18')
+      missing(`distress-signal sentiment detection — got "${sentiment}" for clear distress text`)
     }
-  }, { expectedBug: 'Keyword-based sentiment misses nuanced distress signals', severity: 'MEDIUM' })
+  }, { severity: 'HIGH' })
 
   await step('2.19a Jake cocktail question — irrelevant', 'Routing', async () => {
     // Not processed as a Relay command
@@ -838,33 +833,39 @@ async function week2() {
     assert.ok(req.id)
   })
 
-  await step('2.19c Tony revenue in group chat — handled or deferred', 'Revenue', async () => {
-    // Revenue in group chat: either saved or "please DM"
+  await step('2.19c Group-chat revenue must either save or DM-redirect (not silent drop)', 'Revenue', async () => {
     const parsed = parseRevenueInput('revenue last night was 12400')
     assert.equal(parsed, 12400, `got ${parsed}`)
-    // In real system, group-chat revenue would trigger redirect to DM
-    flagNotBuilt('group-chat revenue → DM redirect UX', '2.19c')
-  })
+    // Group-level routing of revenue messages: check groupRouter exports
+    const gr = await import('../../routing/groupRouter.js').catch(e => ({ _err: e }))
+    if (gr._err) missing('groupRouter module missing')
+    // Can't test DM-redirect without full wiring; require at least one routeGroup export
+    if (!gr.routeGroup && !gr.default) missing('groupRouter has no routeGroup export — revenue routing unverified')
+  }, { severity: 'MEDIUM' })
 
   // ── SATURDAY — Dashboard/bot conflict
   currentDay = 'Saturday'; setClock('2025-02-15T09:00:00Z')
 
-  await step('2.20 Dashboard assigns Jake to Sat brunch (role mismatch)', 'Dashboard', async () => {
-    const jake = staffByName('Jake')
-    const satBrunch = db.shifts.find(s => s.name === 'Sat Brunch')
+  await step('2.20 Dashboard role-mismatch assignment must be rejected (409 or 400)', 'Dashboard', async () => {
+    const jake = staffByName('Jake')  // Bartender
+    const satBrunch = db.shifts.find(s => s.name === 'Sat Brunch')  // No bartender requirement
     const res = await simulateDashboardRequest(db, 'POST', '/api/schedule/assign',
       { staffId: jake.id, shiftId: satBrunch.id, weekStart: WEEK_STARTS.week2 }, JWT)
-    // API doesn't currently validate role match — documents the gap
-    if (res.status === 201) flagNotBuilt('dashboard role validation on schedule/assign', '2.20')
-    assert.equal(res.status, 201)
-  }, { expectedBug: 'Dashboard allows role-mismatched assignments', severity: 'MEDIUM' })
+    // Correct behavior: 409 or 400 with role-mismatch error
+    if (res.status === 201) {
+      missing(`dashboard role validation — accepted Bartender on a brunch with no Bartender slot (${res.status})`)
+    }
+  }, { severity: 'HIGH' })
 
   await step('2.21 Bot edit after dashboard — state consistency', 'Dashboard', async () => {
-    // Bot reads Jake's current assignments — sees he's on Sat brunch (from dashboard)
+    // Force Jake onto Saturday via direct DB (since 2.20 should have rejected the dashboard path)
     const jake = staffByName('Jake')
+    // Only assert consistency AFTER we seed it directly (dashboard-then-bot state sync test)
+    db.scheduleAssignments.push({ id: db._nextId(), group_id: GROUP_ID, staff_id: jake.id, shift_id: 2004,
+      week_start: WEEK_STARTS.week2, day_of_week: 'Saturday', status: 'scheduled' })
     const jakeAssignments = db.scheduleAssignments.filter(a =>
       a.staff_id === jake.id && a.week_start === WEEK_STARTS.week2)
-    assert.ok(jakeAssignments.some(a => a.day_of_week === 'Saturday'), `Jake should be on Saturday: ${JSON.stringify(jakeAssignments)}`)
+    assert.ok(jakeAssignments.some(a => a.day_of_week === 'Saturday'), `Jake on Saturday: ${JSON.stringify(jakeAssignments)}`)
   })
 
   // ── SUNDAY — Intelligence review
@@ -911,11 +912,10 @@ async function week3() {
   console.log('\n── WEEK 3 — Feb 17-23 "The Staffing Crisis" ──')
   currentDay = 'Monday'; setClock('2025-02-17T08:00:00Z')
 
-  await step('3.01 Presidents Day demand signal detected', 'DemandSignals', async () => {
+  await step('3.01 Presidents Day / "busy lunch crowd" must detect high demand', 'DemandSignals', async () => {
     const sig = extractDemandSignal("it's Presidents Day, expect a busy lunch crowd")
-    // "Presidents Day" is a holiday → high demand. "busy" is a high keyword when standalone.
     if (!sig || sig.type !== 'high') {
-      flagNotBuilt('holiday name detection in demand signals', '3.01')
+      missing(`demand-signal detection for holiday + "busy lunch crowd" — got ${JSON.stringify(sig)}`)
     }
     // Save anyway for downstream
     await db.saveDemandSignal(GROUP_ID, WEEK_STARTS.week3, { type: 'high', dayOfWeek: 'Monday', isWeekLevel: false, rawMention: 'Presidents Day' },
@@ -932,31 +932,36 @@ async function week3() {
     markIntel('Schedule generation')
   })
 
-  await step('3.03 Schedule has unfilled Wed cook slot', 'Schedule', async () => {
-    // Simulate: no other cook → gap
+  await step('3.03 Schedule must surface unfilled Wed Cook gap', 'Schedule', async () => {
     const gaps = draft3.gaps ?? []
-    // We'll assert shape rather than specific content since scheduling is complex
-    assert.ok(Array.isArray(gaps), 'gaps array returned')
-  })
+    assert.ok(Array.isArray(gaps), 'gaps is array')
+    // Require: there IS a gap for Wednesday Cook (since Devon is excluded from Wed via new rule)
+    const wedCookGap = gaps.find(g =>
+      (g.dayOfWeek === 'Wednesday' || g.day_of_week === 'Wednesday') &&
+      /cook/i.test(g.roleName ?? g.role ?? ''))
+    if (!wedCookGap) missing(`Wed dinner Cook gap must be reported (Devon excluded Wed, no other Cook). Got gaps: ${JSON.stringify(gaps).slice(0,200)}`)
+  }, { severity: 'HIGH' })
 
   // ── TUESDAY
   currentDay = 'Tuesday'; setClock('2025-02-18T14:00:00Z')
 
-  await step('3.04 Emma resignation DM → flagged', 'Morale', async () => {
+  await step('3.04 Resignation intent must be auto-detected ("two weeks")', 'Morale', async () => {
     const text = "hey I think I need to put in my two weeks"
+    // Correct behavior: sentiment classifier (or a dedicated intent detector) marks this as
+    // resignation/negative, triggering immediate manager alert.
     const sentiment = classifySentiment(text)
-    // Likely neutral — "two weeks" isn't a keyword
-    await db.saveMoraleEvent(GROUP_ID, staffByName('Emma').id, { type: 'resignation_signal', sentiment: 'negative', week_start: WEEK_STARTS.week3 })
-    await bot.sendMessage(String(MANAGER_DM), `⚠️ Emma may be resigning: "${text}"`)
-    flagNotBuilt('resignation intent detection', '3.04')
-  }, { expectedBug: 'Resignation intent not auto-detected in DMs', severity: 'HIGH' })
+    if (sentiment !== 'negative') {
+      missing(`resignation-intent detection — "${text}" classified as "${sentiment}"`)
+    }
+  }, { severity: 'HIGH' })
 
-  await step('3.05 Tony manager→staff relay message', 'Routing', async () => {
-    // Feature: manager-to-staff relay via bot
-    flagNotBuilt('manager-to-staff message relay via bot', '3.05')
-    await bot.sendMessage(String(staffByName('Emma').dm_chat_id), `[Tony]: I'll call you today to talk things through.`)
-    assert.ok(dmCount(staffByName('Emma').dm_chat_id) >= 1)
-  })
+  await step('3.05 Manager→staff relay handler must exist', 'Routing', async () => {
+    // Search for a "tell <name>" or "message <name>" relay handler in routing.
+    const { readFileSync } = await import('node:fs')
+    const dmRouterSrc = readFileSync('src/routing/dmRouter.js', 'utf8')
+    const hasRelay = /relay|tell\s+\w+|forward|manager.*to.*staff|messageRelay/i.test(dmRouterSrc)
+    if (!hasRelay) missing('manager→staff message relay in dmRouter (no relay/forward/tell pattern found)')
+  }, { severity: 'MEDIUM' })
 
   await step('3.06 Emma positive reversal after call', 'Morale', async () => {
     const text = "thanks for calling"
@@ -1001,11 +1006,15 @@ async function week3() {
     assert.equal(res2.status, 201)
   })
 
-  await step('3.11 /rules lists all — no conflict detection', 'BusinessRules', async () => {
+  await step('3.11 /rules must detect contradictory rules (always-required + never-together)', 'BusinessRules', async () => {
     const rules = await db.getRules(GROUP_ID)
     assert.ok(rules.length >= 5)
-    flagNotBuilt('rule conflict detection (contradictory rules)', '3.11')
-  }, { expectedBug: 'No conflict detection between contradictory rules', severity: 'MEDIUM' })
+    // Correct behavior: a detectRuleConflicts function, or formatRuleConflicts surfacing contradictions
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('src/rules/businessRules.js', 'utf8')
+    const hasConflictDetection = /detectRuleConflict|conflictingRule|contradict/i.test(src)
+    if (!hasConflictDetection) missing('contradictory-rule detection in src/rules/businessRules.js')
+  }, { severity: 'MEDIUM' })
 
   // ── FRIDAY — rapid-fire
   currentDay = 'Friday'; setClock('2025-02-21T18:00:00Z')
@@ -1047,27 +1056,40 @@ async function week3() {
   // ── SATURDAY — OT
   currentDay = 'Saturday'; setClock('2025-02-22T09:00:00Z')
 
-  await step('3.14 Sam OT alert at 38h + more', 'Payroll', async () => {
-    // Sam would go into OT on Saturday
-    const assignments = [
-      { staffId: staffByName('Sam').id, staffName: 'Sam', shiftId: 2004, dayOfWeek: 'Saturday' },
+  await step('3.14 Sam @ 44h total must yield 40 regular + 4 OT @ $21 Chef = $966', 'Payroll', async () => {
+    // 38h existing + 6h Saturday = 44h total; 40 regular @ $21, 4 OT @ $31.50 = $840 + $126 = $966
+    const shiftDefs = [
+      { id: 9101, name: 'Mon', dayOfWeek: 'Monday',   startTime: '09:00', endTime: '17:00' }, // 8h
+      { id: 9102, name: 'Tue', dayOfWeek: 'Tuesday',  startTime: '09:00', endTime: '17:00' },
+      { id: 9103, name: 'Wed', dayOfWeek: 'Wednesday', startTime: '09:00', endTime: '17:00' },
+      { id: 9104, name: 'Thu', dayOfWeek: 'Thursday', startTime: '09:00', endTime: '17:00' },
+      { id: 9105, name: 'Fri', dayOfWeek: 'Friday',   startTime: '09:00', endTime: '15:00' }, // 6h → total 38
+      { id: 9106, name: 'Sat', dayOfWeek: 'Saturday', startTime: '17:00', endTime: '23:00' }, // 6h → 44
     ]
-    const shifts = db.shifts.filter(s => s.group_id === GROUP_ID)
-    const roles = db.roleRates.filter(r => r.group_id === GROUP_ID).map(r => ({ role: r.role, hourlyRate: r.rate }))
-    const otSettings = await db.getOvertimeSettings(GROUP_ID)
-    // Seed timeEntries for Sam totaling 38h this week
-    // Then assert calculateWeeklyPayWithOT handles it
-    const timeEntries = [{ staff_id: staffByName('Sam').id, clock_in: '2025-02-17T09:00:00Z', clock_out: '2025-02-17T15:00:00Z' }] // 6h
-    // Placeholder assertion: function runs
-    assert.ok(typeof calculateWeeklyPayWithOT === 'function')
+    const sam = staffByName('Sam')
+    const assigns = shiftDefs.map(s => ({ staffId: sam.id, staffName: 'Sam', shiftId: s.id, role: 'Chef', dayOfWeek: s.dayOfWeek }))
+    const roles = [{ roleName: 'Chef', hourlyRate: 21 }]
+    const ot = { overtime_enabled: true, weekly_threshold: 40, weekly_multiplier: 1.5, daily_threshold: 0, daily_overtime_enabled: false }
+    const pay = calculateWeeklyPayWithOT(assigns, shiftDefs, roles, ot, [], [], [])
+    const row = pay.find(r => String(r.staffId) === String(sam.id))
+    assert.ok(row, `expected row for Sam: ${JSON.stringify(pay).slice(0, 200)}`)
+    if (Math.abs(row.totalHours - 44) > 0.1) wrongOutput('Sam total hours', row.totalHours, 44)
+    if (Math.abs(row.totalWeeklyOTHours - 4) > 0.1) wrongOutput('Sam OT hours', row.totalWeeklyOTHours, 4)
+    if (Math.abs(row.totalGrossPay - 966) > 0.5) wrongOutput('Sam gross pay', row.totalGrossPay, 966)
     markIntel('OT alert')
-  })
+  }, { severity: 'CRITICAL' })
 
-  await step('3.15 Record revenue parses $47800', 'Revenue', async () => {
-    const parsed = parseRevenueInput('revenue was $47,800 tonight')
-    assert.equal(parsed, 47800, `expected 47800, got ${parsed}`)
-    flagNotBuilt('revenue daily vs weekly disambiguation', '3.15')
-  }, { expectedBug: 'No prompt to distinguish daily vs weekly revenue', severity: 'LOW' })
+  await step('3.15 Revenue parser must handle common formats (including plain digits)', 'Revenue', async () => {
+    for (const [text, expected] of [
+      ['revenue was $47,800 tonight', 47800],
+      ['revenue was 47800 tonight', 47800],
+      ['we did 47800', 47800],
+      ['$47k', 47000],
+    ]) {
+      const parsed = parseRevenueInput(text)
+      if (parsed !== expected) wrongOutput(`parseRevenueInput("${text}")`, parsed, expected)
+    }
+  }, { severity: 'MEDIUM' })
 
   await step('3.16 Sat tips $3800 — stress rounding', 'Tips', async () => {
     const parsed = parseTipMessage('tips tonight $3,800 for sat dinner')
@@ -1086,14 +1108,22 @@ async function week3() {
   // ── SUNDAY
   currentDay = 'Sunday'; setClock('2025-02-23T08:00:00Z')
 
-  await step('3.17 Staffing pattern analysis — Wed Cook chronic understaffing', 'StaffingPatterns', async () => {
-    // Over 3+ weeks, Wed dinner cook was unfilled
-    // We don't have the exact function wired, so assert conceptually via data
-    const wedCookHistory = db.scheduleAssignments.filter(a => a.day_of_week === 'Wednesday' && a.shift_id === 2002)
-    flagNotBuilt('chronic understaffing alerts from schedule history', '3.17')
-    assert.ok(true) // placeholder - just mark ran
+  await step('3.17 Staffing pattern analysis must flag chronic Wed Cook understaffing', 'StaffingPatterns', async () => {
+    const { generateStaffingRecommendations } = await import('../../intelligence/staffingPatterns.js')
+    assert.ok(typeof generateStaffingRecommendations === 'function', 'generateStaffingRecommendations exported')
+    // Build history showing Wed dinner Cook unfilled 3x
+    const history = [
+      { shiftName: 'Mon-Fri Dinner', dayOfWeek: 'Wednesday', role: 'Cook', scheduled: 0, required: 1, weekStart: WEEK_STARTS.preseed1 },
+      { shiftName: 'Mon-Fri Dinner', dayOfWeek: 'Wednesday', role: 'Cook', scheduled: 0, required: 1, weekStart: WEEK_STARTS.week1 },
+      { shiftName: 'Mon-Fri Dinner', dayOfWeek: 'Wednesday', role: 'Cook', scheduled: 0, required: 1, weekStart: WEEK_STARTS.week2 },
+      { shiftName: 'Mon-Fri Dinner', dayOfWeek: 'Wednesday', role: 'Cook', scheduled: 0, required: 1, weekStart: WEEK_STARTS.week3 },
+    ]
+    const recs = generateStaffingRecommendations(history)
+    if (!Array.isArray(recs) || recs.length === 0) {
+      missing(`generateStaffingRecommendations did not produce recommendations for 4 weeks of Wed Cook gaps: ${JSON.stringify(recs)}`)
+    }
     markIntel('Staffing patterns')
-  })
+  }, { severity: 'MEDIUM' })
 
   await step('3.18 Devon reliability availability learning', 'AvailabilityLearning', async () => {
     // Compute reliable days based on event history
@@ -1148,18 +1178,17 @@ async function week4() {
     assert.ok(events.some(e => e.type === 'confirmed_schedule'))
   })
 
-  await step('4.04 Sam $21 rate verified (historical $19 remains)', 'Payroll', async () => {
+  await step('4.04 Sam Week 1 pay must be at $21 rate after retroactive fix', 'Payroll', async () => {
     const sam = staffByName('Sam')
     assert.equal(sam.hourlyRate, 21)
-    // Historical week-1 row is still at $19 (retroactive fix not built)
     const hist = await db.getPayrollHistory(GROUP_ID, sam.id)
     const w1 = hist.find(h => h.week_start === WEEK_STARTS.week1)
-    if (w1) {
-      const impliedRate = Math.round((w1.total_gross_pay / w1.total_hours) * 100) / 100
-      // We don't assert exact — just document
-      flagNotBuilt('retroactive Week 1 payroll fix', '4.04')
+    assert.ok(w1, 'Sam has Week 1 payroll row')
+    const impliedRate = Math.round((w1.total_gross_pay / w1.total_hours) * 100) / 100
+    if (Math.abs(impliedRate - 21) > 0.5) {
+      missing(`retroactive Week 1 payroll fix — Sam still at implied rate $${impliedRate} for Week 1`)
     }
-  })
+  }, { severity: 'HIGH' })
 
   // ── WEDNESDAY — concurrent maximum
   currentDay = 'Wednesday'; setClock('2025-02-26T16:45:00Z')
@@ -1254,12 +1283,15 @@ async function week4() {
     assert.equal(staffByName('Devon').active, false)
   })
 
-  await step('4.12 Devon DM after removal — graceful', 'Routing', async () => {
+  await step('4.12 Deactivated-staff DM routing must short-circuit', 'Routing', async () => {
     const devon = staffByName('Devon')
-    // In real system, dmRouter would detect deactivated status
-    flagNotBuilt('graceful message handling for deactivated staff DMs', '4.12')
     assert.equal(devon.active, false)
-  }, { expectedBug: 'Deactivated staff DMs still processed normally', severity: 'LOW' })
+    // Check dmRouter for any deactivated-status check
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('src/routing/dmRouter.js', 'utf8')
+    const checks = /active\s*[!=]==\s*false|\.active\s*===\s*false|deactivated|isActive/i.test(src)
+    if (!checks) missing('dmRouter has no deactivated-staff check — DMs from removed staff still processed')
+  }, { severity: 'MEDIUM' })
 
   await step('4.13 PATCH Alex role + rate via dashboard', 'Dashboard', async () => {
     const alex = db.staff.find(s => s.name === 'Alex Park')
@@ -1340,29 +1372,38 @@ async function bugHunter() {
     assert.ok(parsed && parsed.type, 'parser handled long input')
   })
 
-  await step('BH.05 Concurrent coverage confirm — atomic', 'Concurrency', async () => {
+  await step('BH.05 Concurrent markCovered must return true for exactly one caller', 'Concurrency', async () => {
+    // Simulate concurrent confirmations. First-writer-wins semantics required.
     const req = await db.saveRequest(GROUP_ID, 'Mesa Verde', 'Test concurrent', 'A')
-    const results = await Promise.all([
+    const [r1, r2] = await Promise.all([
       db.markCovered(req.id, 'Person1'),
       db.markCovered(req.id, 'Person2'),
     ])
-    // Both calls set it covered — but only one value persists
-    assert.ok(results[0] || results[1])
     const final = db.coverageRequests.find(r => r.id === req.id)
     assert.equal(final.status, 'covered')
-    if (final.covered_by === 'Person2') {
-      flagNotBuilt('atomic lock on coverage confirmation — last writer wins', 'BH.05')
+    // Correct: final.covered_by should be the first winner deterministically.
+    // Current impl: last-writer-wins (non-atomic). Flag as a bug.
+    if (final.covered_by !== 'Person1') {
+      missing(`atomic coverage lock — concurrent confirms got final=${final.covered_by} (expected deterministic first-writer)`)
     }
-  }, { expectedBug: 'No atomic lock on coverage markCovered (last writer wins)', severity: 'MEDIUM' })
+  }, { severity: 'HIGH' })
 
-  await step('BH.06 Duplicate /makeschedule — both run', 'Concurrency', async () => {
-    const [a, b] = await Promise.all([
+  await step('BH.06 Concurrent /makeschedule must serialize (one draft per week)', 'Concurrency', async () => {
+    // Correct behavior: second call is queued or errors; not two independent drafts.
+    db.generatedSchedules = db.generatedSchedules.filter(g => g.week_start !== WEEK_STARTS.week4)
+    await Promise.all([
       generateWeeklySchedule(GROUP_ID, WEEK_STARTS.week4, buildScheduleMockData(WEEK_STARTS.week4)),
       generateWeeklySchedule(GROUP_ID, WEEK_STARTS.week4, buildScheduleMockData(WEEK_STARTS.week4)),
     ])
-    assert.ok(a && b)
-    flagNotBuilt('lock preventing concurrent schedule generation', 'BH.06')
-  }, { expectedBug: 'No lock preventing concurrent schedule generation', severity: 'LOW' })
+    // Each invocation creates its own result but neither writes to db.generatedSchedules directly
+    // (mockData path returns draft without persisting). However, if the LIVE path were used, we'd
+    // want to see exactly ONE draft per week. Since we can't test the live path without full
+    // Supabase, verify the code at least has some locking primitive.
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('src/schedule/generateSchedule.js', 'utf8')
+    const hasLock = /lock|mutex|inProgress|in_progress|generating|semaphore/i.test(src)
+    if (!hasLock) missing('concurrent /makeschedule lock — no locking primitive in generateSchedule.js')
+  }, { severity: 'MEDIUM' })
 
   await step('BH.07 Zero staff available — returns gaps, no crash', 'Schedule', async () => {
     // All staff marked unavailable
@@ -1377,23 +1418,38 @@ async function bugHunter() {
     assert.ok(draft.gaps.length > 0, 'expected gaps')
   })
 
-  await step('BH.08 OT boundary at 40.0 hrs exactly', 'Payroll', async () => {
-    const shifts = [{ id: 9001, name: 'T', dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00' }]
-    const roles = [{ staffId: 1, role: 'Test', hourlyRate: 20 }]
-    // 5 × 8hr shifts = 40 hours exactly
-    const assignments = Array.from({ length: 5 }, () => ({ staffId: 1, shiftId: 9001 }))
-    const otSettings = { weekly_threshold: 40, weekly_multiplier: 1.5, daily_threshold: 0, daily_overtime_enabled: false }
-    const pay = calculateWeeklyPayWithOT(assignments, shifts, roles, otSettings, [], [], [])
-    assert.ok(pay)
-  })
+  await step('BH.08 OT boundary: 40.0h → 0 OT; 40.1h → 0.1h OT', 'Payroll', async () => {
+    const shifts = [
+      { id: 9001, name: 'A', dayOfWeek: 'Monday',   startTime: '09:00', endTime: '17:00' },
+      { id: 9002, name: 'B', dayOfWeek: 'Tuesday',  startTime: '09:00', endTime: '17:00' },
+      { id: 9003, name: 'C', dayOfWeek: 'Wednesday', startTime: '09:00', endTime: '17:00' },
+      { id: 9004, name: 'D', dayOfWeek: 'Thursday', startTime: '09:00', endTime: '17:00' },
+      { id: 9005, name: 'E', dayOfWeek: 'Friday',   startTime: '09:00', endTime: '17:00' },
+    ]
+    const roles = [{ roleName: 'Test', hourlyRate: 20 }]
+    const assigns40 = shifts.map(s => ({ staffId: 1, staffName: 'T', shiftId: s.id, role: 'Test', dayOfWeek: s.dayOfWeek }))
+    const ot = { overtime_enabled: true, weekly_threshold: 40, weekly_multiplier: 1.5, daily_threshold: 0, daily_overtime_enabled: false }
+    const pay40 = calculateWeeklyPayWithOT(assigns40, shifts, roles, ot, [], [], [])
+    const row = pay40.find(r => String(r.staffId) === '1')
+    assert.ok(row, `pay shape: ${JSON.stringify(pay40).slice(0,200)}`)
+    if (Math.abs(row.totalWeeklyOTHours) > 0.001) wrongOutput('OT at exactly 40h', row.totalWeeklyOTHours, 0)
+    // 40.1h case: extend Friday 6 min
+    const shifts401 = shifts.map(s => s.id === 9005 ? { ...s, endTime: '17:06' } : s)
+    const pay401 = calculateWeeklyPayWithOT(assigns40, shifts401, roles, ot, [], [], [])
+    const r401 = pay401.find(r => String(r.staffId) === '1')
+    if (Math.abs(r401.totalWeeklyOTHours - 0.1) > 0.01) wrongOutput('OT at 40.1h', r401.totalWeeklyOTHours, 0.1)
+  }, { severity: 'HIGH' })
 
-  await step('BH.09 Overnight shift 10pm-2am', 'Payroll', async () => {
+  await step('BH.09 Overnight 10pm-2am must yield 4h / $60 @ $15', 'Payroll', async () => {
     const shifts = [{ id: 9002, name: 'Overnight', dayOfWeek: 'Friday', startTime: '22:00', endTime: '02:00' }]
-    const roles = [{ staffId: 1, role: 'Test', hourlyRate: 15 }]
-    const assignments = [{ staffId: 1, shiftId: 9002 }]
+    const roles = [{ roleName: 'Test', hourlyRate: 15 }]
+    const assignments = [{ staffId: 1, staffName: 'T', shiftId: 9002, role: 'Test', dayOfWeek: 'Friday' }]
     const pay = calculateWeeklyPayWithOT(assignments, shifts, roles, OT_SETTINGS, [], [], [])
-    assert.ok(pay)
-  })
+    const row = pay.find(r => String(r.staffId) === '1')
+    assert.ok(row, `shape: ${JSON.stringify(pay).slice(0,200)}`)
+    if (Math.abs(row.totalHours - 4) > 0.01) wrongOutput('overnight hours', row.totalHours, 4)
+    if (Math.abs(row.totalGrossPay - 60) > 0.5) wrongOutput('overnight pay', row.totalGrossPay, 60)
+  }, { severity: 'HIGH' })
 
   await step('BH.10 Expired JWT returns 401', 'Security', async () => {
     const expired = signExpiredJWT({ groupId: GROUP_ID })
@@ -1401,6 +1457,259 @@ async function bugHunter() {
     assert.equal(res.status, 401)
     assertContains(res.body.error, 'expired', 'error message mentions expired')
   })
+
+  // ── AGGRESSIVE STRESS TESTS ──────────────────────────────────────────────
+
+  await step('BH.11 Negative tip amount must be rejected', 'Tips', async () => {
+    // parseTipMessage returns null for $0 — but what about explicit negative?
+    const p1 = parseTipMessage('$-500')
+    const p2 = parseTipMessage('tips were -500')
+    if (p1 && p1.totalTips < 0) wrongOutput('parseTipMessage accepted negative', p1.totalTips, 'null or positive')
+    if (p2 && p2.totalTips < 0) wrongOutput('parseTipMessage accepted negative (bare)', p2.totalTips, 'null or positive')
+    // calculateTipSplit with negative total → must handle
+    const splits = calculateTipSplit(-500, [{ id: 1, name: 'X', role: 'Server', hoursWorked: 6 }], 'hours')
+    if (splits.length > 0 && splits[0].amount < 0) {
+      missing('negative-total guard in calculateTipSplit (should refuse or return empty)')
+    }
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.12 Tip split with zero-hour staff must not divide-by-zero', 'Tips', async () => {
+    const zeroHourStaff = [
+      { id: 1, name: 'A', role: 'Server', hoursWorked: 0 },
+      { id: 2, name: 'B', role: 'Server', hoursWorked: 0 },
+    ]
+    const splits = calculateTipSplit(100, zeroHourStaff, 'hours')
+    // Correct: either fall back to equal split OR refuse
+    if (splits.some(s => !Number.isFinite(s.amount))) {
+      wrongOutput('tip split produced NaN/Infinity', splits.map(s => s.amount), 'finite numbers')
+    }
+    const sum = splits.reduce((a, b) => a + b.amount, 0)
+    if (Math.abs(sum - 100) > 0.01 && splits.length > 0) {
+      missing(`tip split zero-hour fallback (sum=${sum}, expected 100 if equal-split fallback)`)
+    }
+  }, { severity: 'HIGH' })
+
+  await step('BH.13 Empty staff name must be rejected', 'Security', async () => {
+    const res = await simulateDashboardRequest(db, 'POST', '/api/staff',
+      { name: '', role: 'Server' }, JWT)
+    if (res.status === 201) missing(`empty-string name accepted — staff row created (${res.body.id})`)
+    if (res.status !== 400) wrongOutput('empty-name response status', res.status, 400)
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.14 Whitespace-only staff name must be rejected', 'Security', async () => {
+    const res = await simulateDashboardRequest(db, 'POST', '/api/staff',
+      { name: '   \t\n  ', role: 'Server' }, JWT)
+    if (res.status === 201) missing('whitespace-only name accepted by dashboard')
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.15 Negative hourly rate must be rejected', 'Security', async () => {
+    const sam = staffByName('Sam')
+    const res = await simulateDashboardRequest(db, 'PATCH', `/api/payroll/${sam.id}/rate`,
+      { rate: -5 }, JWT)
+    if (res.status !== 400) wrongOutput('negative rate response', res.status, 400)
+  }, { severity: 'HIGH' })
+
+  await step('BH.16 Rate of zero must be rejected', 'Security', async () => {
+    const sam = staffByName('Sam')
+    const res = await simulateDashboardRequest(db, 'PATCH', `/api/payroll/${sam.id}/rate`,
+      { rate: 0 }, JWT)
+    if (res.status !== 400) wrongOutput('zero rate response', res.status, 400)
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.17 Schedule/assign for past week must warn or reject', 'Schedule', async () => {
+    const aaliyah = staffByName('Aaliyah')
+    const res = await simulateDashboardRequest(db, 'POST', '/api/schedule/assign',
+      { staffId: aaliyah.id, shiftId: 2004, weekStart: '2024-06-03' }, JWT)
+    // Correct: reject or flag as historical
+    if (res.status === 201) missing('past-week schedule/assign accepted without warning (weekStart 2024-06-03)')
+  }, { severity: 'LOW' })
+
+  await step('BH.18 Shift with end_time < start_time must reject OR treat as overnight', 'Schedule', async () => {
+    const res = await simulateDashboardRequest(db, 'POST', '/api/shifts',
+      { name: 'Reverse', day_of_week: 'Friday', start_time: '17:00', end_time: '09:00' }, JWT)
+    if (res.status === 201) {
+      // Accepted — overnight is valid, but verify payroll handles it correctly
+      const roles = [{ staffId: 999, role: 'Test', hourlyRate: 10 }]
+      const shifts = [{ id: res.body.id, name: 'Reverse', dayOfWeek: 'Friday', startTime: '17:00', endTime: '09:00' }]
+      const pay = calculateWeeklyPayWithOT([{ staffId: 999, shiftId: res.body.id }], shifts, roles, OT_SETTINGS, [], [], [])
+      const row = (Array.isArray(pay) ? pay : [pay])[0]
+      const hours = row.totalHours ?? row.total_hours ?? row.hours
+      // 5pm→9am = 16h (overnight)
+      if (Math.abs(hours - 16) > 0.5) wrongOutput('reverse-time shift hours (overnight interpretation)', hours, 16)
+    }
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.19 Unicode staff name round-trips through dashboard', 'Dashboard', async () => {
+    const name = '陳小明 🌟'
+    const res = await simulateDashboardRequest(db, 'POST', '/api/staff', { name, role: 'Server' }, JWT)
+    assert.equal(res.status, 201)
+    if (res.body.name !== name) wrongOutput('unicode name storage', res.body.name, name)
+    const got = await simulateDashboardRequest(db, 'GET', '/api/staff', {}, JWT)
+    const found = got.body.find(s => s.id === res.body.id)
+    if (!found || found.name !== name) wrongOutput('unicode name round-trip', found?.name, name)
+  }, { severity: 'LOW' })
+
+  await step('BH.20 500 concurrent markCovered → at most 1 covered', 'Concurrency', async () => {
+    const req = await db.saveRequest(GROUP_ID, 'Mesa Verde', 'Burst test', 'A')
+    const N = 500
+    const promises = Array.from({ length: N }, (_, i) => db.markCovered(req.id, `P${i}`))
+    await Promise.all(promises)
+    const final = db.coverageRequests.find(r => r.id === req.id)
+    // Should end up covered exactly once
+    if (final.status !== 'covered') wrongOutput('500-concurrent final status', final.status, 'covered')
+    // covered_by should be one of P0..P499 (deterministic ideally)
+    const pMatch = /^P\d+$/.test(final.covered_by)
+    if (!pMatch) wrongOutput('500-concurrent covered_by', final.covered_by, 'P<n>')
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.21 Consecutive-day streak of 7 must return streak=7 + warning=true', 'Intelligence', async () => {
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    const result = getConsecutiveDayStreak(days)
+    if (result.streak !== 7) wrongOutput('7-day streak value', result.streak, 7)
+    if (result.warning !== true) wrongOutput('7-day warning flag', result.warning, true)
+    // And a non-consecutive set
+    const gap = getConsecutiveDayStreak(['Monday','Wednesday','Friday'])
+    if (gap.streak !== 1) wrongOutput('non-consecutive streak', gap.streak, 1)
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.22 Clopening detection (close → open within 8h)', 'Intelligence', async () => {
+    const { detectClopenings } = await import('../../schedule/clopen.js')
+    // Seed: close Fri 11pm, open Sat 6am = 7 hours gap → clopening
+    const assigns = [
+      { staffId: 1, staffName: 'Test', shiftId: 2002, dayOfWeek: 'Friday' },
+      { staffId: 1, staffName: 'Test', shiftId: 2003, dayOfWeek: 'Saturday' },
+    ]
+    const shifts = [
+      { id: 2002, name: 'Mon-Fri Dinner', day_of_week: 'Friday', start_time: '17:00', end_time: '23:00' },
+      { id: 2003, name: 'Sat Brunch', day_of_week: 'Saturday', start_time: '06:00', end_time: '10:00' },
+    ]
+    const clop = detectClopenings(assigns, shifts)
+    if (!clop || clop.length === 0) missing('detectClopenings missed Fri-23:00→Sat-06:00 (7h gap < 8h threshold)')
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.23 Weekly labor budget breach must be detected', 'Budget', async () => {
+    // W1 payroll total was seeded with ~25h × rates; check if we can detect exceeding $8500 budget
+    const total = await db.getPayrollTotal(GROUP_ID, WEEK_STARTS.week4)
+    const budget = (await db.getBudget(GROUP_ID))?.weekly_budget ?? 8500
+    // Build obviously-over-budget payroll
+    await db.savePeriodPayroll({ group_id: GROUP_ID, staff_id: staffByName('Aaliyah').id, week_start: WEEK_STARTS.week4,
+      total_hours: 40, total_late_minutes: 0, total_late_deduction: 0, total_gross_pay: 9000, shift_breakdown: [] })
+    const nowTotal = await db.getPayrollTotal(GROUP_ID, WEEK_STARTS.week4)
+    if (nowTotal <= budget) wrongOutput('W4 payroll (over-budget test)', nowTotal, `> ${budget}`)
+    // Check if laborCost API surfaces this
+    const pct = calculateLaborCostPercent(nowTotal, 10000)
+    if (!pct || !['high', 'critical'].includes(pct.status)) {
+      wrongOutput('labor cost status for $9000+/$10000 revenue', pct?.status, 'high or critical')
+    }
+  }, { severity: 'HIGH' })
+
+  await step('BH.24 Malformed JWT must return 401 (not crash)', 'Security', async () => {
+    for (const token of ['', 'not.a.jwt', 'a.b.c', 'Bearer xyz', '{}']) {
+      const res = await simulateDashboardRequest(db, 'GET', '/api/staff', {}, token)
+      if (res.status !== 401) wrongOutput(`malformed token "${token}" response`, res.status, 401)
+    }
+  }, { severity: 'HIGH' })
+
+  await step('BH.25 Missing JWT must return 401', 'Security', async () => {
+    const res = await simulateDashboardRequest(db, 'GET', '/api/staff', {}, null)
+    if (res.status !== 401) wrongOutput('missing token response', res.status, 401)
+  }, { severity: 'HIGH' })
+
+  await step('BH.26 JWT with wrong signature must return 401', 'Security', async () => {
+    // Sign with different secret
+    const jwt = await import('jsonwebtoken')
+    const fake = jwt.default.sign({ groupId: GROUP_ID }, 'different-secret', { expiresIn: '1h' })
+    const res = await simulateDashboardRequest(db, 'GET', '/api/staff', {}, fake)
+    if (res.status !== 401) wrongOutput('wrong-signature token response', res.status, 401)
+  }, { severity: 'CRITICAL' })
+
+  await step('BH.27 Cross-tenant isolation: JWT for groupA cannot read groupB data', 'Security', async () => {
+    // Create a second group's staff
+    const OTHER_GROUP = 'other-restaurant-999'
+    db.staff.push({ id: 7777, group_id: OTHER_GROUP, name: 'Secret', role: 'Server', active: true, user_id: 7777, dm_chat_id: 7777 })
+    // Our JWT is for GROUP_ID — request shouldn't see OTHER_GROUP's staff
+    const res = await simulateDashboardRequest(db, 'GET', '/api/staff', {}, JWT)
+    assert.equal(res.status, 200)
+    const leakage = res.body.find(s => s.group_id === OTHER_GROUP)
+    if (leakage) wrongOutput('tenant isolation', `saw ${leakage.name} from ${OTHER_GROUP}`, 'no cross-tenant leakage')
+  }, { severity: 'CRITICAL' })
+
+  await step('BH.28 Unknown dashboard route must return 404, not 500', 'Dashboard', async () => {
+    const res = await simulateDashboardRequest(db, 'GET', '/api/nonexistent/endpoint', {}, JWT)
+    if (res.status >= 500) wrongOutput('unknown route status', res.status, '404')
+    if (res.status !== 404) wrongOutput('unknown route status', res.status, 404)
+  }, { severity: 'LOW' })
+
+  await step('BH.29 Recognition: team-word w/o staff name must target team', 'Recognition', async () => {
+    const rec = detectRecognition('shoutout to the whole kitchen crew tonight', db.staff.filter(s => s.group_id === GROUP_ID))
+    if (!rec) missing('detectRecognition on "shoutout to the whole kitchen crew tonight"')
+    if (rec && rec.recipientType !== 'team' && rec.recipientType !== 'role') {
+      wrongOutput('team recognition recipientType', rec.recipientType, "'team' or 'role'")
+    }
+  }, { severity: 'LOW' })
+
+  await step('BH.30 Demand signal: "dead tonight" must detect low demand', 'DemandSignals', async () => {
+    const sig = extractDemandSignal('gonna be dead tonight')
+    if (!sig || sig.type !== 'low') {
+      missing(`low-demand detection for "dead tonight" — got ${JSON.stringify(sig)}`)
+    }
+  }, { severity: 'LOW' })
+
+  await step('BH.31 Sentiment: "absolutely awful" must classify negative', 'Morale', async () => {
+    const s = classifySentiment('absolutely awful tonight')
+    if (s !== 'negative') wrongOutput('sentiment("absolutely awful")', s, 'negative')
+  }, { severity: 'LOW' })
+
+  await step('BH.32 Clock in twice without clock out must reject or auto-close', 'TimeClock', async () => {
+    const testId = 9998
+    db.staff.push({ id: testId, group_id: GROUP_ID, name: 'DualClock', role: 'Server', active: true, user_id: testId, dm_chat_id: testId })
+    await db.clockIn({ staff_id: testId, user_id: testId, group_id: GROUP_ID, shift_id: 2001, clock_in: '2025-02-24T10:00:00Z' })
+    // Second clock-in without clock-out
+    const second = await db.clockIn({ staff_id: testId, user_id: testId, group_id: GROUP_ID, shift_id: 2001, clock_in: '2025-02-24T10:30:00Z' })
+    const openEntries = db.timeEntries.filter(e => e.staff_id === testId && !e.clock_out)
+    // Correct: only one open entry at a time (either first was auto-closed or second rejected)
+    if (openEntries.length > 1) {
+      missing(`clock-in idempotency — ${openEntries.length} open entries for same staff simultaneously`)
+    }
+  }, { severity: 'MEDIUM' })
+
+  await step('BH.33 OT settings null must use defaults safely (no crash)', 'Payroll', async () => {
+    const shifts = [{ id: 1, name: 'T', dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00' }]
+    const roles = [{ roleName: 'X', hourlyRate: 20 }]
+    const assigns = [{ staffId: 1, staffName: 'T', shiftId: 1, role: 'X', dayOfWeek: 'Monday' }]
+    let crashed = false
+    try { calculateWeeklyPayWithOT(assigns, shifts, roles, null, [], [], []) }
+    catch (e) { crashed = true }
+    if (crashed) missing('calculateWeeklyPayWithOT crashes on null otSettings (no default fallback)')
+  }, { severity: 'HIGH' })
+
+  await step('BH.34 Rapid schedule-assign flood (100 ops) must not corrupt state', 'Concurrency', async () => {
+    const before = db.scheduleAssignments.length
+    const promises = []
+    for (let i = 0; i < 100; i++) {
+      promises.push(simulateDashboardRequest(db, 'POST', '/api/schedule/assign',
+        { staffId: staffByName('Aaliyah').id, shiftId: 2001 + (i % 6), weekStart: WEEK_STARTS.week4 }, JWT))
+    }
+    const results = await Promise.all(promises)
+    const ok = results.filter(r => r.status === 201).length
+    if (ok < 100) wrongOutput('rapid-flood success count', ok, 100)
+    const after = db.scheduleAssignments.length
+    if (after - before !== 100) wrongOutput('rapid-flood rows created', after - before, 100)
+  }, { severity: 'LOW' })
+
+  await step('BH.35 Double-booking: same staff same shift+day must be blocked', 'Schedule', async () => {
+    // Aaliyah already has many duplicate assignments from BH.34 — that IS the bug we check
+    const dupes = {}
+    for (const a of db.scheduleAssignments) {
+      if (a.staff_id !== staffByName('Aaliyah').id || a.week_start !== WEEK_STARTS.week4) continue
+      const key = `${a.shift_id}|${a.day_of_week}|${a.week_start}`
+      dupes[key] = (dupes[key] ?? 0) + 1
+    }
+    const maxDupe = Math.max(0, ...Object.values(dupes))
+    if (maxDupe > 1) {
+      missing(`double-booking prevention — Aaliyah has ${maxDupe} rows for one shift/day/week`)
+    }
+  }, { severity: 'HIGH' })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1439,29 +1748,10 @@ function printFinalReport() {
     console.log(`\n  ${sev}:`)
     for (const b of bySeverity[sev]) {
       console.log(`    ❌ W${b.week} ${b.name}`)
-      console.log(`       → ${b.bug}`)
-      if (b.error) console.log(`       error: ${b.error.slice(0, 100)}`)
+      if (b.error) console.log(`       ${b.error.slice(0, 200)}`)
     }
   }
   if (confirmedBugs.length === 0) console.log('\n  (none)')
-
-  if (expectedButNotReproduced.length > 0) {
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('  EXPECTED BUGS THAT DID NOT APPEAR (system handled correctly)')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    for (const e of expectedButNotReproduced) {
-      console.log(`  ✅ W${e.week} ${e.name} — ${e.bug}`)
-    }
-  }
-
-  if (notBuilt.length > 0) {
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    console.log('  FEATURES NOT YET BUILT (hit during simulation)')
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    for (const nb of notBuilt) {
-      console.log(`  [ ] W${nb.week} ${nb.step}: ${nb.feature}`)
-    }
-  }
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   console.log('  INTELLIGENCE LAYER — Features that fired')
@@ -1496,13 +1786,19 @@ function printFinalReport() {
   console.log('  DEPLOYMENT VERDICT')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   const crit = bySeverity.CRITICAL?.length ?? 0
-  const verdict = crit === 0 ? '🟢 PRODUCTION READY' : crit <= 2 ? '🟡 BETA ONLY' : '🔴 NOT READY'
-  console.log(`  ${verdict}  (CRITICAL bugs: ${crit})`)
+  const high = bySeverity.HIGH?.length ?? 0
+  const med  = bySeverity.MEDIUM?.length ?? 0
+  const verdict =
+    crit >= 3 || high >= 10 ? '🔴 NOT READY'
+    : crit >= 1 || high >= 3 ? '🟡 BETA ONLY'
+    : failed.length === 0     ? '🟢 PRODUCTION READY'
+    : '🟡 BETA ONLY'
+  console.log(`  ${verdict}  (CRITICAL: ${crit} | HIGH: ${high} | MEDIUM: ${med} | LOW: ${bySeverity.LOW?.length ?? 0})`)
 
   const orderedFix = [...(bySeverity.CRITICAL ?? []), ...(bySeverity.HIGH ?? []), ...(bySeverity.MEDIUM ?? []), ...(bySeverity.LOW ?? [])]
   if (orderedFix.length > 0) {
     console.log('\n  ORDERED FIX LIST:')
-    orderedFix.forEach((b, i) => console.log(`    ${i + 1}. [${b.severity}] ${b.bug}`))
+    orderedFix.forEach((b, i) => console.log(`    ${String(i + 1).padStart(2)}. [${b.severity}] W${b.week} ${b.name}`))
   }
   console.log('\n═══════════════════════════════════════════════════════════════════\n')
 
