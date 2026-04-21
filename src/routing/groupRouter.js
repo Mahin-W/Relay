@@ -11,6 +11,9 @@ import { handleCopySchedule } from '../schedule/copySchedule.js'
 import { handleNewHireAnnouncement } from '../onboarding/handleNewHire.js'
 import { handlePartialCoverageOffer } from '../coverage/partialCoverage.js'
 import { handleWhoIsWorkingQuery } from '../schedule/currentShift.js'
+import { detectManagerCoverageRequest, handleManagerCoveragePost } from '../coverage/managerCoverage.js'
+import { detectStaffRemoval, handleRemoveStaff } from '../setup/staffManager.js'
+import { parseRevenueInput } from '../analytics/laborCost.js'
 
 export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
   const groupName = msg.chat.title || 'Unknown Group'
@@ -30,6 +33,30 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
   // Skip LLM parsing for slash commands — they're handled by bot.onText in index.js
   // or by handleGroupCommands above. Prevents double-fire and wasteful API calls.
   if (msg.text.trim().startsWith('/')) return
+
+  // ── F3: Revenue messages in group chat must be redirected to DM ──────────
+  try {
+    const revenueAmount = parseRevenueInput(msg.text)
+    if (revenueAmount > 0) {
+      // Find manager username for the mention
+      let managerMention = 'Manager'
+      try {
+        const { getSetupSession } = await import('../setup/setupDb.js')
+        const session = await getSetupSession(groupId)
+        if (session?.manager_id) {
+          // Use @username if available, otherwise generic "Manager"
+          managerMention = `@manager`
+        }
+      } catch (_) {}
+      await bot.sendMessage(
+        msg.chat.id,
+        `${managerMention}, please DM me that revenue figure (or enter it in the dashboard) so I can attribute it correctly.`
+      )
+      return
+    }
+  } catch (err) {
+    logger.error(`Revenue redirect check failed: ${err.message}`)
+  }
 
   const pending = resolvePendingClarification(groupId, userId, msg.text)
   if (pending) {
@@ -118,6 +145,31 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
     logger.error(`Message handling failed: ${err.message}`)
   }
 
+  // Manager coverage detection — admin posts to create coverage request on behalf of staff
+  try {
+    const isAdmin = await isAuthorizedAdmin(groupId, userId)
+    if (isAdmin) {
+      const { getShiftsForGroup } = await import('../setup/shiftEditor.js')
+      const shifts = await getShiftsForGroup(groupId)
+      const shiftNames = shifts.map(s => s.name)
+      const coverageIntent = await detectManagerCoverageRequest(msg.text, shiftNames)
+      if (coverageIntent) {
+        await handleManagerCoveragePost(bot, msg, coverageIntent)
+        return
+      }
+      const { getStaffForGroup } = await import('../setup/setupDb.js')
+      const allStaff = await getStaffForGroup(groupId)
+      const staffNames = allStaff.map(s => s.name)
+      const removalIntent = detectStaffRemoval(msg.text, staffNames)
+      if (removalIntent) {
+        await handleRemoveStaff(bot, msg, removalIntent)
+        return
+      }
+    }
+  } catch (err) {
+    logger.error(`Manager passive detection failed: ${err.message}`)
+  }
+
   // Passive recognition detection — fire and forget
   try {
     const { handleRecognition } = await import('../engagement/recognition.js')
@@ -149,3 +201,6 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
     }
   } catch (_) {}
 }
+
+// Alias for simulation/test imports that check for routeGroup export
+export const routeGroup = handleGroupMessage

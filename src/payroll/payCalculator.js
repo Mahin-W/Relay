@@ -165,11 +165,23 @@ export function parseTimeToDecimalHours(timeStr) {
   return parseTimeToMinutes(timeStr) / 60
 }
 
+const DEFAULT_OT_SETTINGS = {
+  overtime_enabled: false,
+  weekly_threshold: 40,
+  weekly_multiplier: 1.5,
+  daily_threshold: 0,
+  daily_overtime_enabled: false,
+  daily_multiplier: 1.5,
+}
+
 /**
  * Calculate a single shift's pay with overtime support.
  * Pure function — no DB, no Groq, no side effects.
  */
 export function calculateShiftPayWithOT(shift, role, hoursWorkedThisWeekBefore, overtimeSettings, lateMinutes = 0, partialFrom = null, partialUntil = null) {
+  // BUG A1 (BH.33): coerce null/undefined overtimeSettings to safe defaults
+  const ot = overtimeSettings != null ? overtimeSettings : { ...DEFAULT_OT_SETTINGS }
+
   const hourlyRate = role.hourlyRate ?? 0
   const startTime = shift.startTime ?? shift.start_time ?? '9am'
   const endTime   = shift.endTime   ?? shift.end_time   ?? '5pm'
@@ -188,9 +200,9 @@ export function calculateShiftPayWithOT(shift, role, hoursWorkedThisWeekBefore, 
 
   // Step 2 — daily OT split
   let dailyRegular, dailyOTHours
-  if (overtimeSettings.daily_overtime_enabled) {
-    dailyRegular = Math.min(effectiveHours, overtimeSettings.daily_threshold)
-    dailyOTHours = Math.max(0, effectiveHours - overtimeSettings.daily_threshold)
+  if (ot.daily_overtime_enabled) {
+    dailyRegular = Math.min(effectiveHours, ot.daily_threshold)
+    dailyOTHours = Math.max(0, effectiveHours - ot.daily_threshold)
   } else {
     dailyRegular = effectiveHours
     dailyOTHours = 0
@@ -198,8 +210,8 @@ export function calculateShiftPayWithOT(shift, role, hoursWorkedThisWeekBefore, 
 
   // Step 3 — weekly OT split
   let regularHours, weeklyOTHours
-  if (overtimeSettings.overtime_enabled) {
-    const weeklyRemaining = Math.max(0, overtimeSettings.weekly_threshold - (hoursWorkedThisWeekBefore ?? 0))
+  if (ot.overtime_enabled) {
+    const weeklyRemaining = Math.max(0, ot.weekly_threshold - (hoursWorkedThisWeekBefore ?? 0))
     regularHours  = Math.min(dailyRegular, weeklyRemaining)
     weeklyOTHours = Math.max(0, dailyRegular - weeklyRemaining)
   } else {
@@ -209,8 +221,8 @@ export function calculateShiftPayWithOT(shift, role, hoursWorkedThisWeekBefore, 
 
   // Step 4 — pay amounts
   const regularPay  = round2(regularHours  * hourlyRate)
-  const dailyOTPay  = round2(dailyOTHours  * hourlyRate * (overtimeSettings.daily_multiplier  ?? 1.5))
-  const weeklyOTPay = round2(weeklyOTHours * hourlyRate * (overtimeSettings.weekly_multiplier ?? 1.5))
+  const dailyOTPay  = round2(dailyOTHours  * hourlyRate * (ot.daily_multiplier  ?? 1.5))
+  const weeklyOTPay = round2(weeklyOTHours * hourlyRate * (ot.weekly_multiplier ?? 1.5))
   const grossPay    = round2(regularPay + dailyOTPay + weeklyOTPay)
 
   return {
@@ -247,6 +259,9 @@ function dayRank(dayOfWeek) {
  * Returns array sorted by staffName ASC.
  */
 export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSettings, lateEvents = [], partialCoverages = [], timeEntries = []) {
+  // BUG A1 (BH.33): coerce null/undefined overtimeSettings to safe defaults
+  const safeOT = overtimeSettings != null ? overtimeSettings : { ...DEFAULT_OT_SETTINGS }
+
   const shiftMap = Object.fromEntries((shifts ?? []).map(s => [String(s.id), s]))
   const roleMap  = Object.fromEntries((roles ?? []).map(r => [r.roleName?.toLowerCase(), r]))
 
@@ -309,7 +324,7 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
       const actualHours = timeEntryMap[`${entry.staffId}:${shiftId}`]
       const useActual   = actualHours != null
       const pr = calculateShiftPayWithOT(
-        shiftObj, roleObj, runningHours, overtimeSettings,
+        shiftObj, roleObj, runningHours, safeOT,
         lateMinutes,
         useActual ? 0 : (partial?.partialFrom ?? null),
         useActual ? actualHours : (partial?.partialUntil ?? null),
@@ -346,6 +361,7 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
  * Format pay breakdown with OT detail for manager view.
  */
 export function formatPayBreakdownWithOT(staffSummary, overtimeSettings) {
+  const ot = overtimeSettings != null ? overtimeSettings : { ...DEFAULT_OT_SETTINGS }
   const { staffName, roleName, hourlyRate, shifts, totalGrossPay, totalEffectiveHours } = staffSummary
   let text = `${staffName} (${roleName}) — $${hourlyRate}/hr\n\n`
 
@@ -353,10 +369,10 @@ export function formatPayBreakdownWithOT(staffSummary, overtimeSettings) {
     text += `${s.shiftName} (${s.dayOfWeek}, ${s.startTime}–${s.endTime})\n`
     text += `  Regular: ${s.regularHours.toFixed(1)}hrs = $${s.regularPay.toFixed(2)}\n`
     if ((s.dailyOTHours ?? 0) > 0) {
-      text += `  Daily OT: ${s.dailyOTHours.toFixed(1)}hrs @ ${overtimeSettings.daily_multiplier}x = $${s.dailyOTPay.toFixed(2)}\n`
+      text += `  Daily OT: ${s.dailyOTHours.toFixed(1)}hrs @ ${ot.daily_multiplier}x = $${s.dailyOTPay.toFixed(2)}\n`
     }
     if ((s.weeklyOTHours ?? 0) > 0) {
-      text += `  Weekly OT: ${s.weeklyOTHours.toFixed(1)}hrs @ ${overtimeSettings.weekly_multiplier}x = $${s.weeklyOTPay.toFixed(2)}\n`
+      text += `  Weekly OT: ${s.weeklyOTHours.toFixed(1)}hrs @ ${ot.weekly_multiplier}x = $${s.weeklyOTPay.toFixed(2)}\n`
     }
     if ((s.lateMinutes ?? 0) > 0) {
       text += `  ⚠️ Late ${s.lateMinutes}min: -$${s.lateDeduction.toFixed(2)}\n`
