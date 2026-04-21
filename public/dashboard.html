@@ -1138,7 +1138,7 @@
       m.id = 'modal-backdrop';
       m.innerHTML = `
         <div class="modal-card">
-          <h3 class="modal-title">${title}</h3>
+          <h3 class="modal-title"></h3>
           <div class="modal-body">${bodyHTML}</div>
           <div class="modal-actions">
             <button class="btn-secondary" onclick="document.getElementById('modal-backdrop').remove()">Cancel</button>
@@ -1146,6 +1146,7 @@
           </div>
         </div>`;
       document.body.appendChild(m);
+      document.querySelector('#modal-backdrop .modal-title').textContent = title;
       document.getElementById('modal-confirm').onclick = () => { m.remove(); onConfirm(); };
       m.addEventListener('click', e => { if (e.target === m) m.remove(); });
       document.addEventListener('keydown', function esc(e) {
@@ -1422,7 +1423,7 @@
       const weekStart = (schedule && schedule.weekStart) || currentScheduleWeek;
       const actionBar = `
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
-          <button class="btn-primary" onclick="generateSchedule('${weekStart}')">&#9889; Generate Schedule</button>
+          <button class="btn-primary" onclick="generateSchedule(this,'${weekStart}')">&#9889; Generate Schedule</button>
           <button id="approve-btn" class="btn-primary" style="background:#2D7D5A" onclick="approveSchedule('${weekStart}')">
             &#10003; Approve &amp; Publish
           </button>
@@ -1430,8 +1431,7 @@
       return actionBar + renderScheduleTable(schedule, false);
     }
 
-    async function generateSchedule(weekStart) {
-      const btn = event.target;
+    async function generateSchedule(btn, weekStart) {
       btn.disabled = true;
       const originalLabel = btn.innerHTML;
       btn.textContent = 'Generating...';
@@ -1640,6 +1640,7 @@
         async () => {
           const newName = document.getElementById('m-name').value.trim();
           const newRole = document.getElementById('m-role').value.trim();
+          if (!newName || !newRole) { showToast('Name and role required', 'error'); return; }
           try {
             await api(`/api/staff/${id}`, 'PATCH', { name: newName, role: newRole });
             showToast('Staff updated');
@@ -1933,6 +1934,7 @@
 
     async function saveSettings() {
       const name = document.getElementById('s-name')?.value.trim();
+      if (!name) { showToast('Restaurant name cannot be empty', 'error'); return; }
       try {
         await api('/api/settings', 'PATCH', { restaurantName: name });
         showToast('Settings saved');
