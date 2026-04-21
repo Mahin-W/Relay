@@ -1,6 +1,7 @@
 import { createSetupSession } from './setupDb.js'
 import { logger } from '../logger.js'
 import { handleWelcomeStep, handleAddStaffStep, resetStaffStep } from './staffSteps.js'
+import { handlePhoneStep } from './phoneSteps.js'
 import { handleAddShiftsStep, handleShiftRolesStep, resetShiftStep, resetShiftRolesStep, moveToStaffStepShared } from './shiftSteps.js'
 import { handleRoleRatesStep } from './roleRatesSteps.js'
 import { handleOvertimeStep } from './overtimeSteps.js'
@@ -56,6 +57,9 @@ export async function handleSetupMessage(bot, msg, session) {
       break
     case 'add_staff':
       await handleAddStaffStep(bot, msg, session, text)
+      break
+    case 'phone_number':
+      await handlePhoneStep(bot, msg, session, text)
       break
     case 'tip_settings':
       await handleTipSettingsStep(bot, msg, session, text)

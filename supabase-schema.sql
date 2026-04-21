@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS setup_sessions (
   group_name TEXT,
   manager_id BIGINT,
   dm_chat_id BIGINT,
+  phone TEXT,
   step TEXT NOT NULL DEFAULT 'welcome',
   setup_data JSONB DEFAULT '{}',
   setup_complete BOOLEAN DEFAULT false,

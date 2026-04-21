@@ -325,10 +325,10 @@
         <h1>Welcome back</h1>
         <p class="subtitle">Enter your Telegram ID to sign in</p>
         <div class="form-group">
-          <input type="text" class="form-input" id="manager-id-input" placeholder="e.g. 123456789" inputmode="numeric" pattern="[0-9]*">
+          <input type="tel" class="form-input" id="phone-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
         </div>
         <button type="button" class="btn-primary" id="send-code-btn">Send code &rarr;</button>
-        <p class="hint-text">Find your Telegram ID by messaging <a href="https://t.me/userinfobot" target="_blank" rel="noopener" style="color:#D95F2B">@userinfobot</a> on Telegram</p>
+        <p class="hint-text">We'll send a 6-digit code via your Relay bot on Telegram</p>
         <p class="error-message" id="phone-error"></p>
       </div>
 
@@ -373,7 +373,7 @@
   </footer>
 
   <script>
-    const managerIdInput = document.getElementById('manager-id-input');
+    const managerIdInput = document.getElementById('phone-input');
     const sendCodeBtn = document.getElementById('send-code-btn');
     const phoneError = document.getElementById('phone-error');
     const stepPhone = document.getElementById('step-phone');
@@ -406,7 +406,7 @@
     sendCodeBtn.addEventListener('click', async () => {
       const managerId = managerIdInput.value.trim();
       if (!managerId) {
-        showError(phoneError, 'Please enter your Telegram ID.');
+        showError(phoneError, 'Please enter your phone number.');
         return;
       }
 
@@ -419,16 +419,16 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ managerId })
+          body: JSON.stringify({ phone: managerId })
         });
 
         if (res.ok) {
           currentManagerId = managerId;
-          displayPhone.textContent = 'Telegram ID ' + managerId;
+          displayPhone.textContent = managerId;
           goToStep(stepCode);
           otpDigits[0].focus();
         } else if (res.status === 404) {
-          showError(phoneError, "Telegram ID not found. Make sure you've completed Relay setup.");
+          showError(phoneError, "Phone number not registered with Relay. Complete setup via Telegram first.");
         } else if (res.status === 429) {
           showError(phoneError, 'Too many requests. Please wait a moment and try again.');
         } else {

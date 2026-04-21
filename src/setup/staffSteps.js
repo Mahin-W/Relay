@@ -1,5 +1,5 @@
 import { getShiftsForGroup, getStaffForGroup, saveStaff, deleteStaffForGroup, updateSetupSession } from './setupDb.js'
-import { startTipSettingsStep } from './tipSettingsSteps.js'
+import { startPhoneStep } from './phoneSteps.js'
 import { parseStaff } from '../parseMessage.js'
 import { logger } from '../logger.js'
 
@@ -23,12 +23,12 @@ export async function handleWelcomeStep(bot, msg, session, text) {
 
 export async function handleAddStaffStep(bot, msg, session, text) {
   if (/^(done|finish|finished|that'?s? it|thats it)$/i.test(text)) {
-    await startTipSettingsStep(bot, msg.chat.id, session.group_id, session.setup_data ?? {})
+    await startPhoneStep(bot, msg.chat.id, session.group_id)
     return
   }
 
   if (/^skip$/i.test(text)) {
-    await startTipSettingsStep(bot, msg.chat.id, session.group_id, session.setup_data ?? {})
+    await startPhoneStep(bot, msg.chat.id, session.group_id)
     return
   }
 
