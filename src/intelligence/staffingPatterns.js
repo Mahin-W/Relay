@@ -96,9 +96,52 @@ export async function analyzeAllShifts(groupId, weeksBack = 8, db = null) {
 }
 
 /**
- * Generate staffing recommendations from analyzed patterns. Pure function.
+ * Generate staffing recommendations from analyzed patterns or raw history records.
+ *
+ * Accepts two input shapes:
+ *  a) Pre-analyzed patterns: [{ pattern, shiftId, shiftName, dayOfWeek, ... }]
+ *  b) Raw history records:   [{ shiftName, dayOfWeek, role, scheduled, required, weekStart }]
+ *
+ * When given raw history, groups by (shiftName, dayOfWeek, role) and flags any combination
+ * with 3+ weeks where scheduled < required as chronic understaffing (G4 fix).
+ *
+ * Returns an array of recommendation objects directly (for raw history input), or
+ * { recommendations, summary } (for pre-analyzed pattern input) — both for backward compat.
  */
 export function generateStaffingRecommendations(patterns) {
+  // ── Detect raw-history input (G4) ────────────────────────────────────────
+  const isRawHistory = Array.isArray(patterns) && patterns.length > 0 &&
+    patterns[0].scheduled !== undefined && patterns[0].required !== undefined &&
+    patterns[0].weekStart !== undefined && patterns[0].pattern === undefined
+
+  if (isRawHistory) {
+    // Group by (shiftName, dayOfWeek, role)
+    const groups = new Map()
+    for (const row of patterns) {
+      const key = `${row.shiftName}|${row.dayOfWeek}|${row.role}`
+      if (!groups.has(key)) groups.set(key, { shiftName: row.shiftName, dayOfWeek: row.dayOfWeek, role: row.role, weeks: [] })
+      groups.get(key).weeks.push(row)
+    }
+
+    const recs = []
+    for (const { shiftName, dayOfWeek, role, weeks } of groups.values()) {
+      const weeksUnderfilled = weeks.filter(w => w.scheduled < w.required).length
+      if (weeksUnderfilled >= 3) {
+        recs.push({
+          severity: weeksUnderfilled >= 4 ? 'critical' : 'high',
+          shiftName,
+          dayOfWeek,
+          role,
+          weeksUnderfilled,
+          suggestion: 'Cross-train additional staff or reduce requirement',
+        })
+      }
+    }
+
+    return recs
+  }
+
+  // ── Legacy: pre-analyzed pattern objects ─────────────────────────────────
   const recommendations = []
 
   for (const p of patterns) {

@@ -216,6 +216,87 @@ export function formatRuleConflicts(conflicts) {
   return `⚠️ *Schedule conflicts with business rules:*\n\n${lines.join('\n')}\n\nReply "approve anyway" to override these rules.`
 }
 
+// ── detectRuleConflicts (pure) ───────────────────────────────────────────────
+// Returns array of { ruleIdA, ruleIdB, description } for contradictory rule pairs.
+
+export function detectRuleConflicts(rules) {
+  const conflicts = []
+  const active = rules.filter(r => r.active !== false)
+
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const a = active[i]
+      const b = active[j]
+
+      const sidA = a.subjectStaffId ?? a.subject_staff_id ?? null
+      const sidB = b.subjectStaffId ?? b.subject_staff_id ?? null
+      const typeA = a.type
+      const typeB = b.type
+
+      // 1. day_off AND always-required for same staff on same day
+      const isDayOff = (r) => r.type === 'day_off'
+      const isAlwaysRequired = (r) => r.type === 'always-required' || r.type === 'always_required'
+
+      if (isDayOff(a) && isAlwaysRequired(b)) {
+        const dayA = a.dayOfWeek ?? a.day_of_week
+        const dayB = b.dayOfWeek ?? b.day_of_week
+        if (sidA && sidA === sidB && dayA && dayA === dayB) {
+          conflicts.push({ ruleIdA: a.id, ruleIdB: b.id, description: `Staff #${sidA} has day_off on ${dayA} but also always-required on that day` })
+        }
+      } else if (isAlwaysRequired(a) && isDayOff(b)) {
+        const dayA = a.dayOfWeek ?? a.day_of_week
+        const dayB = b.dayOfWeek ?? b.day_of_week
+        if (sidA && sidA === sidB && dayA && dayA === dayB) {
+          conflicts.push({ ruleIdA: a.id, ruleIdB: b.id, description: `Staff #${sidA} has always-required on ${dayA} but also day_off on that day` })
+        }
+      }
+
+      // 2. Duplicate rules (same type, same subject, same constraint_text)
+      const textA = a.constraint_text ?? a.constraint ?? ''
+      const textB = b.constraint_text ?? b.constraint ?? ''
+      if (typeA === typeB && sidA !== null && sidA === sidB && textA && textA === textB) {
+        conflicts.push({ ruleIdA: a.id, ruleIdB: b.id, description: `Duplicate rules: same type "${typeA}", same staff, same constraint text` })
+      }
+
+      // 3. always-required AND staff_conflict/never-together where the always-required subject is also in the conflict
+      const isNeverTogether = (r) => r.type === 'staff_conflict' || r.type === 'never-together' || r.type === 'never_together'
+
+      if (isAlwaysRequired(a) && isNeverTogether(b)) {
+        const oidB = b.objectStaffId ?? b.object_staff_id ?? null
+        // If the always-required staff is the subject of never-together, they can never be scheduled with their object
+        if (sidA && sidA === sidB) {
+          conflicts.push({ ruleIdA: a.id, ruleIdB: b.id, description: `Staff #${sidA} is always-required but also in a never-together rule — may prevent scheduling` })
+        }
+      } else if (isNeverTogether(a) && isAlwaysRequired(b)) {
+        const oidA = a.objectStaffId ?? a.object_staff_id ?? null
+        if (sidB && sidB === sidA) {
+          conflicts.push({ ruleIdA: a.id, ruleIdB: b.id, description: `Staff #${sidB} is always-required but also in a never-together rule — may prevent scheduling` })
+        }
+      }
+    }
+  }
+
+  return conflicts
+}
+
+// ── handleRuleConflictsCommand ────────────────────────────────────────────────
+
+export async function handleRuleConflictsCommand(bot, msg, db) {
+  try {
+    const groupId = msg.chat.id
+    const rules = await (db ? db.getRules(groupId) : (await import('./rulesDb.js')).getRules(groupId))
+    const conflicts = detectRuleConflicts(rules)
+    if (conflicts.length === 0) {
+      await bot.sendMessage(msg.chat.id, '✅ No contradictory rules detected.')
+      return
+    }
+    const lines = conflicts.map((c, i) => `${i + 1}. ${c.description}`)
+    await bot.sendMessage(msg.chat.id, `⚠️ *Contradictory rules detected:*\n\n${lines.join('\n')}`, { parse_mode: 'Markdown' })
+  } catch (err) {
+    await bot.sendMessage(msg.chat.id, 'Could not check rule conflicts.')
+  }
+}
+
 // ── handleListRules ──────────────────────────────────────────────────────────
 
 export async function handleListRules(bot, msg, groupId, db = null) {

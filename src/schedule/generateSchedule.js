@@ -9,6 +9,9 @@ import { getCrossTrainedForRole } from '../intelligence/crossTrainingDb.js'
 
 const DAY_ORDER = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 }
 
+// ── Concurrent-call deduplication ─────────────────────────────────────────────
+const _inProgress = new Map() // concurrency lock — serializes generateWeeklySchedule calls per group+week
+
 // Returns the ISO date string (YYYY-MM-DD) of this week's Monday (current week)
 export function getCurrentWeekStart() {
   const today = new Date()
@@ -50,8 +53,12 @@ export function formatWeekLabel(weekStart) {
 //   { shifts, staff, availability, requirements }
 //   staff must include userId already resolved (no DM-pool name matching needed)
 export async function generateWeeklySchedule(groupId, weekStart, mockData = null) {
+  // ── BH.06: serialize concurrent calls for the same group+week ─────────────
+  const _key = `${groupId}:${weekStart}`
+  if (_inProgress.has(_key)) return _inProgress.get(_key)
+  const _promise = (async () => {
   try {
-    let shifts, resolvedStaff, availabilityRecords, requirements, maxShiftsPerDay = 0
+    let shifts, resolvedStaff, availabilityRecords, requirements, maxShiftsPerDay = 0, mockRules = null
 
     if (mockData) {
       // ── Test path: use provided data directly ─────────────────────────────
@@ -59,6 +66,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       requirements = mockData.requirements ?? []
       availabilityRecords = mockData.availability ?? []
       maxShiftsPerDay = mockData.maxShiftsPerDay ?? 0
+      mockRules = mockData.rules ?? null
       resolvedStaff = (mockData.staff ?? []).map(s => ({
         staffId: s.id,
         name: s.name,
@@ -131,6 +139,35 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       return ids.includes(Number(shiftId))
     }
 
+    // ── Load business rules for scheduling (day_off filtering) ───────────────
+    let schedulingRules = []
+    if (mockRules) {
+      schedulingRules = mockRules
+    } else if (!mockData) {
+      try {
+        const { getRules } = await import('../rules/rulesDb.js')
+        schedulingRules = await getRules(groupId)
+      } catch { /* non-fatal */ }
+    }
+
+    // Build fast lookup: staffId → Set of day-off days
+    const dayOffByStaff = new Map()
+    for (const rule of schedulingRules) {
+      if (rule.active === false) continue
+      if (rule.type === 'day_off') {
+        const sid = rule.subjectStaffId ?? rule.subject_staff_id
+        const day = rule.dayOfWeek ?? rule.day_of_week
+        if (sid && day) {
+          if (!dayOffByStaff.has(sid)) dayOffByStaff.set(sid, new Set())
+          dayOffByStaff.get(sid).add(day)
+        }
+      }
+    }
+
+    function hasDateOff(staffId, dayOfWeek) {
+      return dayOffByStaff.get(staffId)?.has(dayOfWeek) ?? false
+    }
+
     // ── Greedy scheduling ─────────────────────────────────────────────────────
     const sortedShifts = [...shifts].sort(
       (a, b) => (DAY_ORDER[a.day_of_week] ?? 8) - (DAY_ORDER[b.day_of_week] ?? 8)
@@ -153,6 +190,8 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         const candidates = resolvedStaff.filter(s => {
           if ((s.role || '').toLowerCase() !== roleLower) return false
           if (!isAvailable(s.userId, shift.id)) return false
+          // G1: enforce day_off business rules during candidate filtering
+          if (hasDateOff(s.staffId, shift.day_of_week)) return false
           // Enforce max shifts per day (0 = no limit)
           if (s.userId && maxShiftsPerDay > 0) {
             const dayCount = shiftsOnDay[s.userId]?.get(shift.day_of_week) ?? 0
@@ -294,6 +333,9 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
     return { assignments: [], gaps: [], weekStart, scheduleId: null }
   }
+  })()
+  _inProgress.set(_key, _promise)
+  try { return await _promise } finally { _inProgress.delete(_key) }
 }
 
 // Formats a schedule into Telegram markdown.
