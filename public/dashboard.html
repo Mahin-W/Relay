@@ -698,6 +698,225 @@
         padding: 12px 16px;
       }
     }
+
+    /* ── Toast notifications ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 9999;
+      animation: slideUp .2s ease;
+      max-width: 360px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    }
+    .toast-success { background: #2D7D5A; color: #fff; }
+    .toast-error   { background: #C0392B; color: #fff; }
+    .toast-warning { background: #D95F2B; color: #fff; }
+    @keyframes slideUp {
+      from { transform: translateY(16px); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+
+    /* ── Modal ── */
+    #modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(28,20,16,.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 480px;
+      width: 90%;
+      border: 1px solid #E8DFD0;
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1C1410;
+      margin: 0 0 16px;
+    }
+    .modal-body {
+      color: #4A3F35;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .modal-body label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #4A3F35;
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+    .modal-body input,
+    .modal-body select,
+    .modal-body textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #E8DFD0;
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+      background: #FAF7F2;
+      font-family: inherit;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+    .btn-primary {
+      background: #D95F2B;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .btn-primary:hover { background: #B84D20; }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary {
+      background: #F4EFE6;
+      color: #4A3F35;
+      border: 1px solid #E8DFD0;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .page-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1C1410;
+      margin: 0;
+    }
+
+    /* ── Data table ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .data-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid #E8DFD0;
+      font-size: 12px;
+      font-weight: 700;
+      color: #9A8880;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .data-table td {
+      padding: 12px;
+      border-bottom: 1px solid #F4EFE6;
+      color: #1C1410;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #FAF7F2; }
+
+    /* ── Badges & small buttons ── */
+    .role-badge {
+      background: #FDF0E8;
+      color: #D95F2B;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-badge {
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-badge.active { background: #E6F4ED; color: #2D7D5A; }
+    .status-badge.inactive { background: #F4EFE6; color: #9A8880; }
+    .btn-small {
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #E8DFD0;
+      background: #F4EFE6;
+      color: #4A3F35;
+      cursor: pointer;
+      margin-right: 4px;
+      font-family: inherit;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-small:hover { background: #E8DFD0; }
+    .btn-danger {
+      border-color: #FECDCA;
+      background: #FEF2F2;
+      color: #C0392B;
+    }
+    .btn-danger:hover { background: #FECDCA; }
+    .clickable-name {
+      cursor: pointer;
+      font-weight: 600;
+      color: #D95F2B;
+    }
+    .clickable-name:hover { text-decoration: underline; }
+
+    /* ── Time Clock ── */
+    .live-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .live-card {
+      background: #FDF0E8;
+      border: 1px solid #E8DFD0;
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    /* ── Settings form ── */
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #4A3F35;
+      margin-bottom: 4px;
+    }
+    .form-input {
+      padding: 8px 12px;
+      border: 1px solid #E8DFD0;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #FAF7F2;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
   </style>
 </head>
 <body>
@@ -735,6 +954,10 @@
         <a class="nav-item" data-page="payroll" onclick="navigateTo('payroll')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           <span class="nav-item-label">Payroll</span>
+        </a>
+        <a class="nav-item" data-page="timeclock" onclick="navigateTo('timeclock')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span class="nav-item-label">Time Clock</span>
         </a>
         <a class="nav-item" data-page="settings" onclick="navigateTo('settings')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -782,6 +1005,7 @@
       schedule: 'Schedule',
       staff: 'Staff',
       payroll: 'Payroll',
+      timeclock: 'Time Clock',
       settings: 'Settings'
     };
 
@@ -877,6 +1101,78 @@
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
+    }
+
+    async function api(path, method = 'GET', body = null) {
+      const opts = { method, credentials: 'include', headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(path, opts);
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ── Toast ──
+    function showToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      t.className = `toast toast-${type}`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+
+    // ── Modal ──
+    function showModal(title, bodyHTML, onConfirm, confirmLabel = 'Confirm') {
+      const existing = document.getElementById('modal-backdrop');
+      if (existing) existing.remove();
+      const m = document.createElement('div');
+      m.id = 'modal-backdrop';
+      m.innerHTML = `
+        <div class="modal-card">
+          <h3 class="modal-title">${title}</h3>
+          <div class="modal-body">${bodyHTML}</div>
+          <div class="modal-actions">
+            <button class="btn-secondary" onclick="document.getElementById('modal-backdrop').remove()">Cancel</button>
+            <button class="btn-primary" id="modal-confirm">${confirmLabel}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(m);
+      document.getElementById('modal-confirm').onclick = () => { m.remove(); onConfirm(); };
+      m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+      document.addEventListener('keydown', function esc(e) {
+        if (e.key === 'Escape') { m.remove(); document.removeEventListener('keydown', esc); }
+      });
+    }
+
+    // ── Content helper ──
+    function setContent(html) {
+      const main = document.getElementById('page-content');
+      if (main) main.innerHTML = html;
+    }
+
+    function showSkeleton() {
+      setContent('<div style="text-align:center;padding:60px;color:#9A8880">Loading...</div>');
+    }
+
+    function renderErrorInline(retryFnStr) {
+      setContent(`
+        <div class="error-state">
+          <p>Failed to load data</p>
+          <button class="retry-btn" onclick="${retryFnStr}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Tap to retry
+          </button>
+        </div>
+      `);
     }
 
     // ── Auth ──
@@ -1123,7 +1419,47 @@
     }
 
     function renderSchedulePage(schedule) {
-      return renderScheduleTable(schedule, false);
+      const weekStart = (schedule && schedule.weekStart) || currentScheduleWeek;
+      const actionBar = `
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+          <button class="btn-primary" onclick="generateSchedule('${weekStart}')">&#9889; Generate Schedule</button>
+          <button id="approve-btn" class="btn-primary" style="background:#2D7D5A" onclick="approveSchedule('${weekStart}')">
+            &#10003; Approve &amp; Publish
+          </button>
+        </div>`;
+      return actionBar + renderScheduleTable(schedule, false);
+    }
+
+    async function generateSchedule(weekStart) {
+      const btn = event.target;
+      btn.disabled = true;
+      const originalLabel = btn.innerHTML;
+      btn.textContent = 'Generating...';
+      try {
+        await api('/api/schedule/generate', 'POST', { weekStart });
+        showToast('Schedule generated! Reloading...');
+        loadPage('schedule');
+      } catch (e) {
+        showToast(e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalLabel;
+      }
+    }
+
+    async function approveSchedule(weekStart) {
+      const btn = document.getElementById('approve-btn');
+      btn.disabled = true;
+      btn.textContent = 'Publishing...';
+      try {
+        const r = await api('/api/schedule/approve', 'POST', { weekStart });
+        showToast(`Schedule published to Telegram! ${r && r.staffNotified != null ? r.staffNotified : 0} staff notified.`);
+        btn.textContent = 'Published ✓';
+        btn.style.background = '#1A5C3E';
+      } catch (e) {
+        showToast(e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = '&#10003; Approve &amp; Publish';
+      }
     }
 
     function renderPlaceholder(name, iconSvg) {
@@ -1188,15 +1524,23 @@
           break;
 
         case 'staff':
-          content.innerHTML = renderPlaceholder('Staff', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`);
+          showSkeleton();
+          loadStaffPage();
           break;
 
         case 'payroll':
-          content.innerHTML = renderPlaceholder('Payroll', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`);
+          showSkeleton();
+          loadPayrollPage();
+          break;
+
+        case 'timeclock':
+          showSkeleton();
+          loadTimeClockPage();
           break;
 
         case 'settings':
-          content.innerHTML = renderPlaceholder('Settings', `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`);
+          showSkeleton();
+          loadSettingsPage();
           break;
       }
     }
@@ -1227,6 +1571,479 @@
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('open');
       document.getElementById('sidebar-overlay').classList.toggle('visible');
+    }
+
+    // ───────────────────────────────────────────
+    // ── PAGE: STAFF ──
+    // ───────────────────────────────────────────
+    async function loadStaffPage() {
+      try {
+        const staff = await api('/api/staff');
+        if (!staff) return;
+        renderStaffPage(staff);
+      } catch (e) {
+        showToast(e.message, 'error');
+        renderErrorInline("loadPage('staff')");
+      }
+    }
+
+    function renderStaffPage(staff) {
+      const rows = staff.map(s => `
+        <tr>
+          <td><span class="clickable-name" onclick="openEditStaff(${s.id},'${escapeJs(s.name)}','${escapeJs(s.role)}')">${escapeHtml(s.name)}</span></td>
+          <td><span class="role-badge">${escapeHtml(s.role)}</span></td>
+          <td><span class="status-badge ${s.active !== false ? 'active' : 'inactive'}">${s.active !== false ? 'Active' : 'Removed'}</span></td>
+          <td>${s.registered ? '✅' : '⏳'}</td>
+          <td>
+            <button class="btn-small" onclick="openEditStaff(${s.id},'${escapeJs(s.name)}','${escapeJs(s.role)}')">Edit</button>
+            <button class="btn-small btn-danger" onclick="confirmRemoveStaff(${s.id},'${escapeJs(s.name)}')">Remove</button>
+          </td>
+        </tr>`).join('');
+
+      setContent(`
+        <div class="page-header">
+          <h2 class="page-title">Staff</h2>
+          <button class="btn-primary" onclick="openAddStaff()">+ Add Staff</button>
+        </div>
+        <div class="card">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:#9A8880">No staff yet</td></tr>'}</tbody>
+          </table>
+        </div>`);
+    }
+
+    function escapeJs(str) {
+      return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    function openAddStaff() {
+      showModal('Add Staff Member',
+        `<label>Name</label><input id="m-name" placeholder="Full name" />
+         <label>Role</label><input id="m-role" placeholder="e.g. Server, Cook" />`,
+        async () => {
+          const name = document.getElementById('m-name').value.trim();
+          const role = document.getElementById('m-role').value.trim();
+          if (!name || !role) { showToast('Name and role required', 'error'); return; }
+          try {
+            await api('/api/staff', 'POST', { name, role });
+            showToast(`${name} added`);
+            loadStaffPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Add Staff');
+    }
+
+    function openEditStaff(id, name, role) {
+      showModal(`Edit ${name}`,
+        `<label>Name</label><input id="m-name" value="${escapeHtml(name)}" />
+         <label>Role</label><input id="m-role" value="${escapeHtml(role)}" />`,
+        async () => {
+          const newName = document.getElementById('m-name').value.trim();
+          const newRole = document.getElementById('m-role').value.trim();
+          try {
+            await api(`/api/staff/${id}`, 'PATCH', { name: newName, role: newRole });
+            showToast('Staff updated');
+            loadStaffPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Save Changes');
+    }
+
+    function confirmRemoveStaff(id, name) {
+      showModal(`Remove ${name}?`,
+        `<p>This will remove ${escapeHtml(name)} from Relay. Their pay history is kept. The Telegram group will be notified.</p>`,
+        async () => {
+          try {
+            await api(`/api/staff/${id}`, 'DELETE');
+            showToast(`${name} removed`);
+            loadStaffPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Remove');
+    }
+
+    // ───────────────────────────────────────────
+    // ── PAGE: PAYROLL ──
+    // ───────────────────────────────────────────
+    let currentPayrollWeek = getCurrentWeekStart();
+
+    async function loadPayrollPage() {
+      try {
+        const [payroll, settings, tips] = await Promise.all([
+          api(`/api/payroll?week=${currentPayrollWeek}`),
+          api(`/api/settings`),
+          api(`/api/tips?weeks=1`)
+        ]);
+        renderPayrollPage(payroll || [], settings || {}, tips || []);
+      } catch (e) {
+        showToast(e.message, 'error');
+        renderErrorInline("loadPage('payroll')");
+      }
+    }
+
+    function renderPayrollPage(payroll, settings, tips) {
+      const totalPay = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
+      const totalHrs = payroll.reduce((s, r) => s + (r.total_hours || 0), 0);
+      const weekTips = tips.find(t => t.shift_date >= currentPayrollWeek) || null;
+
+      const rows = payroll.map(r => `
+        <tr>
+          <td>${escapeHtml(r.name)}</td>
+          <td><span class="role-badge">${escapeHtml(r.role)}</span></td>
+          <td>${(r.total_hours || 0).toFixed(1)}</td>
+          <td>${formatCurrency(r.total_gross_pay || 0)}</td>
+        </tr>`).join('');
+
+      setContent(`
+        <div class="page-header">
+          <h2 class="page-title">Payroll</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-small" onclick="changePayrollWeek(-7)">&larr; Prev</button>
+            <span style="font-size:14px;font-weight:600;color:#4A3F35">Week of ${formatWeekRange(currentPayrollWeek)}</span>
+            <button class="btn-small" onclick="changePayrollWeek(7)">Next &rarr;</button>
+            <a href="/api/payroll/spreadsheet?week=${currentPayrollWeek}" download class="btn-small">📥 Export CSV</a>
+          </div>
+        </div>
+
+        <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(2,1fr)">
+          <div class="stat-card"><div class="stat-label">Total Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
+          <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="margin:0;font-size:16px;font-weight:700">Log Revenue</h3>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4A3F35;font-size:14px">$</span>
+            <input id="revenue-input" type="number" placeholder="0.00" style="padding:8px 12px;border:1px solid #E8DFD0;border-radius:6px;font-size:14px;width:160px;background:#FAF7F2;font-family:inherit">
+            <button class="btn-primary" onclick="logRevenue()">Log Revenue</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <table class="data-table">
+            <thead><tr><th>Staff</th><th>Role</th><th>Hours</th><th>Gross Pay</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#9A8880">No payroll data for this week</td></tr>'}</tbody>
+          </table>
+          ${payroll.length ? `<div style="padding:12px;border-top:2px solid #E8DFD0;display:flex;justify-content:flex-end;gap:32px;font-weight:700">
+            <span>Total: ${totalHrs.toFixed(1)}h</span>
+            <span>${formatCurrency(totalPay)}</span>
+          </div>` : ''}
+        </div>
+
+        <div class="card" style="margin-top:20px;padding:20px">
+          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Tips This Week</h3>
+          ${weekTips
+            ? `<p style="color:#4A3F35">$${weekTips.total_tips} logged on ${weekTips.shift_date}</p>`
+            : `<div style="display:flex;gap:8px;align-items:center">
+                <span style="color:#4A3F35;font-size:14px">$</span>
+                <input id="tips-input" type="number" placeholder="0.00" style="padding:8px 12px;border:1px solid #E8DFD0;border-radius:6px;font-size:14px;width:160px;background:#FAF7F2;font-family:inherit">
+                <button class="btn-primary" onclick="logTips()">Log Tips</button>
+              </div>`}
+        </div>`);
+    }
+
+    function changePayrollWeek(days) {
+      const d = parseDate(currentPayrollWeek);
+      d.setDate(d.getDate() + days);
+      currentPayrollWeek = formatDate(d);
+      loadPayrollPage();
+    }
+
+    async function logRevenue() {
+      const val = parseFloat(document.getElementById('revenue-input')?.value);
+      if (!val || val <= 0) { showToast('Enter a valid revenue amount', 'error'); return; }
+      try {
+        const r = await api('/api/payroll/revenue', 'POST', { weekStart: currentPayrollWeek, revenue: val });
+        showToast(`Revenue logged. Labor: ${r && r.laborPercent != null ? r.laborPercent : '?'}%`);
+        loadPayrollPage();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function logTips() {
+      const val = parseFloat(document.getElementById('tips-input')?.value);
+      if (!val || val <= 0) { showToast('Enter a valid tip amount', 'error'); return; }
+      try {
+        await api('/api/tips', 'POST', { shiftDate: currentPayrollWeek, totalTips: val });
+        showToast('Tips logged');
+        loadPayrollPage();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    // ───────────────────────────────────────────
+    // ── PAGE: TIME CLOCK ──
+    // ───────────────────────────────────────────
+    async function loadTimeClockPage() {
+      try {
+        const [live, entries] = await Promise.all([
+          api('/api/timeclock/live'),
+          api(`/api/timeclock?week=${getCurrentWeekStart()}`)
+        ]);
+        renderTimeClockPage(live || [], entries || []);
+      } catch (e) {
+        showToast(e.message, 'error');
+        renderErrorInline("loadPage('timeclock')");
+      }
+    }
+
+    function renderTimeClockPage(live, entries) {
+      const liveCards = live.map(e => `
+        <div class="live-card">
+          <div>
+            <div style="font-weight:700;font-size:15px">${escapeHtml(e.name)}</div>
+            <div style="color:#9A8880;font-size:12px">${escapeHtml(e.role)}</div>
+            <div style="color:#4A3F35;font-size:13px;margin-top:4px">
+              Clocked in: ${new Date(e.clock_in).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+            </div>
+            <div style="color:#D95F2B;font-weight:600;font-size:13px">${Number(e.hoursSoFar || 0).toFixed(1)}h so far</div>
+          </div>
+          <button class="btn-small btn-danger" onclick="clockOutStaff(${e.staff_id},'${escapeJs(e.name)}')">Clock Out</button>
+        </div>`).join('');
+
+      const entryRows = entries.map(e => `
+        <tr>
+          <td>${escapeHtml(e.name)}</td>
+          <td>${new Date(e.clock_in).toLocaleDateString()}</td>
+          <td>${new Date(e.clock_in).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+          <td>${e.clock_out ? new Date(e.clock_out).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '<span style="color:#D95F2B">Still in</span>'}</td>
+          <td>${e.clock_out ? ((new Date(e.clock_out) - new Date(e.clock_in)) / 3600000).toFixed(1) + 'h' : '—'}</td>
+          <td><button class="btn-small" onclick="adjustClock(${e.staff_id},'${escapeJs(e.name)}',${e.id})">Adjust</button></td>
+        </tr>`).join('');
+
+      setContent(`
+        <div class="page-header">
+          <h2 class="page-title">Time Clock</h2>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;padding:20px">
+          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Currently Clocked In</h3>
+          ${live.length
+            ? `<div class="live-grid">${liveCards}</div>`
+            : '<p style="color:#9A8880;font-size:14px">No one is currently clocked in.</p>'}
+        </div>
+
+        <div class="card" style="padding:20px">
+          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">This Week's Clock Log</h3>
+          <table class="data-table">
+            <thead><tr><th>Staff</th><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Hours</th><th>Actions</th></tr></thead>
+            <tbody>${entryRows || '<tr><td colspan="6" style="text-align:center;color:#9A8880">No clock entries this week</td></tr>'}</tbody>
+          </table>
+        </div>`);
+    }
+
+    async function clockOutStaff(staffId, name) {
+      try {
+        await api('/api/timeclock/override', 'POST', { staffId, action: 'clock_out' });
+        showToast(`${name} clocked out`);
+        loadTimeClockPage();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function adjustClock(staffId, name, entryId) {
+      showModal(`Adjust ${name}'s Clock`,
+        `<label>Clock Out Time</label>
+         <input id="m-time" type="datetime-local" />`,
+        async () => {
+          const timeVal = document.getElementById('m-time').value;
+          if (!timeVal) { showToast('Select a time', 'error'); return; }
+          try {
+            await api('/api/timeclock/override', 'POST', {
+              staffId, action: 'adjust', time: new Date(timeVal).toISOString()
+            });
+            showToast('Clock entry adjusted');
+            loadTimeClockPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Save Adjustment');
+    }
+
+    // ───────────────────────────────────────────
+    // ── PAGE: SETTINGS ──
+    // ───────────────────────────────────────────
+    async function loadSettingsPage() {
+      try {
+        const [settings, rules, shifts, staff] = await Promise.all([
+          api('/api/settings'),
+          api('/api/rules'),
+          api('/api/shifts'),
+          api('/api/staff')
+        ]);
+        renderSettingsPage(settings || {}, rules || [], shifts || [], staff || []);
+      } catch (e) {
+        showToast(e.message, 'error');
+        renderErrorInline("loadPage('settings')");
+      }
+    }
+
+    function renderSettingsPage(settings, rules, shifts, staff) {
+      const ruleRows = rules.map(r => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F4EFE6">
+          <span style="font-size:14px;color:#4A3F35">${escapeHtml(r.constraint_text || r.type)}</span>
+          <button class="btn-small btn-danger" onclick="deleteRule(${r.id})">🗑</button>
+        </div>`).join('');
+
+      const shiftRows = shifts.map(s => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F4EFE6">
+          <span style="font-size:14px;color:#4A3F35">${escapeHtml(s.name)} — ${escapeHtml(s.day_of_week)}, ${escapeHtml(s.start_time)}–${escapeHtml(s.end_time)}</span>
+          <div>
+            <button class="btn-small" onclick="openEditShift(${s.id},'${escapeJs(s.name)}','${escapeJs(s.day_of_week)}','${escapeJs(s.start_time)}','${escapeJs(s.end_time)}')">Edit</button>
+            <button class="btn-small btn-danger" onclick="deleteShift(${s.id},'${escapeJs(s.name)}')">Delete</button>
+          </div>
+        </div>`).join('');
+
+      const staffOpts = staff.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      // store staff options on window so add-rule can reach them safely
+      window.__staffOptsHtml = staffOpts;
+
+      setContent(`
+        <div class="page-header"><h2 class="page-title">Settings</h2></div>
+
+        <div class="card" style="margin-bottom:20px;padding:20px">
+          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Restaurant</h3>
+          <label class="form-label">Restaurant Name</label>
+          <input id="s-name" value="${escapeHtml(settings.restaurantName || '')}" class="form-input" />
+          <button class="btn-primary" style="margin-top:12px" onclick="saveSettings()">Save</button>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;padding:20px">
+          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Payroll</h3>
+          <label class="form-label">Weekly OT Threshold (hrs)</label>
+          <input id="s-ot-hrs" type="number" value="${settings.overtimeThreshold || 40}" class="form-input" style="width:120px" />
+          <label class="form-label" style="margin-top:12px">OT Multiplier</label>
+          <input id="s-ot-mult" type="number" step="0.1" value="${settings.overtimeMultiplier || 1.5}" class="form-input" style="width:120px" />
+          <label class="form-label" style="margin-top:12px">Weekly Labor Budget ($)</label>
+          <input id="s-budget" type="number" value="${settings.weeklyBudget || ''}" class="form-input" style="width:160px" />
+          <button class="btn-primary" style="margin-top:12px" onclick="savePayrollSettings()">Save</button>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="margin:0;font-size:16px;font-weight:700">Business Rules</h3>
+            <button class="btn-primary" style="font-size:13px;padding:6px 14px" onclick="openAddRule()">+ Add Rule</button>
+          </div>
+          ${ruleRows || '<p style="color:#9A8880;font-size:14px">No rules yet.</p>'}
+        </div>
+
+        <div class="card" style="padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="margin:0;font-size:16px;font-weight:700">Shifts</h3>
+            <button class="btn-primary" style="font-size:13px;padding:6px 14px" onclick="openAddShift()">+ Add Shift</button>
+          </div>
+          ${shiftRows || '<p style="color:#9A8880;font-size:14px">No shifts yet.</p>'}
+        </div>`);
+    }
+
+    async function saveSettings() {
+      const name = document.getElementById('s-name')?.value.trim();
+      try {
+        await api('/api/settings', 'PATCH', { restaurantName: name });
+        showToast('Settings saved');
+        const rn = document.getElementById('restaurant-name');
+        if (rn) rn.textContent = name;
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function savePayrollSettings() {
+      const ot = parseFloat(document.getElementById('s-ot-hrs')?.value);
+      const mult = parseFloat(document.getElementById('s-ot-mult')?.value);
+      const budget = parseFloat(document.getElementById('s-budget')?.value);
+      try {
+        await api('/api/settings', 'PATCH', {
+          overtimeThreshold: ot,
+          overtimeMultiplier: mult,
+          weeklyBudget: budget || undefined
+        });
+        showToast('Payroll settings saved');
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function deleteRule(id) {
+      if (!confirm('Delete this rule?')) return;
+      try {
+        await api(`/api/rules/${id}`, 'DELETE');
+        showToast('Rule deleted');
+        loadSettingsPage();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function openAddRule() {
+      const staffOpts = window.__staffOptsHtml || '';
+      showModal('Add Business Rule',
+        `<label>Type</label>
+         <select id="m-type">
+           <option value="never-together">Never together</option>
+           <option value="always-required">Always required</option>
+           <option value="day-constraint">Day constraint</option>
+         </select>
+         <label>Description</label>
+         <input id="m-constraint" placeholder="e.g. Never schedule Alex and Sam together" />
+         <label>Staff A</label>
+         <select id="m-staff-a"><option value="">— None —</option>${staffOpts}</select>
+         <label>Staff B (for never-together)</label>
+         <select id="m-staff-b"><option value="">— None —</option>${staffOpts}</select>`,
+        async () => {
+          const type = document.getElementById('m-type').value;
+          const constraintText = document.getElementById('m-constraint').value.trim();
+          const subjectStaffId = document.getElementById('m-staff-a').value || null;
+          const objectStaffId = document.getElementById('m-staff-b').value || null;
+          if (!constraintText) { showToast('Description required', 'error'); return; }
+          try {
+            await api('/api/rules', 'POST', { type, constraintText, subjectStaffId, objectStaffId });
+            showToast('Rule added');
+            loadSettingsPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Add Rule');
+    }
+
+    function openEditShift(id, name, day, start, end) {
+      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const opts = days.map(d => `<option value="${d}" ${d === day ? 'selected' : ''}>${d}</option>`).join('');
+      showModal(`Edit Shift: ${name}`,
+        `<label>Name</label><input id="m-sname" value="${escapeHtml(name)}" />
+         <label>Day</label><select id="m-sday">${opts}</select>
+         <label>Start Time</label><input id="m-sstart" type="time" value="${escapeHtml(start)}" />
+         <label>End Time</label><input id="m-send" type="time" value="${escapeHtml(end)}" />`,
+        async () => {
+          try {
+            await api(`/api/shifts/${id}`, 'PATCH', {
+              name: document.getElementById('m-sname').value.trim(),
+              day_of_week: document.getElementById('m-sday').value,
+              start_time: document.getElementById('m-sstart').value,
+              end_time: document.getElementById('m-send').value
+            });
+            showToast('Shift updated');
+            loadSettingsPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Save');
+    }
+
+    async function deleteShift(id, name) {
+      if (!confirm(`Delete shift "${name}"?`)) return;
+      try {
+        await api(`/api/shifts/${id}`, 'DELETE');
+        showToast(`Shift "${name}" deleted`);
+        loadSettingsPage();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function openAddShift() {
+      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const opts = days.map(d => `<option value="${d}">${d}</option>`).join('');
+      showModal('Add Shift',
+        `<label>Name</label><input id="m-sname" placeholder="e.g. Lunch" />
+         <label>Day</label><select id="m-sday">${opts}</select>
+         <label>Start Time</label><input id="m-sstart" type="time" />
+         <label>End Time</label><input id="m-send" type="time" />`,
+        async () => {
+          try {
+            await api('/api/shifts', 'POST', {
+              name: document.getElementById('m-sname').value.trim(),
+              day_of_week: document.getElementById('m-sday').value,
+              start_time: document.getElementById('m-sstart').value,
+              end_time: document.getElementById('m-send').value
+            });
+            showToast('Shift added');
+            loadSettingsPage();
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Add Shift');
     }
 
     // ── Init ──
