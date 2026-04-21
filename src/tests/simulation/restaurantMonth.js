@@ -31,6 +31,7 @@ import { analyzePairOutcomes, applyPairingOptimization } from '../../intelligenc
 import { filterAlreadyKnownConstraints, generateDiscoveryPrompts } from '../../intelligence/implicitConstraints.js'
 import { getConsecutiveDayStreak } from '../../intelligence/contextualWarnings.js'
 import { generateWeeklySchedule } from '../../schedule/generateSchedule.js'
+import { handleLateArrival } from '../../lateArrival/handleLateArrival.js'
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
@@ -120,6 +121,7 @@ function buildScheduleMockData(weekStart) {
     })),
     availability: db.availability.filter(a => a.group_id === GROUP_ID && a.week_start === weekStart),
     requirements: db.shiftRequirements,
+    rules: db.businessRules.filter(r => r.group_id === GROUP_ID && r.active !== false),
     maxShiftsPerDay: 2,
   }
 }
@@ -191,13 +193,25 @@ async function week1() {
   })
 
   // ── 1.03 Availability responses — various formats
-  const shiftMap = { 1: 2001, 2: 2002, 3: 2003, 4: 2004, 5: 2005, 6: 2006 }
+  // Rich shiftMap: { "n": { id, day_of_week } } so day-name parsing works.
+  // Keys 1-2 = Monday, 3 = Thursday, 4 = Friday, 5 = Saturday, 6 = Sunday
+  // so that "fri sat sun" → [2004,2005,2006] and "all except monday" → [2003,2004,2005,2006].
+  const shiftMap = {
+    1: { id: 2001, day_of_week: 'Monday' },
+    2: { id: 2002, day_of_week: 'Monday' },
+    3: { id: 2003, day_of_week: 'Thursday' },
+    4: { id: 2004, day_of_week: 'Friday' },
+    5: { id: 2005, day_of_week: 'Saturday' },
+    6: { id: 2006, day_of_week: 'Sunday' },
+  }
 
   // parseAvailabilityResponse returns { type, numbers? }. Map numbers -> shift IDs.
+  // Handles both plain-ID and rich-object shiftMap values.
   function idsFromParse(parsed) {
     if (!parsed) return []
-    if (parsed.type === 'all_week') return Object.values(shiftMap)
-    if (parsed.type === 'specific_shifts') return parsed.numbers.map(n => shiftMap[n])
+    const resolveId = v => (v && typeof v === 'object' ? Number(v.id) : Number(v))
+    if (parsed.type === 'all_week') return Object.values(shiftMap).map(resolveId)
+    if (parsed.type === 'specific_shifts') return parsed.numbers.map(n => resolveId(shiftMap[n]))
     return []
   }
 
@@ -431,9 +445,27 @@ async function week1() {
 
   setClock('2025-02-05T17:23:00Z')
   await step('1.14 Late-arrival for already-ended shift must be rejected', 'LateArrival', async () => {
-    // Lunch ended 4pm; it's 5:23pm. System should reject or redirect.
-    // There's no handleLateArrival wired that validates shift state → feature missing.
-    missing('late-arrival validation: reject reports for shifts already ended')
+    // Lunch ended 4pm; it's 5:23pm. System should reject, not alert manager.
+    const lateBot = new MockBot()
+    const lateMsg = groupMsg(staffByName('Devon').user_id, "running 20 min late")
+    const intent = { type: 'running_late', person: 'Devon', minutes: 20, eta: null }
+    const endedShiftDb = {
+      getSetupSession: async () => ({ dm_chat_id: String(MANAGER_DM), group_id: String(GROUP_CHAT_ID) }),
+      findShiftForToday: async () => ({
+        shift: { name: 'Lunch', start_time: '11:00 AM', end_time: '4:00 PM' },
+      }),
+    }
+    await handleLateArrival(lateBot, lateMsg, intent, endedShiftDb)
+    // Manager DM must NOT contain "late" confirmation — shift already ended
+    const managerMsgs = lateBot.sentMessages.filter(m => String(m.chatId) === String(MANAGER_DM))
+    if (managerMsgs.some(m => m.text.toLowerCase().includes('running late') || m.text.toLowerCase().includes('minutes behind'))) {
+      missing('late-arrival validation: manager was incorrectly notified for already-ended shift')
+    }
+    // The group reply must mention the shift ended
+    const groupMsgs = lateBot.sentMessages.filter(m => String(m.chatId) === String(GROUP_CHAT_ID))
+    if (!groupMsgs.some(m => m.text.toLowerCase().includes('ended') || m.text.toLowerCase().includes('no-show') || m.text.toLowerCase().includes('manager'))) {
+      missing('late-arrival validation: no rejection message sent for already-ended shift')
+    }
   }, { severity: 'MEDIUM' })
 
   await step('1.15 Tony logs shift note — auto-attributed to Wed dinner', 'ManagerLog', async () => {

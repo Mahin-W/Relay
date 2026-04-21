@@ -154,8 +154,35 @@ function buildAvailabilityDm(firstName, managerName, restaurantName, weekLabel, 
   )
 }
 
+// Day-name → canonical day mapping for NL parsing (C1)
+const DAY_NAME_MAP = {
+  mon: 'Monday', monday: 'Monday',
+  tue: 'Tuesday', tues: 'Tuesday', tuesday: 'Tuesday',
+  wed: 'Wednesday', wednesday: 'Wednesday',
+  thu: 'Thursday', thur: 'Thursday', thurs: 'Thursday', thursday: 'Thursday',
+  fri: 'Friday', friday: 'Friday',
+  sat: 'Saturday', saturday: 'Saturday',
+  sun: 'Sunday', sunday: 'Sunday',
+}
+
+// Resolve the day_of_week for a shiftMap entry — handles both plain-ID and
+// rich-object forms: { "1": 101 } vs { "1": { id: 101, day_of_week: 'Monday' } }
+function shiftDayOfWeek(entry) {
+  if (entry && typeof entry === 'object') return entry.day_of_week ?? null
+  return null
+}
+
+// Extract shift IDs (keys) whose day_of_week matches any of the supplied canonical days.
+function keysForDays(shiftMap, canonicalDays) {
+  const daySet = new Set(canonicalDays)
+  return Object.entries(shiftMap)
+    .filter(([, v]) => daySet.has(shiftDayOfWeek(v)))
+    .map(([k]) => k)
+}
+
 // Pure parser — extracts intent from a user's availability reply text.
 // Returns { type: 'unavailable' | 'all_week' | 'specific_shifts' | 'unclear', numbers?: string[] }
+// shiftMap accepts: { "1": shiftId } OR { "1": { id, day_of_week, ... } }
 export function parseAvailabilityResponse(text, shiftMap) {
   const lower = text.toLowerCase().trim()
 
@@ -163,13 +190,47 @@ export function parseAvailabilityResponse(text, shiftMap) {
     return { type: 'unavailable' }
   }
 
+  // C3: loosen all_week — short phrases containing "all" + affirmative word
   if (/^(all|all shifts|every shift|every day|all week|available all|yes all)$/i.test(lower)) {
     return { type: 'all_week' }
   }
+  if (lower.length <= 20 && /\ball\b/.test(lower) && /\b(good|yes|yeah|works|fine|sure|ok|free)\b/.test(lower)) {
+    return { type: 'all_week' }
+  }
 
+  // C2: typo-tolerant "all except <day>" — catches "except", "excpet", "exept", "ecxept", "but", "minus", "no"
+  // The except-word pattern is: starts with 'ex' or 'ec', contains 'cept' or 'cpet' or 'ept' variants.
+  const exceptMatch = lower.match(/\b(?:all|every)\b.*\b(?:except|excpet|exept|ecxept|but|minus|no)\b.*\b(mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/i)
+  if (exceptMatch) {
+    const excludedDay = DAY_NAME_MAP[exceptMatch[1].toLowerCase()]
+    if (excludedDay) {
+      const allKeys = Object.keys(shiftMap)
+      const excludedKeys = new Set(keysForDays(shiftMap, [excludedDay]))
+      const numbers = allKeys.filter(k => !excludedKeys.has(k))
+      if (numbers.length > 0) {
+        return { type: 'specific_shifts', numbers }
+      }
+    }
+  }
+
+  // Numbered shifts
   const numbers = (text.match(/\d+/g) ?? []).map(String).filter(n => shiftMap[n])
   if (numbers.length > 0) {
     return { type: 'specific_shifts', numbers }
+  }
+
+  // C1: day-name parsing — scan for abbreviated or full day names
+  const words = lower.split(/[\s,\/\-]+/).filter(Boolean)
+  const matchedDays = []
+  for (const word of words) {
+    const canonical = DAY_NAME_MAP[word]
+    if (canonical) matchedDays.push(canonical)
+  }
+  if (matchedDays.length > 0) {
+    const dayKeys = keysForDays(shiftMap, matchedDays)
+    if (dayKeys.length > 0) {
+      return { type: 'specific_shifts', numbers: dayKeys }
+    }
   }
 
   return { type: 'unclear' }
