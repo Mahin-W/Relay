@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS staff (
   group_id TEXT NOT NULL,
   name TEXT NOT NULL,
   role TEXT DEFAULT 'Staff',
-  active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -88,7 +87,6 @@ CREATE TABLE IF NOT EXISTS coverage_requests (
   covered_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   covered_at TIMESTAMPTZ,
-  partial_coverage_needed BOOLEAN DEFAULT FALSE,
   CONSTRAINT valid_status CHECK (status IN ('open','covered','cancelled'))
 );
 
@@ -204,20 +202,6 @@ CREATE TABLE IF NOT EXISTS schedule_assignments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_assignments_group_week ON schedule_assignments(group_id, week_start);
-CREATE INDEX IF NOT EXISTS idx_assignments_staff_week ON schedule_assignments(staff_id, week_start);
-
-CREATE TABLE IF NOT EXISTS partial_coverage (
-  id BIGSERIAL PRIMARY KEY,
-  coverage_request_id BIGINT REFERENCES coverage_requests(id) ON DELETE CASCADE,
-  staff_id BIGINT,
-  staff_name TEXT NOT NULL,
-  cover_from TEXT NOT NULL,
-  cover_until TEXT NOT NULL,
-  group_id TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_partial_coverage_request ON partial_coverage(coverage_request_id);
 
 CREATE TABLE IF NOT EXISTS schedule_receipts (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -458,7 +442,7 @@ BEGIN
       'noshow_warnings', 'onboarding_pending', 'payroll_records', 'weekly_revenue',
       'labor_budgets', 'manager_log_entries', 'time_entries',
       'business_rules', 'schedule_edit_events', 'learned_preferences', 'morale_events',
-      'demand_signals', 'partial_coverage'
+      'demand_signals'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
@@ -483,41 +467,3 @@ CREATE TABLE IF NOT EXISTS platform_contacts (
 CREATE INDEX IF NOT EXISTS idx_platform_contacts_staff ON platform_contacts(staff_id);
 
 ALTER TABLE platform_contacts ENABLE ROW LEVEL SECURITY;
-
--- ═══════════════════════════════════════════════════════════════
--- TIPS, RECOGNITION & SCHEDULE QUALITY
--- ═══════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS tip_records (
-  id BIGSERIAL PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  shift_id BIGINT,
-  shift_date DATE NOT NULL,
-  total_tips DECIMAL(10,2) NOT NULL,
-  split_method TEXT,
-  splits JSONB,
-  mode TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS recognition_events (
-  id BIGSERIAL PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  recipient_id BIGINT REFERENCES staff(id),
-  recipient_name TEXT,
-  message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS schedule_quality_scores (
-  id BIGSERIAL PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  week_start DATE NOT NULL,
-  score INTEGER CHECK (score >= 0 AND score <= 100),
-  grade TEXT,
-  draft_edits INTEGER DEFAULT 0,
-  coverage_requests INTEGER DEFAULT 0,
-  no_shows INTEGER DEFAULT 0,
-  avg_fill_minutes INTEGER,
-  UNIQUE(group_id, week_start)
-);
