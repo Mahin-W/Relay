@@ -28,6 +28,7 @@ export function startWebServer(bot, db) {
 
   app.use('/api/auth', authRoutes)
   app.use('/api/dashboard', dashRoutes)
+  app.use('/api', dashRoutes)
 
   app.get('/health', (req, res) =>
     res.json({ ok: true, service: 'relay', time: new Date().toISOString() }))
