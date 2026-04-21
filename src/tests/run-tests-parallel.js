@@ -69,6 +69,7 @@ const FAST_SUITES = [
   { id: 'integration_coverage', file: 'integration/coverageFlow.test.js', label: 'Integration — Coverage Flow', timeout: 30_000 },
   { id: 'integration_botadmin', file: 'integration/botAdminFlow.test.js', label: 'Integration — Bot Admin Flow', timeout: 10_000 },
   { id: 'integration_schedule', file: 'integration/scheduleFlow.test.js', label: 'Integration — Schedule Generation', timeout: 15_000 },
+  { id: 'integration_dash_api', file: 'integration/dashApiRoutes.test.js', label: 'Integration — Dash API Routes', timeout: 30_000 },
   { id: 'e2e_week', file: 'e2e/fullWeekFlow.test.js', label: 'E2E — Full Week Cycle', timeout: 30_000 },
 ]
 
