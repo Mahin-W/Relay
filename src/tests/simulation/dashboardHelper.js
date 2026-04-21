@@ -33,7 +33,8 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
 
   // ── Staff ───────────────────────────────────────────────────────────────
   if (M === 'POST' && path === '/api/staff') {
-    if (!body.name || !body.role) return { status: 400, body: { error: 'Name and role required' } }
+    if (!body.name || !body.name.trim()) return { status: 400, body: { error: 'Name is required' } }
+    if (!body.role) return { status: 400, body: { error: 'Name and role required' } }
     const row = { id: db._nextId(), group_id: groupId, name: body.name, role: body.role,
       active: true, dm_chat_id: body.phone ? null : null, user_id: null, created_at: new Date().toISOString() }
     db.staff.push(row)
@@ -89,7 +90,40 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
     if (!body.staffId || !body.shiftId || !body.weekStart) {
       return { status: 400, body: { error: 'staffId, shiftId, weekStart required' } }
     }
+
+    // B3: reject past weekStart (>= 7 days before today)
+    const weekStartDate = new Date(body.weekStart)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    sevenDaysAgo.setHours(0, 0, 0, 0)
+    if (weekStartDate < sevenDaysAgo) {
+      return { status: 409, body: { error: 'weekStart is in the past; use /api/timeclock/override for historical corrections' } }
+    }
+
     const shift = db.shifts.find(s => s.id === body.shiftId)
+    const staffMember = db.staff.find(s => s.id === body.staffId && s.group_id === groupId)
+    if (!staffMember) return { status: 404, body: { error: 'Staff not found' } }
+
+    // B2: role mismatch check using shift_requirements
+    const requirements = (db.shiftRequirements || []).filter(r => r.shift_id === body.shiftId)
+    if (requirements.length > 0) {
+      const requiredRoles = [...new Set(requirements.map(r => r.role))]
+      const staffRole = staffMember.role
+      const crossTraining = staffMember.cross_training || []
+      const roleMatch = requiredRoles.includes(staffRole) ||
+        crossTraining.some(ct => requiredRoles.includes(ct))
+      if (!roleMatch) {
+        return { status: 409, body: { error: `Role mismatch: ${staffRole} cannot fill ${shift?.name ?? body.shiftId} (requires: ${requiredRoles.join(', ')})` } }
+      }
+    }
+
+    // B4: duplicate check
+    const duplicate = db.scheduleAssignments.find(a =>
+      a.staff_id === body.staffId && a.shift_id === body.shiftId && a.week_start === body.weekStart
+    )
+    if (duplicate) {
+      return { status: 409, body: { error: 'Already assigned' } }
+    }
+
     const row = { id: db._nextId(), group_id: groupId, staff_id: body.staffId, shift_id: body.shiftId,
       week_start: body.weekStart, day_of_week: shift?.day_of_week ?? null, status: 'scheduled', created_at: new Date().toISOString() }
     db.scheduleAssignments.push(row)
@@ -104,7 +138,18 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
     if (typeof body.rate !== 'number' || body.rate <= 0) return { status: 400, body: { error: 'Invalid rate' } }
     s.hourlyRate = body.rate
     await db.updateRoleRate(groupId, s.role, body.rate)
-    return { status: 200, body: { staffId, role: s.role, rate: body.rate } }
+    // Retroactive payroll recompute: update all historical payroll rows for this staff
+    const recomputed = []
+    const history = await db.getPayrollHistory(groupId, staffId)
+    for (const row of history) {
+      const oldPay = row.total_gross_pay
+      const newPay = Math.round(row.total_hours * body.rate * 100) / 100
+      if (Math.abs(newPay - oldPay) > 0.001) {
+        row.total_gross_pay = newPay
+        recomputed.push({ weekStart: row.week_start, delta: Math.round((newPay - oldPay) * 100) / 100 })
+      }
+    }
+    return { status: 200, body: { staffId, role: s.role, rate: body.rate, recomputed } }
   }
 
   if (M === 'POST' && path === '/api/payroll/revenue') {

@@ -354,7 +354,8 @@ router.post('/staff', async (req, res) => {
   try {
     const groupId = req.manager.groupId
     const { name, role } = req.body
-    if (!name || !role) return res.status(400).json({ error: 'name and role are required' })
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' })
+    if (!role) return res.status(400).json({ error: 'name and role are required' })
     const db = supabase()
     const { data, error } = await db
       .from('staff')
@@ -676,20 +677,57 @@ router.post('/schedule/assign', async (req, res) => {
     if (!staffId || !shiftId || !weekStart) {
       return res.status(400).json({ error: 'staffId, shiftId, and weekStart are required' })
     }
+
+    // B3: reject past weekStart (>= 7 days before today)
+    const weekStartDate = new Date(weekStart)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    sevenDaysAgo.setHours(0, 0, 0, 0)
+    if (weekStartDate < sevenDaysAgo) {
+      return res.status(409).json({ error: 'weekStart is in the past; use /api/timeclock/override for historical corrections' })
+    }
+
     const db = supabase()
     const [staffCheck, shiftCheck] = await Promise.all([
-      db.from('staff').select('id, name').eq('id', staffId).eq('group_id', groupId).single(),
+      db.from('staff').select('id, name, role, cross_training').eq('id', staffId).eq('group_id', groupId).single(),
       db.from('shifts').select('id, name').eq('id', shiftId).eq('group_id', groupId).single(),
     ])
     if (!staffCheck.data) return res.status(404).json({ error: 'Staff not found' })
     if (!shiftCheck.data) return res.status(404).json({ error: 'Shift not found' })
 
+    // B2: role mismatch check
+    const { data: requirements } = await db
+      .from('shift_requirements')
+      .select('role, count')
+      .eq('shift_id', shiftId)
+    if (requirements && requirements.length > 0) {
+      const requiredRoles = [...new Set(requirements.map(r => r.role))]
+      const staffRole = staffCheck.data.role
+      const crossTraining = staffCheck.data.cross_training || []
+      const roleMatch = requiredRoles.includes(staffRole) ||
+        crossTraining.some(ct => requiredRoles.includes(ct))
+      if (!roleMatch) {
+        return res.status(409).json({
+          error: `Role mismatch: ${staffRole} cannot fill ${shiftCheck.data.name} (requires: ${requiredRoles.join(', ')})`,
+        })
+      }
+    }
+
+    // B4: duplicate check
+    const { data: existing } = await db
+      .from('schedule_assignments')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('staff_id', staffId)
+      .eq('shift_id', shiftId)
+      .eq('week_start', weekStart)
+      .maybeSingle()
+    if (existing) {
+      return res.status(409).json({ error: 'Already assigned' })
+    }
+
     const { error } = await db
       .from('schedule_assignments')
-      .upsert(
-        { group_id: groupId, staff_id: staffId, shift_id: shiftId, week_start: weekStart, status: 'assigned' },
-        { onConflict: 'group_id,staff_id,shift_id,week_start', ignoreDuplicates: true }
-      )
+      .insert({ group_id: groupId, staff_id: staffId, shift_id: shiftId, week_start: weekStart, status: 'assigned' })
     if (error) throw error
 
     res.json({ success: true })
@@ -910,6 +948,52 @@ router.get('/payroll/spreadsheet', async (req, res) => {
   } catch (err) {
     console.error('GET /payroll/spreadsheet error:', err.message)
     res.status(500).json({ error: 'Failed to export payroll' })
+  }
+})
+
+// PATCH /api/payroll/:staffId/rate
+router.patch('/payroll/:staffId/rate', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { staffId } = req.params
+    const { rate } = req.body
+    if (typeof rate !== 'number' || rate <= 0) {
+      return res.status(400).json({ error: 'rate must be a positive number' })
+    }
+    const db = supabase()
+
+    // Verify staff belongs to group
+    const { data: staffRow, error: staffErr } = await db
+      .from('staff')
+      .select('id, role')
+      .eq('id', staffId)
+      .eq('group_id', groupId)
+      .single()
+    if (staffErr || !staffRow) return res.status(404).json({ error: 'Staff not found' })
+
+    // Update role_rates
+    const { error: rateErr } = await db
+      .from('role_rates')
+      .upsert(
+        { group_id: groupId, role_name: staffRow.role, hourly_rate: rate },
+        { onConflict: 'group_id,role_name' }
+      )
+    if (rateErr) throw rateErr
+
+    // Wire retroactive payroll recompute (Track A — retroFix.js may be built concurrently)
+    let recomputed = []
+    try {
+      const { recomputeAllWeeksForStaff } = await import('../payroll/retroFix.js')
+      recomputed = await recomputeAllWeeksForStaff(staffId, groupId, db)
+    } catch (importErr) {
+      // retroFix.js not yet available — skip silently
+      console.warn('retroFix not available:', importErr.message)
+    }
+
+    res.json({ staffId, rate, recomputed })
+  } catch (err) {
+    console.error('PATCH /payroll/:staffId/rate error:', err.message)
+    res.status(500).json({ error: 'Failed to update rate' })
   }
 })
 

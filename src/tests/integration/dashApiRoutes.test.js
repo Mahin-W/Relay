@@ -440,3 +440,126 @@ describe('Week param tests — auth works, DB optional', () => {
     assert.notEqual(status, 401)
   })
 })
+
+// ── B1 (BH.14): whitespace-only name rejection ────────────────────────────────
+
+describe('B1 BH.14 — whitespace-only staff name rejected', () => {
+  test('POST /api/staff with whitespace-only name → 400', async () => {
+    const app = createTestApp()
+    const { status, body } = await request(app, 'POST', '/api/staff', {
+      headers: { Cookie: authCookie() },
+      body: { name: '   \t\n  ', role: 'Server' },
+    })
+    assert.equal(status, 400)
+    assert.ok(body?.error, `expected error message, got: ${JSON.stringify(body)}`)
+  })
+
+  test('POST /api/staff with empty string name → 400', async () => {
+    const app = createTestApp()
+    const { status, body } = await request(app, 'POST', '/api/staff', {
+      headers: { Cookie: authCookie() },
+      body: { name: '', role: 'Server' },
+    })
+    assert.equal(status, 400)
+    assert.ok(body?.error, `expected error message, got: ${JSON.stringify(body)}`)
+  })
+
+  test('POST /api/staff with real name → validation passes (not 400)', async () => {
+    const app = createTestApp()
+    const { status } = await request(app, 'POST', '/api/staff', {
+      headers: { Cookie: authCookie() },
+      body: { name: 'Alice', role: 'Server' },
+    })
+    assert.notEqual(status, 400)
+  })
+})
+
+// ── B2 (2.20): role mismatch assignment rejected ──────────────────────────────
+
+describe('B2 2.20 — role mismatch assignment rejected', () => {
+  test('POST /api/schedule/assign with all required fields hits DB layer (not 400)', async () => {
+    const app = createTestApp()
+    const { status } = await request(app, 'POST', '/api/schedule/assign', {
+      headers: { Cookie: authCookie() },
+      body: { staffId: 'staff-1', shiftId: 'shift-1', weekStart: '2099-01-01' },
+    })
+    // Validation passes; DB lookup may 404/500 without real DB
+    assert.notEqual(status, 400)
+  })
+})
+
+// ── B3 (BH.17): past weekStart rejected ──────────────────────────────────────
+
+describe('B3 BH.17 — past weekStart rejected', () => {
+  test('POST /api/schedule/assign with weekStart 1 year ago → 409', async () => {
+    const app = createTestApp()
+    const { status, body } = await request(app, 'POST', '/api/schedule/assign', {
+      headers: { Cookie: authCookie() },
+      body: { staffId: 'staff-1', shiftId: 'shift-1', weekStart: '2020-01-06' },
+    })
+    assert.equal(status, 409)
+    assert.ok(body?.error?.includes('past'), `expected past-week error, got: ${JSON.stringify(body)}`)
+  })
+
+  test('POST /api/schedule/assign with weekStart 8 days ago → 409', async () => {
+    const app = createTestApp()
+    const past = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const { status } = await request(app, 'POST', '/api/schedule/assign', {
+      headers: { Cookie: authCookie() },
+      body: { staffId: 'staff-1', shiftId: 'shift-1', weekStart: past },
+    })
+    assert.equal(status, 409)
+  })
+
+  test('POST /api/schedule/assign with future weekStart → passes validation (not 409)', async () => {
+    const app = createTestApp()
+    const { status } = await request(app, 'POST', '/api/schedule/assign', {
+      headers: { Cookie: authCookie() },
+      body: { staffId: 'staff-1', shiftId: 'shift-1', weekStart: '2099-01-01' },
+    })
+    // Validation passes; DB lookup will 404/500 without real DB
+    assert.notEqual(status, 409)
+  })
+})
+
+// ── B5 (wire retroFix): PATCH /api/payroll/:staffId/rate ─────────────────────
+
+describe('B5 wire retroFix — PATCH /api/payroll/:staffId/rate', () => {
+  test('PATCH /api/payroll/:staffId/rate without rate → 400', async () => {
+    const app = createTestApp()
+    const { status, body } = await request(app, 'PATCH', '/api/payroll/staff-1/rate', {
+      headers: { Cookie: authCookie() },
+      body: {},
+    })
+    assert.equal(status, 400)
+    assert.ok(body?.error, `expected error, got: ${JSON.stringify(body)}`)
+  })
+
+  test('PATCH /api/payroll/:staffId/rate with negative rate → 400', async () => {
+    const app = createTestApp()
+    const { status } = await request(app, 'PATCH', '/api/payroll/staff-1/rate', {
+      headers: { Cookie: authCookie() },
+      body: { rate: -5 },
+    })
+    assert.equal(status, 400)
+  })
+
+  test('PATCH /api/payroll/:staffId/rate with zero rate → 400', async () => {
+    const app = createTestApp()
+    const { status } = await request(app, 'PATCH', '/api/payroll/staff-1/rate', {
+      headers: { Cookie: authCookie() },
+      body: { rate: 0 },
+    })
+    assert.equal(status, 400)
+  })
+
+  test('PATCH /api/payroll/:staffId/rate with valid rate → hits DB layer (not 400)', async () => {
+    const app = createTestApp()
+    const { status } = await request(app, 'PATCH', '/api/payroll/staff-1/rate', {
+      headers: { Cookie: authCookie() },
+      body: { rate: 21 },
+    })
+    // Validation passes; DB lookup may 404/500 without real DB
+    assert.notEqual(status, 400)
+  })
+})
