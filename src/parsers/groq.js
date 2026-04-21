@@ -3,16 +3,26 @@ import OpenAI from 'openai'
 let _client = null
 const _getClient = () => {
   if (!_client) {
-    _client = new OpenAI({
-      apiKey: process.env.CEREBRAS_API_KEY,
-      baseURL: 'https://api.cerebras.ai/v1',
-    })
+    if (process.env.CEREBRAS_API_KEY) {
+      _client = new OpenAI({
+        apiKey: process.env.CEREBRAS_API_KEY,
+        baseURL: 'https://api.cerebras.ai/v1',
+      })
+    } else {
+      _client = new OpenAI({
+        apiKey: process.env.GROQ_API_KEY,
+        baseURL: 'https://api.groq.com/openai/v1',
+      })
+    }
   }
   return _client
 }
 
 // Lazy proxy — client is created on first use, not at module load.
-// Prevents crash on startup when CEREBRAS_API_KEY is missing.
+// Prefers CEREBRAS_API_KEY; falls back to GROQ_API_KEY with Groq endpoint.
+export const GROQ_MODEL = process.env.CEREBRAS_API_KEY
+  ? 'llama-3.3-70b'
+  : 'llama-3.3-70b-versatile'
 export const groq = new Proxy({}, {
   get(_, prop) { return _getClient()[prop] },
 })
