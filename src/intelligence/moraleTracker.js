@@ -1,16 +1,69 @@
 import { getMoraleEvents } from './moraleDb.js'
 
 const POSITIVE_KEYWORDS = ['bet', 'fasho', 'say less', 'happy', 'love', 'great', 'absolutely', 'for sure', 'of course', 'no problem', 'totally', 'excited']
-const NEGATIVE_KEYWORDS = ['ugh', 'hate', 'again', 'always me', 'whatever', 'fine', 'i guess', 'if i have to', 'forced', 'last minute']
+const NEGATIVE_KEYWORDS = ['ugh', 'hate', 'again', 'always me', 'whatever', 'fine', 'i guess', 'if i have to', 'forced', 'last minute', 'ridiculous', 'ridic', 'absurd', 'unacceptable', 'fed up', 'had it', 'sick of', 'done with']
+
+// BUG D1: when a positive intensifier is followed within 2 words by a negative adjective, classify negative
+const NEGATIVE_ADJECTIVES = ['awful', 'terrible', 'bad', 'horrible', 'worst', 'shit', 'sucks', 'miserable', 'exhausting']
+
+// BUG D3: distress phrases
+const DISTRESS_PHRASES = ["hard time", "burned out", "burnt out", "overwhelmed", "can't keep", "cant keep", "not sure i can", "breaking point", "at my limit", "done", "hate this job", "miserable here"]
+
+function _intensifierFollowedByNegativeAdj(lower) {
+  const words = lower.split(/\s+/)
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace(/[^a-z]/g, '')
+    if (POSITIVE_KEYWORDS.includes(word)) {
+      // Check the next 2 words
+      for (let j = i + 1; j <= i + 2 && j < words.length; j++) {
+        const next = words[j].replace(/[^a-z]/g, '')
+        if (NEGATIVE_ADJECTIVES.includes(next)) return true
+      }
+    }
+  }
+  return false
+}
+
+export function detectDistressSignal(text) {
+  if (!text) return false
+  const lower = text.toLowerCase()
+  return DISTRESS_PHRASES.some(phrase => lower.includes(phrase))
+}
+
+export function detectResignationIntent(text) {
+  if (!text) return false
+  return /\b(two\s*weeks?|2\s*weeks?|putting?\s+in\s+my\s+notice|last\s+day|quit(ting)?\s*(tomorrow|next|soon|today)?|moving\s+on|handing\s+in\s+my\s+notice|final\s+shift)\b/i.test(text)
+}
+
+export function detectRemovalIntent(text) {
+  if (!text) return null
+  const match = text.match(/\b(fire|terminate|let\s+go|remove|get\s+rid\s+of)\s+(\w+)/i)
+  if (!match) return null
+  const verbRaw = match[1].toLowerCase()
+  let intent
+  if (verbRaw === 'fire') intent = 'fire'
+  else if (verbRaw === 'terminate') intent = 'terminate'
+  else intent = 'remove'
+  return { intent, targetName: match[2].toLowerCase() }
+}
 
 export function classifySentiment(text) {
   if (!text || text.trim() === '') return 'neutral'
   const lower = text.toLowerCase()
 
+  // BUG D4: resignation → negative
+  if (detectResignationIntent(text)) return 'negative'
+
+  // BUG D3: distress phrases → negative
+  if (detectDistressSignal(text)) return 'negative'
+
   // Check negative FIRST
   for (const kw of NEGATIVE_KEYWORDS) {
     if (lower.includes(kw)) return 'negative'
   }
+
+  // BUG D1: intensifier + negative adjective → negative
+  if (_intensifierFollowedByNegativeAdj(lower)) return 'negative'
 
   for (const kw of POSITIVE_KEYWORDS) {
     if (lower.includes(kw)) return 'positive'
