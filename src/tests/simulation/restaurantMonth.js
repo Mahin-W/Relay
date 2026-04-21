@@ -452,14 +452,18 @@ async function week1() {
   })
 
   setClock('2025-02-05T23:45:00Z')
-  await step('1.16 Tips parsing bug: $1140 without comma truncates to $114', 'Tips', async () => {
-    const parsedBad = parseTipMessage('tips tonight were $1140')
-    // REAL BUG: greedy \d{1,3} in regex consumes "$114" leaving "0"
-    assert.equal(parsedBad.totalTips, 114, `BUG: $1140 parses as $114 (regex limits to 1-3 digits pre-comma)`)
-    flagNotBuilt('parseTipMessage: $NNNN (4 digits no comma) truncated to first 3 digits', '1.16')
-    // Use $1,140 for actual calc
-    const parsed = parseTipMessage('tips tonight were $1,140')
-    assert.ok(parsed && parsed.totalTips === 1140, `expected $1140 via $1,140, got ${JSON.stringify(parsed)}`)
+  await step('1.16 Tips $1140 (no comma) and $1,140 both parse to 1140', 'Tips', async () => {
+    // Regression guard: previously $1140 truncated to $114 due to greedy \d{1,3}
+    const plain = parseTipMessage('tips tonight were $1140')
+    assert.ok(plain && plain.totalTips === 1140, `FIXED: $1140 now parses as 1140, got ${JSON.stringify(plain)}`)
+    const formatted = parseTipMessage('tips tonight were $1,140')
+    assert.ok(formatted && formatted.totalTips === 1140, `formatted $1,140 parses as 1140, got ${JSON.stringify(formatted)}`)
+    // Also verify "1140 tips" (no dollar sign) and large amounts with commas
+    const bare = parseTipMessage('1140 tips')
+    assert.ok(bare && bare.totalTips === 1140, `bare "1140 tips" parses as 1140, got ${JSON.stringify(bare)}`)
+    const large = parseTipMessage('$12,340')
+    assert.ok(large && large.totalTips === 12340, `$12,340 parses as 12340, got ${JSON.stringify(large)}`)
+    const parsed = formatted
     // Build staff list: FOH on Wed dinner (inferred)
     const fohWedDinner = [
       { id: staffByName('Aaliyah').id, name: 'Aaliyah', role: 'Server', hoursWorked: 6 },

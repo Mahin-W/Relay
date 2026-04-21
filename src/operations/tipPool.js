@@ -45,9 +45,10 @@ export function parseTipMessage(text) {
     totalTips = parseFloat(kMatch[1]) * 1000
   }
 
-  // Try $N,NNN or $N pattern
+  // Try $N,NNN (with commas) or $NNNN (plain digits) pattern.
+  // Formatted variant first so "$1,140" captures the full number instead of "$1".
   if (totalTips === null) {
-    const dollarMatch = t.match(/\$(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/)
+    const dollarMatch = t.match(/\$(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/)
     if (dollarMatch) {
       totalTips = parseFloat(dollarMatch[1].replace(/,/g, ''))
     }
@@ -55,8 +56,9 @@ export function parseTipMessage(text) {
 
   // Try "N tips" or "tips: N" or "tips N"
   if (totalTips === null) {
-    const tipsMatch = t.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*tips\b/i)
-      || t.match(/tips\s*[:]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i)
+    const numPat = '(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)'
+    const tipsMatch = t.match(new RegExp(`${numPat}\\s*tips\\b`, 'i'))
+      || t.match(new RegExp(`tips\\s*[:]\\s*${numPat}`, 'i'))
     if (tipsMatch) {
       totalTips = parseFloat(tipsMatch[1].replace(/,/g, ''))
     }
