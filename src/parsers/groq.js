@@ -1,17 +1,26 @@
 import OpenAI from 'openai'
 
-export const groq = new OpenAI({
-  apiKey: process.env.CEREBRAS_API_KEY,
-  baseURL: 'https://api.cerebras.ai/v1',
+let _client = null
+const _getClient = () => {
+  if (!_client) {
+    _client = new OpenAI({
+      apiKey: process.env.CEREBRAS_API_KEY,
+      baseURL: 'https://api.cerebras.ai/v1',
+    })
+  }
+  return _client
+}
+
+// Lazy proxy — client is created on first use, not at module load.
+// Prevents crash on startup when CEREBRAS_API_KEY is missing.
+export const groq = new Proxy({}, {
+  get(_, prop) { return _getClient()[prop] },
 })
 
-// Extract JSON from LLM output that may contain markdown fences or preamble text.
 export function extractJSON(raw) {
   if (!raw) return '{}'
-  // Strip markdown code fences: ```json ... ``` or ``` ... ```
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fenced) return fenced[1].trim()
-  // Find first { ... } block
   const braceMatch = raw.match(/\{[\s\S]*\}/)
   if (braceMatch) return braceMatch[0]
   return raw
