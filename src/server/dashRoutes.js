@@ -314,7 +314,7 @@ function formatMoney(n) {
 async function safeSend(bot, chatId, text) {
   try {
     if (bot && chatId) await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' })
-  } catch {}
+  } catch (e) { console.warn('safeSend failed:', e.message) }
 }
 
 // Helper: fetch manager DM and group chat IDs
@@ -362,10 +362,12 @@ router.post('/staff', async (req, res) => {
       .select()
       .single()
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `✅ ${name} (${role}) added via dashboard.`)
     res.status(201).json(data)
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `✅ ${name} (${role}) added via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /staff error:', err.message)
     res.status(500).json({ error: 'Failed to add staff' })
@@ -396,10 +398,12 @@ router.patch('/staff/:id', async (req, res) => {
       .select()
       .single()
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `✅ ${data.name}'s profile updated via dashboard.`)
     res.json(data)
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `✅ ${data.name}'s profile updated via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('PATCH /staff/:id error:', err.message)
     res.status(500).json({ error: 'Failed to update staff' })
@@ -420,19 +424,25 @@ router.delete('/staff/:id', async (req, res) => {
       .single()
     if (findErr || !existing) return res.status(404).json({ error: 'Staff not found' })
     const name = existing.name
-    await db.from('staff').update({ active: false }).eq('id', id).eq('group_id', groupId)
+    const { error: staffErr } = await db.from('staff').update({ active: false }).eq('id', id).eq('group_id', groupId)
+    if (staffErr) throw staffErr
     const weekStart = getCurrentWeekStart()
+    // best-effort: cancel future assignments
     await db
       .from('schedule_assignments')
       .update({ status: 'cancelled' })
       .eq('staff_id', id)
       .eq('group_id', groupId)
       .gte('week_start', weekStart)
-    const bot = req.app.locals.bot
-    const { managerDm, groupChat } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `${name} removed from Relay via dashboard. 👋`)
-    await safeSend(bot, groupChat, `${name} has left the team. 👋`)
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm, groupChat }) =>
+      Promise.all([
+        safeSend(bot, managerDm, `${name} removed from Relay via dashboard. 👋`),
+        safeSend(bot, groupChat, `${name} has left the team. 👋`),
+      ])
+    ).catch(() => {})
   } catch (err) {
     console.error('DELETE /staff/:id error:', err.message)
     res.status(500).json({ error: 'Failed to remove staff' })
@@ -510,10 +520,12 @@ router.post('/shifts', async (req, res) => {
       .select()
       .single()
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `✅ New shift added: ${name} (${day_of_week}, ${start_time}–${end_time})`)
     res.status(201).json(data)
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `✅ New shift added: ${name} (${day_of_week}, ${start_time}–${end_time})`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /shifts error:', err.message)
     res.status(500).json({ error: 'Failed to add shift' })
@@ -546,10 +558,12 @@ router.patch('/shifts/:id', async (req, res) => {
       .select()
       .single()
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `✅ ${data.name} updated via dashboard.`)
     res.json(data)
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `✅ ${data.name} updated via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('PATCH /shifts/:id error:', err.message)
     res.status(500).json({ error: 'Failed to update shift' })
@@ -581,10 +595,12 @@ router.delete('/shifts/:id', async (req, res) => {
     }
     const { error } = await db.from('shifts').delete().eq('id', id).eq('group_id', groupId)
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `Shift ${existing.name} removed via dashboard.`)
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `Shift ${existing.name} removed via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('DELETE /shifts/:id error:', err.message)
     res.status(500).json({ error: 'Failed to delete shift' })
@@ -676,10 +692,12 @@ router.post('/schedule/assign', async (req, res) => {
       )
     if (error) throw error
 
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `✅ ${staffCheck.data.name} added to ${shiftCheck.data.name} via dashboard.`)
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `✅ ${staffCheck.data.name} added to ${shiftCheck.data.name} via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /schedule/assign error:', err.message)
     res.status(500).json({ error: 'Failed to assign schedule' })
@@ -711,10 +729,12 @@ router.delete('/schedule/assign', async (req, res) => {
       .eq('group_id', groupId)
     if (error) throw error
 
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `${staffName} removed from ${shiftName} via dashboard.`)
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `${staffName} removed from ${shiftName} via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('DELETE /schedule/assign error:', err.message)
     res.status(500).json({ error: 'Failed to remove assignment' })
@@ -849,11 +869,12 @@ router.post('/payroll/revenue', async (req, res) => {
       )
     if (error) throw error
 
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `📊 Revenue logged via dashboard: ${formatMoney(revenueNum)}\nLabor cost: ${laborPercent}% of revenue`)
-
     res.json({ revenue: revenueNum, laborPercent, totalPayroll })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `📊 Revenue logged via dashboard: ${formatMoney(revenueNum)}\nLabor cost: ${laborPercent}% of revenue`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /payroll/revenue error:', err.message)
     res.status(500).json({ error: 'Failed to log revenue' })
@@ -898,7 +919,7 @@ router.get('/payroll/spreadsheet', async (req, res) => {
 router.get('/tips', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weeks = parseInt(req.query.weeks) || 4
+    const weeks = Math.min(parseInt(req.query.weeks) || 4, 52)
     const db = supabase()
     const { data, error } = await db
       .from('tip_records')
@@ -946,11 +967,12 @@ router.post('/tips', async (req, res) => {
       .single()
     if (error) throw error
 
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `💰 Tips logged via dashboard: ${formatMoney(totalTipsNum)} for ${shiftDate}`)
-
     res.status(201).json({ splits, total: totalTipsNum })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `💰 Tips logged via dashboard: ${formatMoney(totalTipsNum)} for ${shiftDate}`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /tips error:', err.message)
     res.status(500).json({ error: 'Failed to log tips' })
@@ -1032,11 +1054,12 @@ router.patch('/settings', async (req, res) => {
 
     await Promise.all(updates)
 
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `⚙️ Restaurant settings updated via dashboard.`)
-
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `⚙️ Restaurant settings updated via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('PATCH /settings error:', err.message)
     res.status(500).json({ error: 'Failed to update settings' })
@@ -1091,10 +1114,12 @@ router.post('/rules', async (req, res) => {
       .select()
       .single()
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `✅ New rule added via dashboard: ${constraintText}`)
     res.status(201).json(data)
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `✅ New rule added via dashboard: ${constraintText}`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /rules error:', err.message)
     res.status(500).json({ error: 'Failed to add rule' })
@@ -1120,10 +1145,12 @@ router.delete('/rules/:id', async (req, res) => {
       .eq('id', id)
       .eq('group_id', groupId)
     if (error) throw error
-    const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
-    await safeSend(bot, managerDm, `Rule removed via dashboard.`)
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `Rule removed via dashboard.`)
+    ).catch(() => {})
   } catch (err) {
     console.error('DELETE /rules/:id error:', err.message)
     res.status(500).json({ error: 'Failed to delete rule' })
@@ -1179,11 +1206,12 @@ router.post('/coverage', async (req, res) => {
     })
     if (error) throw error
 
-    const bot = req.app.locals.bot
-    const { groupChat } = await getSessionChats(db, groupId)
-    await safeSend(bot, groupChat, `📢 Coverage needed: ${shift.name} ${shift.day_of_week} ${shift.start_time}–${shift.end_time}`)
-
     res.json({ success: true })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ groupChat }) =>
+      safeSend(bot, groupChat, `📢 Coverage needed: ${shift.name} ${shift.day_of_week} ${shift.start_time}–${shift.end_time}`)
+    ).catch(() => {})
   } catch (err) {
     console.error('POST /coverage error:', err.message)
     res.status(500).json({ error: 'Failed to create coverage request' })
@@ -1267,21 +1295,34 @@ router.post('/timeclock/override', async (req, res) => {
 
     const staffName = staffRow.name
     const bot = req.app.locals.bot
-    const { managerDm } = await getSessionChats(db, groupId)
 
     if (action === 'clock_out') {
       const result = await manualClockOut(staffId, groupId, time || new Date().toISOString(), db)
-      await safeSend(bot, managerDm, `⏰ Clock override: ${staffName} clocked out via dashboard.`)
-      return res.json({ success: true, result })
+      res.json({ success: true, result })
+      // fire-and-forget notification
+      getSessionChats(db, groupId).then(({ managerDm }) =>
+        safeSend(bot, managerDm, `⏰ Clock override: ${staffName} clocked out via dashboard.`)
+      ).catch(() => {})
+      return
     }
 
     if (action === 'clock_in') {
       const result = await manualClockIn(staffId, groupId, time || new Date().toISOString(), db)
-      await safeSend(bot, managerDm, `⏰ Clock override: ${staffName} clocked in via dashboard.`)
-      return res.json({ success: true, result })
+      res.json({ success: true, result })
+      // fire-and-forget notification
+      getSessionChats(db, groupId).then(({ managerDm }) =>
+        safeSend(bot, managerDm, `⏰ Clock override: ${staffName} clocked in via dashboard.`)
+      ).catch(() => {})
+      return
     }
 
     if (action === 'adjust') {
+      let adjustedTime
+      try {
+        adjustedTime = time ? new Date(time).toISOString() : new Date().toISOString()
+      } catch {
+        return res.status(400).json({ error: 'Invalid time format — use ISO 8601' })
+      }
       const { data: entry } = await db
         .from('time_entries')
         .select('id')
@@ -1292,9 +1333,13 @@ router.post('/timeclock/override', async (req, res) => {
         .limit(1)
         .single()
       if (!entry) return res.status(404).json({ error: 'No open clock entry found' })
-      await db.from('time_entries').update({ clock_out: time }).eq('id', entry.id)
-      await safeSend(bot, managerDm, `⏰ Clock adjusted for ${staffName} via dashboard.`)
-      return res.json({ success: true })
+      await db.from('time_entries').update({ clock_out: adjustedTime }).eq('id', entry.id)
+      res.json({ success: true })
+      // fire-and-forget notification
+      getSessionChats(db, groupId).then(({ managerDm }) =>
+        safeSend(bot, managerDm, `⏰ Clock adjusted for ${staffName} via dashboard.`)
+      ).catch(() => {})
+      return
     }
   } catch (err) {
     console.error('POST /timeclock/override error:', err.message)
