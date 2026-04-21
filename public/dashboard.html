@@ -981,7 +981,7 @@
     function renderStatCards(data) {
       const d = data || {};
       const coverageSub = d.coverageRequests > 0
-        ? `<span class="stat-sub orange">Avg ${d.avgFillTime || '?'}min to fill</span>`
+        ? `<span class="stat-sub orange">Avg ${d.avgFillMinutes != null ? d.avgFillMinutes : '?'}min to fill</span>`
         : `<span class="stat-sub green">&#10003; None this week</span>`;
       const laborSub = d.revenuePercent
         ? `<span class="stat-sub ${d.revenuePercent > 30 ? 'orange' : 'green'}">${d.revenuePercent}% of revenue</span>`
@@ -1041,8 +1041,8 @@
       }
 
       staff.forEach(member => {
-        html += `<tr><td><div class="staff-name">${escapeHtml(member.name)}</div>`;
-        if (member.role) html += `<div class="staff-role">${escapeHtml(member.role)}</div>`;
+        html += `<tr><td><div class="staff-name">${escapeHtml(member.staffName || member.name || '')}</div>`;
+        if (member.roleName || member.role) html += `<div class="staff-role">${escapeHtml(member.roleName || member.role)}</div>`;
         html += `</td>`;
 
         days.forEach(day => {
@@ -1050,7 +1050,7 @@
           html += `<td>`;
           if (Array.isArray(shifts)) {
             shifts.forEach(s => {
-              const label = typeof s === 'string' ? s : s.name || '';
+              const label = typeof s === 'string' ? s : s.shiftName || s.name || '';
               html += `<div class="shift-pill ${shiftPillClass(label)}">${escapeHtml(label)}</div>`;
             });
           }

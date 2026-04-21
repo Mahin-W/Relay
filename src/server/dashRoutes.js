@@ -79,18 +79,13 @@ router.get('/overview', async (req, res) => {
     res.json({
       restaurantName: req.manager.restaurantName,
       weekStart,
-      stats: {
-        staffCount,
-        shiftsThisWeek,
-        coverageRequests,
-        avgFillMinutes,
-        laborCost: Math.round(laborCost * 100) / 100,
-        revenue,
-        laborPercent,
-        qualityScore: qualityRow?.score ?? null,
-        qualityGrade: qualityRow?.grade ?? null,
-        unconfirmedCount,
-      }
+      staffCount,
+      shiftsThisWeek,
+      coverageRequests,
+      avgFillMinutes,
+      laborCost: Math.round(laborCost * 100) / 100,
+      qualityScore: qualityRow?.score ?? null,
+      qualityGrade: qualityRow?.grade ?? null,
     })
   } catch (err) {
     console.error('overview error:', err.message)

@@ -325,10 +325,10 @@
         <h1>Welcome back</h1>
         <p class="subtitle">Enter your Telegram ID to sign in</p>
         <div class="form-group">
-          <input type="tel" class="form-input" id="phone-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+          <input type="text" class="form-input" id="manager-id-input" placeholder="e.g. 123456789" inputmode="numeric" pattern="[0-9]*">
         </div>
         <button type="button" class="btn-primary" id="send-code-btn">Send code &rarr;</button>
-        <p class="hint-text">We'll send a 6-digit code via your Relay bot</p>
+        <p class="hint-text">Find your Telegram ID by messaging <a href="https://t.me/userinfobot" target="_blank" rel="noopener" style="color:#D95F2B">@userinfobot</a> on Telegram</p>
         <p class="error-message" id="phone-error"></p>
       </div>
 
@@ -373,7 +373,7 @@
   </footer>
 
   <script>
-    const phoneInput = document.getElementById('phone-input');
+    const managerIdInput = document.getElementById('manager-id-input');
     const sendCodeBtn = document.getElementById('send-code-btn');
     const phoneError = document.getElementById('phone-error');
     const stepPhone = document.getElementById('step-phone');
@@ -384,7 +384,7 @@
     const backToPhone = document.getElementById('back-to-phone');
     const verifySpinner = document.getElementById('verify-spinner');
 
-    let currentPhone = '';
+    let currentManagerId = '';
 
     function showError(el, msg) {
       el.textContent = msg;
@@ -404,9 +404,9 @@
 
     // Step A: Send code
     sendCodeBtn.addEventListener('click', async () => {
-      const phone = phoneInput.value.trim();
-      if (!phone) {
-        showError(phoneError, 'Please enter your phone number.');
+      const managerId = managerIdInput.value.trim();
+      if (!managerId) {
+        showError(phoneError, 'Please enter your Telegram ID.');
         return;
       }
 
@@ -418,16 +418,17 @@
         const res = await fetch('/api/auth/request-code', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone })
+          credentials: 'include',
+          body: JSON.stringify({ managerId })
         });
 
         if (res.ok) {
-          currentPhone = phone;
-          displayPhone.textContent = phone;
+          currentManagerId = managerId;
+          displayPhone.textContent = 'Telegram ID ' + managerId;
           goToStep(stepCode);
           otpDigits[0].focus();
         } else if (res.status === 404) {
-          showError(phoneError, "This number isn't registered with Relay. Set up Relay first via Telegram.");
+          showError(phoneError, "Telegram ID not found. Make sure you've completed Relay setup.");
         } else if (res.status === 429) {
           showError(phoneError, 'Too many requests. Please wait a moment and try again.');
         } else {
@@ -441,7 +442,7 @@
       }
     });
 
-    phoneInput.addEventListener('keydown', (e) => {
+    managerIdInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') sendCodeBtn.click();
     });
 
@@ -513,7 +514,8 @@
         const res = await fetch('/api/auth/verify-code', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: currentPhone, code })
+          credentials: 'include',
+          body: JSON.stringify({ managerId: currentManagerId, code })
         });
 
         if (res.ok) {
@@ -552,7 +554,7 @@
       hideError(codeError);
       clearOtp();
       goToStep(stepPhone);
-      phoneInput.focus();
+      managerIdInput.focus();
     });
   </script>
 

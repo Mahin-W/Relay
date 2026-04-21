@@ -51,8 +51,7 @@ bot.deleteWebHook({ drop_pending_updates: true })
   .finally(() => bot.startPolling())
 
 // Start web dashboard server
-const WEB_PORT = process.env.PORT || 3001
-startWebServer(bot, WEB_PORT)
+startWebServer(bot)
 
 let BOT_USERNAME = ''
 

@@ -4,15 +4,7 @@ import { signToken, setCookieHeader, requireAuth } from './middleware.js'
 
 const router = express.Router()
 
-// In-memory OTP store — key: normalized phone, value: { code, expiresAt, attempts, ... }
 const otpStore = new Map()
-
-function normalizePhone(phone) {
-  const digits = phone.replace(/\D/g, '')
-  if (digits.length === 10) return '+1' + digits
-  if (digits.length === 11 && digits[0] === '1') return '+' + digits
-  return '+' + digits
-}
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString()
@@ -21,36 +13,29 @@ function generateOTP() {
 // POST /api/auth/request-code
 router.post('/request-code', async (req, res) => {
   try {
-    const { phone } = req.body
-    if (!phone) return res.status(400).json({ error: 'Phone number required' })
+    const { managerId } = req.body
+    if (!managerId) return res.status(400).json({ error: 'Telegram ID required' })
 
-    const normalized = normalizePhone(phone)
+    const id = String(managerId).replace(/\D/g, '')
+    if (!id) return res.status(400).json({ error: 'Invalid Telegram ID' })
 
-    // Rate limit — 60 second cooldown per phone
-    const existing = otpStore.get(normalized)
-    if (existing && existing.expiresAt > Date.now() && existing.createdAt > Date.now() - 60000) {
+    // Rate limit — 60 second cooldown
+    const existing = otpStore.get(id)
+    if (existing && existing.createdAt > Date.now() - 60000) {
       return res.status(429).json({ error: 'Please wait before requesting another code' })
     }
 
-    // Look up manager by manager_id in setup_sessions
-    // manager_id is a Telegram user ID (BIGINT), so we match against the phone digits
-    // But the actual auth flow: manager_id is a Telegram ID, dm_chat_id is where we send the OTP
-    // We need to find the session by matching phone to a known identifier
-    // Since Telegram IDs aren't phone numbers, we look up by manager_id directly
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-
-    // First try: match manager_id as the phone digits (Telegram user IDs are numeric)
-    const digits = phone.replace(/\D/g, '')
     const { data: session } = await supabase
       .from('setup_sessions')
-      .select('group_id, group_name, manager_id, dm_chat_id, setup_data')
-      .eq('manager_id', digits)
+      .select('group_id, group_name, manager_id, dm_chat_id')
+      .eq('manager_id', id)
       .eq('setup_complete', true)
       .maybeSingle()
 
     if (!session) {
       return res.status(404).json({
-        error: 'Phone number not registered with Relay. Set up Relay first via Telegram.'
+        error: "Telegram ID not found. Make sure you've completed Relay setup."
       })
     }
 
@@ -61,26 +46,24 @@ router.post('/request-code', async (req, res) => {
     }
 
     const otp = generateOTP()
-    otpStore.set(normalized, {
+    otpStore.set(id, {
       code: otp,
       expiresAt: Date.now() + 10 * 60 * 1000,
       createdAt: Date.now(),
       attempts: 0,
-      managerId: String(session.manager_id),
       groupId: session.group_id,
-      groupName: session.group_name,
-      restaurantName: session.setup_data?.restaurant_name || session.group_name || 'Your Restaurant'
+      restaurantName: session.group_name || 'Your Restaurant',
+      dmChatId: session.dm_chat_id,
     })
 
-    // Send OTP via Telegram bot
     const bot = req.app.locals.bot
     if (bot) {
       await bot.sendMessage(session.dm_chat_id,
-        `🔐 Your Relay login code: *${otp}*\n\nExpires in 10 minutes. Don't share this with anyone.`,
+        `🔐 Your Relay login code: *${otp}*\n\nExpires in 10 minutes.`,
         { parse_mode: 'Markdown' })
     }
 
-    res.json({ success: true, message: 'Code sent to your Telegram' })
+    res.json({ success: true })
   } catch (err) {
     console.error('request-code error:', err.message)
     res.status(500).json({ error: 'Something went wrong — try again' })
@@ -90,24 +73,24 @@ router.post('/request-code', async (req, res) => {
 // POST /api/auth/verify-code
 router.post('/verify-code', async (req, res) => {
   try {
-    const { phone, code } = req.body
-    if (!phone || !code) return res.status(400).json({ error: 'Phone and code required' })
+    const { managerId, code } = req.body
+    if (!managerId || !code) return res.status(400).json({ error: 'Telegram ID and code required' })
 
-    const normalized = normalizePhone(phone)
-    const stored = otpStore.get(normalized)
+    const id = String(managerId).replace(/\D/g, '')
+    const stored = otpStore.get(id)
 
     if (!stored) {
-      return res.status(400).json({ error: 'No code requested for this number' })
+      return res.status(400).json({ error: 'No code requested for this ID' })
     }
 
     if (stored.expiresAt < Date.now()) {
-      otpStore.delete(normalized)
+      otpStore.delete(id)
       return res.status(400).json({ error: 'Code expired — request a new one' })
     }
 
     stored.attempts++
     if (stored.attempts >= 5) {
-      otpStore.delete(normalized)
+      otpStore.delete(id)
       return res.status(429).json({ error: 'Too many attempts — request a new code' })
     }
 
@@ -115,13 +98,11 @@ router.post('/verify-code', async (req, res) => {
       return res.status(401).json({ error: 'Incorrect code' })
     }
 
-    // Success — single use
-    otpStore.delete(normalized)
+    otpStore.delete(id)
     const token = signToken({
-      managerId: stored.managerId,
+      managerId: id,
       groupId: stored.groupId,
       restaurantName: stored.restaurantName,
-      phone: normalized
     })
     setCookieHeader(res, token)
 
