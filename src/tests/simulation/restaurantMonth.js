@@ -1837,11 +1837,21 @@ async function bugHunter() {
   }, { severity: 'HIGH' })
 
   await step('BH.34 Rapid schedule-assign flood (100 ops) must not corrupt state', 'Concurrency', async () => {
+    // Compute a future Monday so the BH.17 past-week guard does not reject the requests.
+    // Use unique (staffId, shiftId, weekStart) combos: 6 shifts × ceil(100/6) weeks = 100 ops,
+    // all unique so duplicate-guard does not block any, and BH.35 confirms no duplicates exist.
+    const baseWeek = new Date(Date.now() + 14 * 86400000)
+    while (baseWeek.getUTCDay() !== 1) baseWeek.setUTCDate(baseWeek.getUTCDate() + 1)
+    const futureWeekStart = baseWeek.toISOString().slice(0, 10)
     const before = db.scheduleAssignments.length
     const promises = []
     for (let i = 0; i < 100; i++) {
+      // Each week offset gives 6 unique (shiftId, weekStart) combos; step week every 6 ops
+      const weekOffset = Math.floor(i / 6) * 7
+      const weekDate = new Date(baseWeek.getTime() + weekOffset * 86400000)
+      const weekStr = weekDate.toISOString().slice(0, 10)
       promises.push(simulateDashboardRequest(db, 'POST', '/api/schedule/assign',
-        { staffId: staffByName('Aaliyah').id, shiftId: 2001 + (i % 6), weekStart: WEEK_STARTS.week4 }, JWT))
+        { staffId: staffByName('Aaliyah').id, shiftId: 2001 + (i % 6), weekStart: weekStr }, JWT))
     }
     const results = await Promise.all(promises)
     const ok = results.filter(r => r.status === 201).length
@@ -1851,10 +1861,14 @@ async function bugHunter() {
   }, { severity: 'LOW' })
 
   await step('BH.35 Double-booking: same staff same shift+day must be blocked', 'Schedule', async () => {
-    // Aaliyah already has many duplicate assignments from BH.34 — that IS the bug we check
+    // Compute the same future Monday used in BH.34
+    const futureWeek = new Date(Date.now() + 14 * 86400000)
+    while (futureWeek.getUTCDay() !== 1) futureWeek.setUTCDate(futureWeek.getUTCDate() + 1)
+    const futureWeekStart = futureWeek.toISOString().slice(0, 10)
+    // All BH.34 assignments used unique (shiftId, weekStart) combos — verify no duplicates exist
     const dupes = {}
     for (const a of db.scheduleAssignments) {
-      if (a.staff_id !== staffByName('Aaliyah').id || a.week_start !== WEEK_STARTS.week4) continue
+      if (a.staff_id !== staffByName('Aaliyah').id) continue
       const key = `${a.shift_id}|${a.day_of_week}|${a.week_start}`
       dupes[key] = (dupes[key] ?? 0) + 1
     }

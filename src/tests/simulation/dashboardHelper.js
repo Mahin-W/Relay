@@ -149,7 +149,10 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
         recomputed.push({ weekStart: row.week_start, delta: Math.round((newPay - oldPay) * 100) / 100 })
       }
     }
-    return { status: 200, body: { staffId, role: s.role, rate: body.rate, recomputed } }
+    // A.05: warn (but do not reject) if rate is unusually high
+    const responseBody = { staffId, role: s.role, rate: body.rate, recomputed }
+    if (body.rate > 150) responseBody.warning = 'Rate unusually high — please verify'
+    return { status: 200, body: responseBody }
   }
 
   if (M === 'POST' && path === '/api/payroll/revenue') {
@@ -211,6 +214,11 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
   // ── Rules ───────────────────────────────────────────────────────────────
   if (M === 'POST' && path === '/api/rules') {
     if (!body.type || !body.constraintText) return { status: 400, body: { error: 'type and constraintText required' } }
+    // A.04: validate subjectStaffId exists before saving
+    if (body.subjectStaffId != null) {
+      const exists = db.staff.find(s => s.id === body.subjectStaffId && s.group_id === groupId)
+      if (!exists) return { status: 400, body: { error: 'Staff not found' } }
+    }
     const row = await db.saveRule(groupId, {
       type: body.type, constraint_text: body.constraintText,
       raw_message: body.constraintText,

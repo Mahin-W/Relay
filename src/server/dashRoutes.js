@@ -990,7 +990,10 @@ router.patch('/payroll/:staffId/rate', async (req, res) => {
       console.warn('retroFix not available:', importErr.message)
     }
 
-    res.json({ staffId, rate, recomputed })
+    // A.05: warn (but do not reject) if rate is unusually high
+    const responseBody = { staffId, rate, recomputed }
+    if (rate > 150) responseBody.warning = 'Rate unusually high — please verify'
+    res.json(responseBody)
   } catch (err) {
     console.error('PATCH /payroll/:staffId/rate error:', err.message)
     res.status(500).json({ error: 'Failed to update rate' })
@@ -1185,6 +1188,16 @@ router.post('/rules', async (req, res) => {
     const { type, constraintText, subjectStaffId, objectStaffId } = req.body
     if (!type || !constraintText) return res.status(400).json({ error: 'type and constraintText are required' })
     const db = supabase()
+    // A.04: validate subjectStaffId exists before saving
+    if (subjectStaffId != null) {
+      const { data: subjectStaff, error: subjectErr } = await db
+        .from('staff')
+        .select('id')
+        .eq('id', subjectStaffId)
+        .eq('group_id', groupId)
+        .single()
+      if (subjectErr || !subjectStaff) return res.status(400).json({ error: 'Staff not found' })
+    }
     const { data, error } = await db
       .from('business_rules')
       .insert({
