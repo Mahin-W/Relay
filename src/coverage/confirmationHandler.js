@@ -168,6 +168,52 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
     return
   }
 
+  // ── G.05: OT warning — check if volunteer would exceed 40h this week ────
+  try {
+    const _getPayrollForWeek = db?.getPayrollForWeek ?? null
+    const _getTimeEntriesForWeek = db?.getTimeEntriesForWeek ?? null
+    const weekStart = openRequest.week_start ?? null
+    const managerChatId = _getManagerDmChatId ? await _getManagerDmChatId(groupId) : null
+
+    if (managerChatId && weekStart) {
+      let currentHours = 0
+
+      // Try payroll records first (most accurate)
+      if (_getPayrollForWeek) {
+        const payrollRows = await _getPayrollForWeek(groupId, weekStart)
+        const allStaff = await (db?.getStaffForGroup ?? getStaffForGroup)(groupId)
+        const volunteerStaff = allStaff.find(s => s.name?.toLowerCase() === volunteer.toLowerCase())
+        if (volunteerStaff) {
+          const row = payrollRows.find(r => r.staff_id === volunteerStaff.id)
+          currentHours = Number(row?.total_hours ?? row?.hours ?? 0)
+        }
+      } else if (_getTimeEntriesForWeek) {
+        // Fall back to time entries
+        const entries = await _getTimeEntriesForWeek(groupId, weekStart)
+        const allStaff = await (db?.getStaffForGroup ?? getStaffForGroup)(groupId)
+        const volunteerStaff = allStaff.find(s => s.name?.toLowerCase() === volunteer.toLowerCase())
+        if (volunteerStaff) {
+          const staffEntries = entries.filter(e => e.staff_id === volunteerStaff.id && e.clock_out)
+          for (const e of staffEntries) {
+            const ms = new Date(e.clock_out).getTime() - new Date(e.clock_in).getTime()
+            currentHours += ms / 3600000
+          }
+          currentHours = Math.round(currentHours * 10) / 10
+        }
+      }
+
+      const SHIFT_ESTIMATE = 6 // hours — conservative estimate when shift info unavailable
+      if (currentHours + SHIFT_ESTIMATE > 40) {
+        await bot.sendMessage(
+          managerChatId,
+          `⚠️ Heads up: ${volunteer} volunteering for coverage may push them over 40h this week (${currentHours}h + ~${SHIFT_ESTIMATE}h = OT). Coverage has been accepted, but please verify payroll.`
+        )
+      }
+    }
+  } catch (err) {
+    logger.error(`G.05 OT check failed: ${err.message}`)
+  }
+
   const marked = await _markCovered(openRequest.id, volunteer)
   if (!marked) {
     await bot.sendMessage(msg.chat.id, 'That shift was already covered by someone else — thanks for offering! 🙏')

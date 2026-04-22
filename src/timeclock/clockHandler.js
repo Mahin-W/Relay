@@ -119,13 +119,43 @@ export async function handleClockOut(bot, msg, db = null) {
 
   const entry = await getOpenEntry(userId, groupId, db)
   if (!entry) {
-    await bot.sendMessage(msg.chat.id, "You haven't clocked in today. Send *clock in* to start.", { parse_mode: 'Markdown' })
+    // Check if there's a recent closed entry (already clocked out)
+    let recentlyClosed = null
+    try {
+      const _getMostRecentEntry = db?.getMostRecentEntry ?? null
+      if (_getMostRecentEntry) {
+        recentlyClosed = await _getMostRecentEntry(userId, groupId)
+      }
+    } catch (_) {}
+
+    if (recentlyClosed?.clock_out) {
+      const time = formatTime(recentlyClosed.clock_out)
+      await bot.sendMessage(msg.chat.id,
+        `You're already clocked out at ${time}. Contact your manager to correct.`)
+    } else {
+      await bot.sendMessage(msg.chat.id, "You haven't clocked in today. Send *clock in* to start.", { parse_mode: 'Markdown' })
+    }
     return true
   }
 
   const closed = await clockOut(entry.id, msg.text, db)
   if (!closed) {
-    await bot.sendMessage(msg.chat.id, 'Something went wrong recording your clock-out. Try again.')
+    // D.02: null return means entry was already clocked out (race condition / duplicate request)
+    let alreadyOutTime = null
+    try {
+      const _getMostRecentEntry = db?.getMostRecentEntry ?? null
+      if (_getMostRecentEntry) {
+        const recent = await _getMostRecentEntry(userId, groupId)
+        if (recent?.clock_out) alreadyOutTime = formatTime(recent.clock_out)
+      }
+    } catch (_) {}
+
+    if (alreadyOutTime) {
+      await bot.sendMessage(msg.chat.id,
+        `You're already clocked out at ${alreadyOutTime}. Contact your manager to correct.`)
+    } else {
+      await bot.sendMessage(msg.chat.id, 'Something went wrong recording your clock-out. Try again.')
+    }
     return true
   }
 

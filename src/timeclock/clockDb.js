@@ -30,6 +30,7 @@ export async function clockIn(groupId, userId, staffId, shiftId, rawText, db = n
 export async function clockOut(entryId, rawText, db = null) {
   if (db?.clockOut) return db.clockOut(entryId, rawText)
   try {
+    // D.02: only update if clock_out is currently null — prevents silent overwrite
     const { data, error } = await supabase
       .from('time_entries')
       .update({
@@ -37,9 +38,15 @@ export async function clockOut(entryId, rawText, db = null) {
         clock_out_raw: rawText,
       })
       .eq('id', entryId)
+      .is('clock_out', null)
       .select()
       .single()
     if (error) throw error
+    if (!data) {
+      // Row exists but clock_out was already set — idempotency guard triggered
+      logger.db(`Clock-out skipped (already clocked out): entry ${entryId}`)
+      return null
+    }
     logger.db(`Clock-out saved: entry ${entryId}`)
     return data
   } catch (err) {

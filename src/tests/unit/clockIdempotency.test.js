@@ -99,4 +99,27 @@ describe('handleClockIn idempotency (BH.32)', () => {
     const openEntries = db.timeEntries.filter(e => e.user_id === userId && !e.clock_out)
     assert.equal(openEntries.length, 1, `Only 1 open entry allowed at a time, found ${openEntries.length}`)
   })
+
+  // D.02 — double clock-out idempotency
+  test('SimulationDb.clockOut is idempotent — second call returns null without overwriting first clock-out', async () => {
+    const { SimulationDb } = await import('../simulation/simulationDb.js')
+    const db = new SimulationDb()
+
+    const userId = 9002
+    const groupId = 'grp2'
+
+    const entry = await db.clockIn({ user_id: userId, group_id: groupId, staff_id: 2, shift_id: 2, clock_in: new Date().toISOString() })
+    assert.ok(entry, 'Clock-in must succeed')
+
+    const firstOut = await db.clockOut(entry.id, '15:00')
+    assert.ok(firstOut, 'First clock-out must succeed')
+    assert.equal(firstOut.clock_out, '15:00', 'First clock-out time must be preserved')
+
+    const secondOut = await db.clockOut(entry.id, '17:00')
+    assert.equal(secondOut, null, 'Second clock-out must return null (D.02 idempotency guard)')
+
+    // Verify first time was NOT overwritten
+    const stored = db.timeEntries.find(e => e.id === entry.id)
+    assert.equal(stored.clock_out, '15:00', 'Original clock_out must not be overwritten by second call')
+  })
 })

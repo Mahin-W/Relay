@@ -255,8 +255,11 @@ export class SimulationDb extends MockDB {
   }
   async clockOut(entryId, clockOutTime = null) {
     const e = this.timeEntries.find(x => x.id === entryId)
-    if (e) e.clock_out = clockOutTime ?? this._ts()
-    return e ?? null
+    if (!e) return null
+    // D.02: idempotency — never overwrite an existing clock_out
+    if (e.clock_out != null) return null
+    e.clock_out = clockOutTime ?? this._ts()
+    return e
   }
   async manualClockIn(data) { return this.clockIn(data) }
   async manualClockOut(staffId, clockOutTime) {
