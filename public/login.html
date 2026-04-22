@@ -295,16 +295,24 @@
 
   <!-- Nav -->
   <nav class="nav">
-    <div class="nav-logo-icon">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20">
-        <path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/>
-        <polyline points="6,9 10,13 6,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.4"/>
-        <polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
-        <polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="1"/>
-      </svg>
-    </div>
-    <span class="nav-logo-text">Relay</span>
+    <a href="/" class="nav-logo" style="text-decoration:none; display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <div class="nav-logo-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20">
+          <path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/>
+          <polyline points="6,9 10,13 6,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.4"/>
+          <polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
+          <polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="1"/>
+        </svg>
+      </div>
+      <span class="nav-logo-text">Relay</span>
+    </a>
   </nav>
+
+  <div style="text-align:center; margin-bottom:8px;">
+    <a href="/" style="font-size:13px; color:#9A8880; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+      &larr; Back to home
+    </a>
+  </div>
 
   <!-- Main -->
   <main class="main">
@@ -323,12 +331,12 @@
           </div>
         </div>
         <h1>Welcome back</h1>
-        <p class="subtitle">Enter your Telegram ID to sign in</p>
+        <p class="subtitle">Enter your phone number to sign in</p>
         <div class="form-group">
-          <input type="tel" class="form-input" id="phone-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+          <input type="tel" class="form-input" id="phone-input" placeholder="+1 (555) 000-0000" inputmode="tel" autocomplete="tel">
         </div>
         <button type="button" class="btn-primary" id="send-code-btn">Send code &rarr;</button>
-        <p class="hint-text">We'll send a 6-digit code via your Relay bot on Telegram</p>
+        <p class="hint-text">Use the number you gave Relay during setup. Haven't added it yet? Send /setphone to your Relay bot first.</p>
         <p class="error-message" id="phone-error"></p>
       </div>
 
@@ -424,6 +432,7 @@
 
         if (res.ok) {
           currentManagerId = managerId;
+          window._loginPhone = managerId;
           displayPhone.textContent = managerId;
           goToStep(stepCode);
           otpDigits[0].focus();
