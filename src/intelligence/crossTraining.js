@@ -47,6 +47,7 @@ export async function extractCrossTrainingMention(text, staff, roles) {
     const response = await groqWithRetry(() =>
       groq.chat.completions.create({
         model: GROQ_MODEL,
+        response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: text },

@@ -124,6 +124,7 @@ export async function isDmConfirmation(text) {
       model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 10,
+      response_format: { type: 'json_object' },
 
       messages: [
         {
@@ -170,6 +171,7 @@ export async function parseMessage(text, senderName, groupName) {
       model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 200,
+      response_format: { type: 'json_object' },
 
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },

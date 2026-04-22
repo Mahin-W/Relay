@@ -7,16 +7,18 @@ export async function parseShift(text) {
       model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 800,
+      response_format: { type: 'json_object' },
 
       messages: [
         {
           role: 'system',
-          content: `You are parsing restaurant shift descriptions for a scheduling bot. Return ONLY a valid JSON object. No explanation. No code. No markdown. No extra text. Raw JSON only.
+          content: `You are parsing restaurant shift descriptions for a scheduling bot. Return ONLY a valid JSON object.
 
 The manager may describe one shift or many at once. Expand ALL combinations. For example:
 - "2 shifts a day 8am-12pm and 12pm-4pm on Mon Tue Wed Thu Fri" → 10 shifts (2 times × 5 days)
 - "weekends 10am-6pm" → 2 shifts (Saturday + Sunday)
 - "Saturday Lunch, 11am-3pm" → 1 shift
+- "10am-12pm is breakfast and 12pm to 2pm is lunch every day" → 14 shifts (2 times × 7 days)
 
 Return: {"shifts":[{"name":"descriptive name e.g. Monday Morning","day_of_week":"full day name","start_time":"12-hour e.g. 8:00 AM","end_time":"12-hour e.g. 12:00 PM"},...]}
 
@@ -38,7 +40,7 @@ Always use full day names (Monday not Mon). Always use 12-hour AM/PM format.`,
     logger.parse(`Parsed ${shifts.length} shift(s) from: "${text}"`)
     return shifts
   } catch (err) {
-    logger.error(`parseShift failed: ${err.message}`)
+    logger.error(`parseShift failed: ${err.status ?? ''} ${err.message}`)
     return []
   }
 }
@@ -49,11 +51,12 @@ export async function parseShiftRequirements(text, shiftNames) {
       model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 500,
+      response_format: { type: 'json_object' },
 
       messages: [
         {
           role: 'system',
-          content: `You are parsing role requirements for restaurant shifts. Return ONLY a valid JSON object. No explanation. No code. No markdown. No extra text. Raw JSON only.
+          content: `You are parsing role requirements for restaurant shifts. Return ONLY a valid JSON object.
 
 Configured shifts: ${shiftNames.join(', ')}
 
@@ -76,7 +79,7 @@ If nothing can be parsed, return {"requirements":[]}.`,
     logger.parse(`Parsed ${reqs.length} shift requirement(s)`)
     return reqs
   } catch (err) {
-    logger.error(`parseShiftRequirements failed: ${err.message}`)
+    logger.error(`parseShiftRequirements failed: ${err.status ?? ''} ${err.message}`)
     return []
   }
 }
@@ -91,11 +94,12 @@ export async function parseStaff(text, senderName) {
       model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 400,
+      response_format: { type: 'json_object' },
 
       messages: [
         {
           role: 'system',
-          content: `You are parsing restaurant staff descriptions for a scheduling bot. Return ONLY a valid JSON object. No explanation. No code. No markdown. No extra text. Raw JSON only. Extract ONLY the people explicitly named or self-identified in the message.
+          content: `You are parsing restaurant staff descriptions for a scheduling bot. Return ONLY a valid JSON object. Extract ONLY the people explicitly named or self-identified in the message.
 
 ${senderLine}
 
@@ -117,7 +121,7 @@ Rules:
     logger.parse(`Parsed ${staff.length} staff member(s) from: "${text}"`)
     return staff
   } catch (err) {
-    logger.error(`parseStaff failed: ${err.message}`)
+    logger.error(`parseStaff failed: ${err.status ?? ''} ${err.message}`)
     return []
   }
 }

@@ -71,6 +71,7 @@ async function parseEditIntent(text, schedule) {
       model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 120,
+      response_format: { type: 'json_object' },
 
       messages: [
         {

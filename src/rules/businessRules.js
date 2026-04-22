@@ -42,6 +42,7 @@ Extract the scheduling rule if present.`
   const response = await groqWithRetry(() =>
     groq.chat.completions.create({
       model: GROQ_MODEL,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: RULE_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
