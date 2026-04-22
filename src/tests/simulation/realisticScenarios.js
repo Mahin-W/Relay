@@ -707,14 +707,20 @@ async function groupG() {
   }, { severity: 'HIGH' })
 
   await step('G.10 Concurrent rapid-fire schedule assigns for UNIQUE staff+shift pairs must all succeed', 'Concurrency', async () => {
-    // This is the corrected version of BH.34: use unique combinations so all should succeed
+    // This is the corrected version of BH.34: use unique combinations so all should succeed.
+    // Each staff is paired with a shift that accepts their role to avoid role-mismatch rejection.
     const staffPool = db.staff.filter(s => s.group_id === GROUP_ID && s.active !== false && s.role).slice(0, 10)
     const shiftPool = db.shifts.filter(s => s.group_id === GROUP_ID)
     const weekStart = '2027-03-08'  // Far-future week — past-week guard won't reject
 
-    const requests = staffPool.slice(0, 10).map((s, i) => ({
-      staffId: s.id, shiftId: shiftPool[i % shiftPool.length].id, weekStart,
-    }))
+    const allReqs = db.shiftRequirements || []
+    const requests = staffPool.slice(0, 10).map(s => {
+      // Find any shift that accepts this staff's role
+      const compatible = shiftPool.find(sh =>
+        allReqs.some(r => r.shift_id === sh.id && r.role === s.role)
+      ) ?? shiftPool[0]
+      return { staffId: s.id, shiftId: compatible.id, weekStart }
+    })
 
     // These are all unique (staff+shift vary) → ALL should succeed
     const results = await Promise.all(

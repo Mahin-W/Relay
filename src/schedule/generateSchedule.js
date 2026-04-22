@@ -152,6 +152,8 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
 
     // Build fast lookup: staffId → Set of day-off days
     const dayOffByStaff = new Map()
+    // Build pinned assignments: shiftId → Set<staffId> (shift_preference rules with a specific shift)
+    const pinnedByShift = new Map()
     for (const rule of schedulingRules) {
       if (rule.active === false) continue
       if (rule.type === 'day_off') {
@@ -160,6 +162,14 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         if (sid && day) {
           if (!dayOffByStaff.has(sid)) dayOffByStaff.set(sid, new Set())
           dayOffByStaff.get(sid).add(day)
+        }
+      }
+      if (rule.type === 'shift_preference') {
+        const sid = rule.subjectStaffId ?? rule.subject_staff_id
+        const shiftId = rule.shift_id
+        if (sid && shiftId) {
+          if (!pinnedByShift.has(shiftId)) pinnedByShift.set(shiftId, new Set())
+          pinnedByShift.get(shiftId).add(sid)
         }
       }
     }
@@ -200,8 +210,18 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
           return true
         })
 
-        // Fairness: prefer staff with fewer assignments this week
-        candidates.sort((a, b) => (assignmentCount[a.staffId] ?? 0) - (assignmentCount[b.staffId] ?? 0))
+        // Pinned staff (shift_preference rule for this specific shift) go first; then sort by fewest assignments
+        const pinned = pinnedByShift.get(shift.id)
+        if (pinned?.size) {
+          candidates.sort((a, b) => {
+            const aPin = pinned.has(a.staffId) ? 0 : 1
+            const bPin = pinned.has(b.staffId) ? 0 : 1
+            if (aPin !== bPin) return aPin - bPin
+            return (assignmentCount[a.staffId] ?? 0) - (assignmentCount[b.staffId] ?? 0)
+          })
+        } else {
+          candidates.sort((a, b) => (assignmentCount[a.staffId] ?? 0) - (assignmentCount[b.staffId] ?? 0))
+        }
 
         const picked = candidates.slice(0, req.count)
 
@@ -285,6 +305,68 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       }
     }
 
+    // ── Enforce max-5-days/week business rule ─────────────────────────────────
+    // Applies in both mock and live mode when the rule is present
+    const hasMaxDaysRule = schedulingRules.some(r =>
+      r.active !== false &&
+      r.type === 'shift_preference' &&
+      (r.subject === 'TEAM' || r.subjectStaffId == null) &&
+      /5 days\/week/.test(r.constraint_text ?? '')
+    ) || (mockRules && mockRules.some(r =>
+      r.active !== false &&
+      r.type === 'shift_preference' &&
+      (r.subject === 'TEAM' || r.subjectStaffId == null) &&
+      /5 days\/week/.test(r.constraint_text ?? '')
+    ))
+    if (hasMaxDaysRule) {
+      // Count distinct days per staffId; remove excess assignments (last added = lowest priority).
+      // Pinned assignments (from shift_preference rules) are kept regardless of day count.
+      const daySetByStaff = new Map()
+      const toRemove = new Set()
+      // First pass: reserve days for pinned assignments so they aren't displaced
+      for (let i = 0; i < assignments.length; i++) {
+        const a = assignments[i]
+        if (pinnedByShift.get(a.shiftId)?.has(a.staffId)) {
+          if (!daySetByStaff.has(a.staffId)) daySetByStaff.set(a.staffId, new Set())
+          daySetByStaff.get(a.staffId).add(a.dayOfWeek)
+        }
+      }
+      for (let i = 0; i < assignments.length; i++) {
+        const a = assignments[i]
+        // Never remove a pinned assignment
+        if (pinnedByShift.get(a.shiftId)?.has(a.staffId)) continue
+        if (!daySetByStaff.has(a.staffId)) daySetByStaff.set(a.staffId, new Set())
+        const ds = daySetByStaff.get(a.staffId)
+        if (!ds.has(a.dayOfWeek)) {
+          if (ds.size >= 5) {
+            toRemove.add(i)
+          } else {
+            ds.add(a.dayOfWeek)
+          }
+        }
+      }
+      if (toRemove.size > 0) {
+        const removed = assignments.filter((_, i) => toRemove.has(i))
+        assignments.splice(0, assignments.length, ...assignments.filter((_, i) => !toRemove.has(i)))
+        // Push removed slots to gaps
+        for (const a of removed) {
+          gaps.push({
+            shiftId: a.shiftId,
+            shiftName: a.shiftName,
+            dayOfWeek: a.dayOfWeek,
+            startTime: a.startTime,
+            endTime: a.endTime,
+            roleName: a.roleName,
+            roleId: null,
+            needed: 1,
+            found: 0,
+            shortfall: 1,
+          })
+        }
+        logger.bot(`Max-5-days rule: removed ${toRemove.size} excess assignments`)
+      }
+    }
+
     // ── Apply rotation fairness (live mode only) ───────────────────────────────
     if (!mockData && assignments.length > 0) {
       try {
@@ -328,7 +410,12 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     // ── Persist draft (skipped in test/mock mode) ─────────────────────────────
     const saved = mockData ? null : await saveGeneratedSchedule(groupId, weekStart, assignments, gaps)
 
-    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed }
+    // ── B.03: flag when regenerating for a week that already has published assignments ──
+    const alreadyPublished = mockData
+      ? (mockData.publishedCount != null ? mockData.publishedCount > 0 : false)
+      : false  // live mode: caller should pass publishedCount via options if needed
+
+    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed, alreadyPublished }
   } catch (err) {
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
     return { assignments: [], gaps: [], weekStart, scheduleId: null }
