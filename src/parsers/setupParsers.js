@@ -1,10 +1,10 @@
-import { groq, extractJSON } from './groq.js'
+import { groq, extractJSON, GROQ_MODEL } from './groq.js'
 import { logger } from '../logger.js'
 
 export async function parseShift(text) {
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 800,
 
@@ -46,7 +46,7 @@ Always use full day names (Monday not Mon). Always use 12-hour AM/PM format.`,
 export async function parseShiftRequirements(text, shiftNames) {
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 500,
 
@@ -88,7 +88,7 @@ export async function parseStaff(text, senderName) {
       : `If someone says "I'm a [role]" but no name is given, skip them.`
 
     const completion = await groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 400,
 
