@@ -388,14 +388,17 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     if (clopenings.length > 0) logger.bot(`Clopening warnings: ${clopenings.length}`)
     if (hoursIssues.overtime.length > 0) logger.bot(`Overtime warnings: ${hoursIssues.overtime.length}`)
 
-    // ── Business rules check (live mode only) ─────────────────────────────────
+    // ── Business rules check (both live and mockData paths) ──────────────────
     let ruleConflicts = []
-    if (!mockData && assignments.length > 0) {
+    if (assignments.length > 0) {
       try {
-        const { getRules } = await import('../rules/rulesDb.js')
         const { applyRulesToAssignments } = await import('../rules/businessRules.js')
-        const rules = await getRules(groupId)
-        if (rules.length > 0) {
+        let rules = mockRules
+        if (!rules) {
+          const { getRules } = await import('../rules/rulesDb.js')
+          rules = await getRules(groupId)
+        }
+        if (rules?.length > 0) {
           const mappedShifts = shifts.map(s => ({ id: s.id, name: s.name, dayOfWeek: s.day_of_week, startTime: s.start_time, endTime: s.end_time }))
           const mappedStaff = resolvedStaff.map(s => ({ id: s.staffId, name: s.name }))
           const result = applyRulesToAssignments(assignments, mappedShifts, mappedStaff, rules)

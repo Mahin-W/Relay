@@ -208,6 +208,7 @@ async function onMakeSchedule(engine, ev) {
     })),
     availability: db.availability.filter(a => a.group_id === GROUP_ID && a.week_start === ev.weekStart),
     requirements: db.shiftRequirements,
+    rules: await db.getRules(GROUP_ID),
     maxShiftsPerDay: 2,
   }
   const draft = await generateWeeklySchedule(GROUP_ID, ev.weekStart, mockData)
