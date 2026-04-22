@@ -7,6 +7,7 @@ export const logger = {
   bot:     (msg) => console.log(`[${timestamp()}] 🤖 ${msg}`),
   db:      (msg) => console.log(`[${timestamp()}] 🗄️  ${msg}`),
   error:   (msg) => console.error(`[${timestamp()}] ❌ ${msg}`),
+  warn:    (msg) => console.warn(`[${timestamp()}] ⚠️  ${msg}`),
   parse:   (msg) => console.log(`[${timestamp()}] 🔍 ${msg}`),
   success: (msg) => console.log(`[${timestamp()}] ✅ ${msg}`),
 }
