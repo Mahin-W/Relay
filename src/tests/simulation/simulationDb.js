@@ -184,6 +184,10 @@ export class SimulationDb extends MockDB {
       raw_response: data.raw_response ?? null,
       collected_at: this._ts() }
     if (idx >= 0) this.availability[idx] = row; else this.availability.push(row)
+    // G.03: flag late submissions — availability saved after schedule already published
+    const hasPublished = this.scheduleAssignments.some(a =>
+      a.group_id === String(groupId) && a.week_start === weekStart)
+    if (hasPublished) row.late_submission = true
     return row
   }
   async getAvailability(groupId, weekStart) {
@@ -366,8 +370,16 @@ export class SimulationDb extends MockDB {
 
   // ── Tips ────────────────────────────────────────────────────────────────
   async saveTipRecord(row) {
-    const withId = { id: this._nextId(), ...row, created_at: this._ts() }
-    this.tipRecords.push(withId); return withId
+    try {
+      // E.03: upsert by (group_id, shift_date) — replace existing record for same date
+      const idx = this.tipRecords.findIndex(r =>
+        r.group_id === row.group_id && r.shift_date === row.shift_date)
+      const withId = { id: idx >= 0 ? this.tipRecords[idx].id : this._nextId(), ...row, created_at: this._ts() }
+      if (idx >= 0) this.tipRecords[idx] = withId; else this.tipRecords.push(withId)
+      return withId
+    } catch (err) {
+      return null
+    }
   }
   async getTipHistory(groupId, weeksBack = 4) {
     return this.tipRecords.filter(r => r.group_id === String(groupId))

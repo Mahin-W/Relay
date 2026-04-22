@@ -184,6 +184,7 @@ function keysForDays(shiftMap, canonicalDays) {
 // Returns { type: 'unavailable' | 'all_week' | 'specific_shifts' | 'unclear', numbers?: string[] }
 // shiftMap accepts: { "1": shiftId } OR { "1": { id, day_of_week, ... } }
 export function parseAvailabilityResponse(text, shiftMap) {
+  if (text == null) return { type: 'unclear' }
   const lower = text.toLowerCase().trim()
 
   if (/^(off|can'?t|no|nope|none|unavailable|not available|busy all week)$/i.test(lower)) {

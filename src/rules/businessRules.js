@@ -112,6 +112,7 @@ function parseTime24(timeStr) {
 }
 
 export function applyRulesToAssignments(assignments, shifts, staff, rules) {
+  rules = rules ?? []
   const conflicts = []
 
   for (const rule of rules) {
@@ -220,6 +221,7 @@ export function formatRuleConflicts(conflicts) {
 // Returns array of { ruleIdA, ruleIdB, description } for contradictory rule pairs.
 
 export function detectRuleConflicts(rules) {
+  if (!rules) return []
   const conflicts = []
   const active = rules.filter(r => r.active !== false)
 
