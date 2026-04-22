@@ -1,3 +1,4 @@
+import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from '../parsers/groq.js'
 import { getRules, deactivateRule, saveRule } from './rulesDb.js'
 
 // ── extractRule (LLM) ────────────────────────────────────────────────────────
@@ -40,7 +41,7 @@ Extract the scheduling rule if present.`
 
   const response = await groqWithRetry(() =>
     groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       messages: [
         { role: 'system', content: RULE_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },

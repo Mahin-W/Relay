@@ -1,4 +1,4 @@
-import { groq, groqWithRetry, extractJSON } from '../parsers/groq.js'
+import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from '../parsers/groq.js'
 import { saveCrossTraining, removeCrossTraining, getAllCrossTraining } from './crossTrainingDb.js'
 import { logger } from '../logger.js'
 
@@ -46,7 +46,7 @@ export async function extractCrossTrainingMention(text, staff, roles) {
   try {
     const response = await groqWithRetry(() =>
       groq.chat.completions.create({
-        model: 'llama3.1-8b',
+        model: GROQ_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: text },

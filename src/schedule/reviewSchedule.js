@@ -1,4 +1,4 @@
-import { groq, groqWithRetry, extractJSON } from '../parsers/groq.js'
+import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from '../parsers/groq.js'
 import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup, getOvertimeSettings } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
@@ -68,7 +68,7 @@ async function parseEditIntent(text, schedule) {
     const staffNames = [...new Set((schedule.assignments ?? []).map(a => a.staffName))]
 
     const completion = await groqWithRetry(() => groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 120,
 

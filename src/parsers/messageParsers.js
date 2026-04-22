@@ -1,4 +1,4 @@
-import { groq, groqWithRetry, extractJSON } from './groq.js'
+import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from './groq.js'
 import { logger } from '../logger.js'
 
 const SYSTEM_PROMPT = `You are an intent classifier for Relay, a shift coverage bot for restaurant staff group chats. Your ONLY job is to classify messages and extract key details.
@@ -121,7 +121,7 @@ RULES:
 export async function isDmConfirmation(text) {
   try {
     const completion = await groqWithRetry(() => groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 10,
 
@@ -167,7 +167,7 @@ export async function parseMessage(text, senderName, groupName) {
 
   try {
     const completion = await groqWithRetry(() => groq.chat.completions.create({
-      model: 'llama3.1-8b',
+      model: GROQ_MODEL,
       temperature: 0.0,
       max_tokens: 200,
 
