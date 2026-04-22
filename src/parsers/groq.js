@@ -26,13 +26,15 @@ export function extractJSON(raw) {
 }
 
 // Cerebras-first, Groq fallback. Passes the right model name for each provider.
+// Cerebras doesn't support response_format — strip it before sending.
 export async function groqCreate(params) {
   const cerebras = _cerebrasClient()
   if (cerebras) {
     try {
-      return await cerebras.chat.completions.create({ ...params, model: CEREBRAS_MODEL })
+      const { response_format, ...cerebrasParams } = params
+      return await cerebras.chat.completions.create({ ...cerebrasParams, model: CEREBRAS_MODEL })
     } catch (err) {
-      logger.warn(`Cerebras failed (${err.status ?? err.message}), falling back to Groq`)
+      logger.warn(`Cerebras failed (status=${err.status} msg=${err.message}), falling back to Groq`)
     }
   }
 
