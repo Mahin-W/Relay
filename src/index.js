@@ -418,9 +418,9 @@ bot.onText(/^\/setphone(.*)/, async (msg, match) => {
     return
   }
   try {
-    const { getSetupSessionByManager, updateSetupSession } = await import('./setup/setupDb.js')
+    const { getManagerGroup, updateSetupSession } = await import('./setup/setupDb.js')
     const userId = msg.from?.id
-    const session = await getSetupSessionByManager(userId)
+    const session = await getManagerGroup(userId)
     if (!session) {
       await bot.sendMessage(msg.chat.id,
         "I couldn't find a Relay setup linked to your account. Make sure you've completed setup in your restaurant's group first.")

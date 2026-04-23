@@ -83,7 +83,7 @@ export async function getManagerGroup(managerId) {
   try {
     const { data, error } = await supabase
       .from('setup_sessions')
-      .select('group_id, dm_chat_id, setup_data, group_name, manager_id')
+      .select('group_id, dm_chat_id, setup_data, group_name, manager_id, phone')
       .eq('manager_id', managerId)
       .eq('setup_complete', true)
       .order('created_at', { ascending: false })
