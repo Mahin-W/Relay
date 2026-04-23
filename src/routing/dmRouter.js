@@ -474,6 +474,9 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
     }
   }
 
+  // Slash commands not handled here are caught by onText handlers in index.js — don't double-reply
+  if (text.startsWith('/')) return
+
   await bot.sendMessage(msg.chat.id,
     `To volunteer for a shift, just reply *yes* when I ask you.\n\nSend */start* if you haven't registered yet.`,
     { parse_mode: 'Markdown' })
