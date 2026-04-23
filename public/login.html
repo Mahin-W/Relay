@@ -524,7 +524,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ managerId: currentManagerId, code })
+          body: JSON.stringify({ phone: currentManagerId, code })
         });
 
         if (res.ok) {

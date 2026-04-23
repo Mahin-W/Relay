@@ -32,9 +32,17 @@ import { generateTurnoverRiskReport, formatTurnoverRiskCommand } from './intelli
 import { UnifiedBot } from './platform/UnifiedBot.js'
 import { TelegramAdapter } from './platform/TelegramAdapter.js'
 import { startWebServer } from './server/webServer.js'
+import { handleShiftsCommand, handleEditShift, handleAddShift, handleRemoveShift } from './setup/shiftEditor.js'
+import { handleViewStaff, handleRemoveStaff } from './setup/staffManager.js'
+import { handleCoverageCommand } from './coverage/managerCoverage.js'
+import { handleMissedClockOutCheck } from './timeclock/missedClockOut.js'
 import cron from 'node-cron'
 
-const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'CEREBRAS_API_KEY', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
+const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
+if (!process.env.CEREBRAS_API_KEY && !process.env.GROQ_API_KEY) {
+  console.error('❌ Missing LLM key: set CEREBRAS_API_KEY or GROQ_API_KEY in .env')
+  process.exit(1)
+}
 const missing = REQUIRED_ENV.filter((key) => !process.env[key])
 if (missing.length > 0) {
   console.error(`❌ Missing required environment variables: ${missing.join(', ')}`)
@@ -403,6 +411,51 @@ bot.onText(/^\/tips$/, async (msg) => {
   await handleTipHistory(bot, msg)
 })
 
+// /setphone +1234567890 — DM command for managers to link their phone for web login
+bot.onText(/^\/setphone(.*)/, async (msg, match) => {
+  if (msg.chat.type !== 'private') {
+    await bot.sendMessage(msg.chat.id, 'Send /setphone in a DM with me, not in the group.')
+    return
+  }
+  try {
+    const { getSetupSessionByManager, updateSetupSession } = await import('./setup/setupDb.js')
+    const userId = msg.from?.id
+    const session = await getSetupSessionByManager(userId)
+    if (!session) {
+      await bot.sendMessage(msg.chat.id,
+        "I couldn't find a Relay setup linked to your account. Make sure you've completed setup in your restaurant's group first.")
+      return
+    }
+
+    const raw = (match[1] || '').trim()
+    if (!raw) {
+      const current = session.phone
+        ? `Your current number: ${session.phone}`
+        : 'No phone number set yet.'
+      await bot.sendMessage(msg.chat.id,
+        `${current}\n\nSend your number like:\n/setphone +15550001234`)
+      return
+    }
+
+    const digits = raw.replace(/\D/g, '')
+    let normalized
+    if (digits.length === 10) normalized = '+1' + digits
+    else if (digits.length === 11 && digits[0] === '1') normalized = '+' + digits
+    else if (digits.length > 7) normalized = '+' + digits
+    else {
+      await bot.sendMessage(msg.chat.id, "That doesn't look like a valid phone number. Try: /setphone +15550001234")
+      return
+    }
+
+    await updateSetupSession(session.group_id, { phone: normalized })
+    await bot.sendMessage(msg.chat.id,
+      `✅ Phone number set to ${normalized}.\n\nYou can now log in at the Relay dashboard using this number.`)
+  } catch (err) {
+    logger.error(`/setphone failed: ${err.message}`)
+    await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
+  }
+})
+
 bot.onText(/^\/kudos(.*)/, async (msg, match) => {
   if (!['group', 'supergroup'].includes(msg.chat.type)) return
   const name = (match[1] || '').trim()
@@ -550,6 +603,68 @@ function startPreferenceCron(bot) {
   })
   logger.info('Preference analysis cron started (Sunday midnight)')
 }
+
+bot.onText(/^\/shifts/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleShiftsCommand(bot, msg)
+})
+
+bot.onText(/^\/editshift(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleEditShift(bot, msg, (match[1] || '').trim())
+})
+
+bot.onText(/^\/addshift/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleAddShift(bot, msg)
+})
+
+bot.onText(/^\/removeshift(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleRemoveShift(bot, msg, (match[1] || '').trim())
+})
+
+bot.onText(/^\/staff/, async (msg) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleViewStaff(bot, msg)
+})
+
+bot.onText(/^\/removestaff(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleRemoveStaff(bot, msg, (match[1] || '').trim())
+})
+
+bot.onText(/^\/coverage(.*)/, async (msg, match) => {
+  if (!['group', 'supergroup'].includes(msg.chat.type)) return
+  const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
+  if (!isAdmin) return
+  await handleCoverageCommand(bot, msg, match)
+})
+
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    const { data: groups } = await supabase.from('setup_sessions').select('group_id').eq('setup_complete', true)
+    for (const g of groups || []) {
+      await handleMissedClockOutCheck(bot, g.group_id)
+    }
+  } catch (err) {
+    logger.error(`Missed clock-out cron error: ${err.message}`)
+  }
+})
 
 process.on('SIGINT', () => {
   logger.bot('Shutting down gracefully...')
