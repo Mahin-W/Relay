@@ -155,6 +155,15 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       useFallback = true
     }
 
+    // ── Fallback: no shift requirements configured → default to 1 any-role per shift ──
+    // Previously a shift with zero requirements was silently skipped, producing empty
+    // schedules whenever the manager hadn't done the shift_roles setup step.
+    let useRequirementsFallback = false
+    if (requirements.length === 0 && shifts.length > 0) {
+      useRequirementsFallback = true
+      requirements = shifts.map(s => ({ shift_id: s.id, role: '*', count: 1, roleId: null }))
+    }
+
     // ── Availability lookup ───────────────────────────────────────────────────
     const availMap = {}
     for (const av of availabilityRecords) {
@@ -223,16 +232,22 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     const assignmentCount = {} // staffId → number
 
     for (const shift of sortedShifts) {
-      const shiftReqs = requirements.filter(r => r.shift_id === shift.id)
+      let shiftReqs = requirements.filter(r => r.shift_id === shift.id)
 
-      // If no requirements are defined, skip the shift for scheduling purposes
-      if (shiftReqs.length === 0) continue
+      // If requirements are missing for THIS shift only, synthesize one "any role, 1 person"
+      // so the shift still gets scheduled. The group-wide fallback above handles the
+      // zero-requirements-total case; this covers a partial setup where some shifts got
+      // requirements and others didn't.
+      if (shiftReqs.length === 0) {
+        shiftReqs = [{ shift_id: shift.id, role: '*', count: 1, roleId: null }]
+      }
 
       for (const req of shiftReqs) {
         const roleLower = (req.role || '').toLowerCase()
+        const matchAnyRole = roleLower === '*' || roleLower === ''
 
         const candidates = resolvedStaff.filter(s => {
-          if ((s.role || '').toLowerCase() !== roleLower) return false
+          if (!matchAnyRole && (s.role || '').toLowerCase() !== roleLower) return false
           if (!isAvailable(s.userId, shift.id)) return false
           // G1: enforce day_off business rules during candidate filtering
           if (hasDateOff(s.staffId, shift.day_of_week)) return false
@@ -456,7 +471,13 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     if (useFallback) {
       warnings.push({
         type: 'no_availability',
-        message: 'No availability was submitted for this week. Schedule generated from role matching only — please verify before publishing.',
+        message: 'No availability was submitted for this week — schedule generated without availability filtering. Please verify before publishing.',
+      })
+    }
+    if (useRequirementsFallback) {
+      warnings.push({
+        type: 'no_requirements',
+        message: 'No shift role requirements configured — defaulted to 1 staff per shift (any role). Configure role counts in Settings for better results.',
       })
     }
 

@@ -1022,6 +1022,26 @@
     .bar-label { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
     .bar-amount { font-size: 10px; color: var(--text-secondary); font-weight: 600; }
 
+    /* Stacked-bar segments (colored by category) */
+    .bar-segment {
+      width: 100%;
+      min-height: 1px;
+    }
+    .bar-segment:first-child { border-radius: 4px 4px 0 0; }
+    .bar-segment:last-child { border-radius: 0; }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      margin-bottom: 8px; font-size: 12px; color: var(--text-secondary);
+    }
+    .legend-item {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .category-dot {
+      display: inline-block;
+      width: 10px; height: 10px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+
     /* ── Responsive revenue grid ── */
     @media (max-width: 900px) {
       .revenue-grid { grid-template-columns: repeat(4, 1fr); }
@@ -1683,19 +1703,20 @@
       btn.textContent = 'Generating...';
       try {
         const result = await api('/api/schedule/generate', 'POST', { weekStart });
-        const noAvail = (result && result.warnings || []).find(w => w.type === 'no_availability');
-        // Reload the schedule view first so the banner has a container to prepend into
+        const warnings = (result && result.warnings) || [];
+        // Reload the schedule view first so banners have a container to prepend into
         const schedule = await loadScheduleData(currentScheduleWeek);
         setContent(renderSchedulePage(schedule));
-        if (noAvail) {
+        if (warnings.length > 0) {
           const container = document.getElementById('page-content');
-          const existing = container.querySelector('.warning-banner');
-          if (existing) existing.remove();
-          const banner = document.createElement('div');
-          banner.className = 'warning-banner';
-          banner.innerHTML = `<span>⚠️</span><span>${escapeHtml(noAvail.message)}</span><button onclick="this.parentElement.remove()" aria-label="Dismiss">✕</button>`;
-          container.prepend(banner);
-          showToast('Schedule generated (role-based fallback)', 'warning');
+          container.querySelectorAll('.warning-banner').forEach(b => b.remove());
+          for (const w of warnings) {
+            const banner = document.createElement('div');
+            banner.className = 'warning-banner';
+            banner.innerHTML = `<span>⚠️</span><span>${escapeHtml(w.message)}</span><button onclick="this.parentElement.remove()" aria-label="Dismiss">✕</button>`;
+            container.prepend(banner);
+          }
+          showToast(`Schedule generated (${warnings.length} warning${warnings.length === 1 ? '' : 's'})`, 'warning');
         } else {
           showToast('Schedule generated');
         }
@@ -1931,6 +1952,23 @@
     // ───────────────────────────────────────────
     let currentPayrollWeek = getCurrentWeekStart();
 
+    // Revenue category → color + label. Keep in sync with ALLOWED_CATEGORIES in dashRoutes.js.
+    const REV_CATEGORIES = {
+      lunch:     { label: 'Lunch',     color: '#F5A623' },
+      dinner:    { label: 'Dinner',    color: '#4A90E2' },
+      brunch:    { label: 'Brunch',    color: '#2D7D5A' },
+      breakfast: { label: 'Breakfast', color: '#E8C547' },
+      bar:       { label: 'Bar',       color: '#D95F2B' },
+      catering:  { label: 'Catering',  color: '#9B59B6' },
+      other:     { label: 'Other',     color: '#9A8880' },
+    };
+    const CATEGORY_ORDER = ['lunch','dinner','brunch','breakfast','bar','catering','other'];
+    function categoryColor(cat) { return REV_CATEGORIES[cat]?.color || REV_CATEGORIES.other.color; }
+    function categoryLabel(cat) { return REV_CATEGORIES[cat]?.label || 'Other'; }
+    function categorySelectOptions(selected) {
+      return CATEGORY_ORDER.map(c => `<option value="${c}" ${c === selected ? 'selected' : ''}>${REV_CATEGORIES[c].label}</option>`).join('');
+    }
+
     async function loadPayrollPage() {
       try {
         const [payroll, settings, tips, revenue] = await Promise.all([
@@ -1988,17 +2026,19 @@
         </div>
 
         <div class="card" style="margin-bottom:20px;padding:20px">
-          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">Quick add for today ${isTodayInWeek ? `<span style="font-size:12px;font-weight:400;color:var(--text-muted)">(${today})</span>` : `<span style="font-size:12px;font-weight:400;color:var(--text-muted)">(disabled — not viewing this week)</span>`}</h3>
+          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">Quick add <span style="font-size:12px;font-weight:400;color:var(--text-muted)">— pick any day + category</span></h3>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <div>
-              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Revenue ($)</label>
-              <div style="display:flex;gap:8px">
-                <input id="quick-revenue" type="number" min="0" step="0.01" placeholder="0.00" ${isTodayInWeek ? '' : 'disabled'} style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
-                <button class="btn-primary" onclick="quickAddRevenue()" ${isTodayInWeek ? '' : 'disabled'}>Add</button>
+              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Revenue</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="quick-rev-date" type="date" value="${today}" max="${weekEnd}" min="${currentPayrollWeek}" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">
+                <select id="quick-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">${categorySelectOptions(isTodayInWeek ? (new Date().getHours() < 15 ? 'lunch' : 'dinner') : 'dinner')}</select>
+                <input id="quick-rev-amount" type="number" min="0" step="0.01" placeholder="0.00" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+                <button class="btn-primary" onclick="quickAddRevenue()">Add</button>
               </div>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Tips ($)</label>
+              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Tips (today only)</label>
               <div style="display:flex;gap:8px">
                 <input id="quick-tips" type="number" min="0" step="0.01" placeholder="0.00" ${isTodayInWeek ? '' : 'disabled'} style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
                 <button class="btn-primary" onclick="quickAddTips()" ${isTodayInWeek ? '' : 'disabled'}>Add</button>
@@ -2022,18 +2062,22 @@
     }
 
     async function quickAddRevenue() {
-      const el = document.getElementById('quick-revenue');
-      const amount = parseFloat(el?.value);
+      const dateEl = document.getElementById('quick-rev-date');
+      const amtEl = document.getElementById('quick-rev-amount');
+      const catEl = document.getElementById('quick-rev-cat');
+      const date = dateEl?.value;
+      const amount = parseFloat(amtEl?.value);
+      const category = catEl?.value || 'other';
+      if (!date) { showToast('Pick a date', 'error'); return; }
       if (!Number.isFinite(amount) || amount <= 0) { showToast('Enter an amount greater than zero', 'error'); return; }
-      const date = formatDate(new Date());
       try {
-        await api('/api/revenue/daily', 'POST', { date, amount });
-        if (el) el.value = '';
+        await api('/api/revenue/daily', 'POST', { date, amount, category });
+        if (amtEl) amtEl.value = '';
         await loadPayrollPage();
-        showToast(`$${amount.toFixed(2)} revenue added for today`);
+        showToast(`$${amount.toFixed(2)} ${categoryLabel(category)} added for ${date}`);
       } catch (e) {
-        const msg = /does not exist/i.test(e.message || '')
-          ? 'Daily revenue table not found — run the daily_revenue migration SQL in Supabase'
+        const msg = /does not exist|column.*does not exist/i.test(e.message || '')
+          ? 'daily_revenue table/columns missing — run the migration SQL in Supabase'
           : (e.message || 'Failed to add revenue');
         showToast(msg, 'error');
       }
@@ -2072,8 +2116,9 @@
         const day = days[date];
         const entries = (day.entries || []).map(e => `
           <div class="revenue-entry">
+            <span class="category-dot" style="background:${categoryColor(e.category)}" title="${categoryLabel(e.category)}"></span>
             <span class="entry-amount">$${Number(e.amount).toFixed(2)}</span>
-            <span class="entry-note">${escapeHtml(e.note || '')}</span>
+            <span class="entry-note">${escapeHtml(e.note || categoryLabel(e.category))}</span>
             <button class="entry-delete" onclick="deleteDailyRevenue(${e.id})" aria-label="Delete">✕</button>
           </div>
         `).join('');
@@ -2084,6 +2129,7 @@
             <div class="day-total">$${Number(day.total).toFixed(2)}</div>
             <div class="day-entries">${entries || '<div style="font-size:11px;color:var(--text-muted)">No entries</div>'}</div>
             <div class="add-entry">
+              <select class="note-input" id="cat-${date}">${categorySelectOptions('dinner')}</select>
               <input type="number" class="revenue-input" placeholder="0.00" min="0" step="0.01" id="rev-${date}">
               <input type="text" class="note-input" placeholder="note" id="note-${date}" maxlength="80">
               <button class="add-btn" onclick="addDailyRevenue('${date}')">+ Add</button>
@@ -2092,19 +2138,37 @@
         `;
       }).join('');
 
+      // Stacked bar chart — each day's total split into colored segments by category
       const bars = dayOrder.map(date => {
-        const amount = Number(days[date].total);
-        const pct = (amount / maxAmount) * 100;
+        const dayTotal = Number(days[date].total);
+        const pct = (dayTotal / maxAmount) * 100;
+        const byCat = days[date].byCategory || {};
+        const segments = CATEGORY_ORDER
+          .filter(c => (byCat[c] || 0) > 0)
+          .map(c => {
+            const catPct = dayTotal > 0 ? (byCat[c] / dayTotal) * 100 : 0;
+            return `<div class="bar-segment" style="height:${catPct}%;background:${categoryColor(c)}" title="${categoryLabel(c)}: $${byCat[c].toFixed(2)}"></div>`;
+          }).join('');
         return `
           <div class="chart-col">
             <div class="bar-container">
-              <div class="bar-fill" style="height:${pct}%" title="$${amount.toFixed(2)}"></div>
+              <div class="bar-fill" style="height:${pct}%;background:transparent;display:flex;flex-direction:column-reverse" title="$${dayTotal.toFixed(2)}">${segments}</div>
             </div>
             <div class="bar-label">${dayLabel(date)}</div>
-            <div class="bar-amount">$${amount.toFixed(0)}</div>
+            <div class="bar-amount">$${dayTotal.toFixed(0)}</div>
           </div>
         `;
       }).join('');
+
+      // Legend showing only the categories that actually appear this week
+      const usedCats = new Set();
+      for (const d of Object.values(days)) for (const c of Object.keys(d.byCategory || {})) usedCats.add(c);
+      const legend = CATEGORY_ORDER.filter(c => usedCats.has(c)).map(c => `
+        <span class="legend-item">
+          <span class="category-dot" style="background:${categoryColor(c)}"></span>
+          ${categoryLabel(c)}
+        </span>
+      `).join('') || '<span style="color:var(--text-muted);font-size:12px">No entries yet</span>';
 
       return `
         <div class="revenue-section">
@@ -2113,7 +2177,10 @@
             <div class="week-total">Week Total: <strong>$${Number(revenue.weekTotal || 0).toFixed(2)}</strong></div>
           </div>
           <div class="revenue-grid">${grid}</div>
-          <div class="revenue-chart"><div class="chart-bars">${bars}</div></div>
+          <div class="revenue-chart">
+            <div class="chart-legend">${legend}</div>
+            <div class="chart-bars">${bars}</div>
+          </div>
         </div>
       `;
     }
@@ -2121,15 +2188,17 @@
     async function addDailyRevenue(date) {
       const amtEl = document.getElementById(`rev-${date}`);
       const noteEl = document.getElementById(`note-${date}`);
+      const catEl = document.getElementById(`cat-${date}`);
       const amount = parseFloat(amtEl?.value);
+      const category = catEl?.value || 'other';
       if (!Number.isFinite(amount) || amount <= 0) {
         showToast('Enter an amount greater than zero', 'error');
         return;
       }
       try {
-        await api('/api/revenue/daily', 'POST', { date, amount, note: noteEl?.value || undefined });
+        await api('/api/revenue/daily', 'POST', { date, amount, category, note: noteEl?.value || undefined });
         await loadPayrollPage();
-        showToast('Revenue added');
+        showToast(`$${amount.toFixed(2)} ${categoryLabel(category)} added`);
       } catch (e) { showToast(e.message, 'error'); }
     }
 

@@ -986,6 +986,8 @@ async function recalcWeeklyRevenue(db, groupId, weekStart) {
   return { total: Number(total.toFixed(2)), laborPercent: laborPct }
 }
 
+const ALLOWED_CATEGORIES = new Set(['lunch', 'dinner', 'brunch', 'breakfast', 'bar', 'catering', 'other'])
+
 // GET /api/revenue/daily?weekStart=YYYY-MM-DD
 router.get('/revenue/daily', async (req, res) => {
   try {
@@ -996,7 +998,7 @@ router.get('/revenue/daily', async (req, res) => {
 
     const { data, error } = await db
       .from('daily_revenue')
-      .select('id, entry_date, amount, note, created_at')
+      .select('id, entry_date, amount, note, category, created_at')
       .eq('group_id', groupId)
       .gte('entry_date', weekStart)
       .lte('entry_date', weekEnd)
@@ -1007,16 +1009,20 @@ router.get('/revenue/daily', async (req, res) => {
     const days = {}
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i)
-      days[d] = { total: 0, entries: [] }
+      days[d] = { total: 0, entries: [], byCategory: {} }
     }
     for (const r of data ?? []) {
       const key = String(r.entry_date).slice(0, 10)
-      if (!days[key]) days[key] = { total: 0, entries: [] }
-      days[key].total = Number((Number(days[key].total) + Number(r.amount)).toFixed(2))
+      if (!days[key]) days[key] = { total: 0, entries: [], byCategory: {} }
+      const amt = Number(r.amount)
+      const cat = r.category || 'other'
+      days[key].total = Number((Number(days[key].total) + amt).toFixed(2))
+      days[key].byCategory[cat] = Number(((days[key].byCategory[cat] || 0) + amt).toFixed(2))
       days[key].entries.push({
         id: r.id,
-        amount: Number(r.amount),
+        amount: amt,
         note: r.note,
+        category: cat,
         created_at: r.created_at,
       })
     }
@@ -1029,11 +1035,11 @@ router.get('/revenue/daily', async (req, res) => {
   }
 })
 
-// POST /api/revenue/daily  body: { date, amount, note? }
+// POST /api/revenue/daily  body: { date, amount, note?, category? }
 router.post('/revenue/daily', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const { date, amount, note } = req.body ?? {}
+    const { date, amount, note, category } = req.body ?? {}
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
     }
@@ -1041,11 +1047,13 @@ router.post('/revenue/daily', async (req, res) => {
     if (!Number.isFinite(amt) || amt <= 0) {
       return res.status(400).json({ error: 'amount must be a positive number' })
     }
+    let cat = (category || 'other').toLowerCase()
+    if (!ALLOWED_CATEGORIES.has(cat)) cat = 'other'
     const db = supabase()
 
     const { data: inserted, error } = await db
       .from('daily_revenue')
-      .insert({ group_id: groupId, entry_date: date, amount: amt, note: note || null })
+      .insert({ group_id: groupId, entry_date: date, amount: amt, note: note || null, category: cat })
       .select()
       .single()
     if (error) throw error

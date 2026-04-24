@@ -538,3 +538,9 @@ CREATE TABLE IF NOT EXISTS daily_revenue (
 
 CREATE INDEX IF NOT EXISTS idx_daily_revenue_group_date
   ON daily_revenue(group_id, entry_date);
+
+-- ═══════════════════════════════════════════════════════════════
+-- DAILY REVENUE — add category column (run after daily_revenue exists)
+-- ═══════════════════════════════════════════════════════════════
+
+ALTER TABLE daily_revenue ADD COLUMN IF NOT EXISTS category TEXT;
