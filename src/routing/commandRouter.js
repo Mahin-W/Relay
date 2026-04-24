@@ -1,7 +1,7 @@
 import { getSetupSession, getBotAdmins, addBotAdmin, removeBotAdmin } from '../setup/setupDb.js'
 import { startAvailabilityCollection } from '../availability/collectAvailability.js'
 import { resetAvailabilityForGroup, getPublishedSchedule } from '../availability/availabilityDb.js'
-import { generateWeeklySchedule, formatScheduleMessage, getNextWeekStart, formatWeekLabel } from '../schedule/generateSchedule.js'
+import { generateWeeklySchedule, formatScheduleMessage, formatWarningsSection, getNextWeekStart, formatWeekLabel } from '../schedule/generateSchedule.js'
 import { getManagerGroup } from '../setup/setupDb.js'
 import { logger } from '../logger.js'
 import { formatClopeningWarning } from '../schedule/clopen.js'
@@ -199,12 +199,13 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
         logger.error(`Pairing optimization failed (non-fatal): ${pairingErr.message}`)
       }
 
-      const hasWarnings = clopeningWarn || hoursWarn || rulesSection
+      const setupWarnings = formatWarningsSection(schedule.warnings ?? [])
+      const hasWarnings = clopeningWarn || hoursWarn || rulesSection || setupWarnings
       const reviewPrompt = hasWarnings
         ? `Reply *approve anyway* to publish despite warnings, *approve* if you've fixed them, or *regenerate* for a different arrangement.`
         : `Reply *approve* to publish, or *regenerate* for a different arrangement.`
       await bot.sendMessage(managerGroup.dm_chat_id,
-        `📋 *Draft Schedule Ready*\n\n${formatted}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}${demandSection}${contextSection}${staffingSection}${availRiskSection}${calloutSection}${pairingSection}\n${reviewPrompt}`,
+        `📋 *Draft Schedule Ready*\n\n${formatted}${setupWarnings}${clopeningWarn}${hoursWarn}${budgetSection}${rulesSection}${prefsSection}${alertsSection}${demandSection}${contextSection}${staffingSection}${availRiskSection}${calloutSection}${pairingSection}\n${reviewPrompt}`,
         { parse_mode: 'Markdown' })
       await bot.sendMessage(msg.chat.id, `📋 Draft schedule sent to the manager for review.`)
     } catch (err) {

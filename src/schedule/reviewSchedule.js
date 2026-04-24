@@ -1,7 +1,7 @@
 import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from '../parsers/groq.js'
 import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup, getOvertimeSettings } from '../setup/setupDb.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
-import { generateWeeklySchedule, formatScheduleMessage, formatWeekLabel } from './generateSchedule.js'
+import { generateWeeklySchedule, formatScheduleMessage, formatWarningsSection, formatWeekLabel } from './generateSchedule.js'
 import { getGroupMembersWithDm } from '../db.js'
 import { logger } from '../logger.js'
 import { applyEdit } from './scheduleEditor.js'
@@ -29,7 +29,8 @@ export async function handleManagerReview(bot, msg, schedule, managerGroup) {
     try {
       const newSchedule = await generateWeeklySchedule(schedule.group_id, schedule.week_start)
       const formatted = formatScheduleMessage(newSchedule.assignments, newSchedule.gaps, newSchedule.week_start)
-      await bot.sendMessage(msg.chat.id, `📋 *New Draft Schedule*\n\n${formatted}\n\n${REVIEW_PROMPT}`, { parse_mode: 'Markdown' })
+      const warnings = formatWarningsSection(newSchedule.warnings ?? [])
+      await bot.sendMessage(msg.chat.id, `📋 *New Draft Schedule*\n\n${formatted}${warnings}\n\n${REVIEW_PROMPT}`, { parse_mode: 'Markdown' })
     } catch (err) {
       logger.error(`Regeneration failed: ${err.message}`)
       await bot.sendMessage(msg.chat.id, `Something went wrong — try again.`)

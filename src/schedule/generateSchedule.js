@@ -491,6 +491,14 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
   try { return await _promise } finally { _inProgress.delete(_key) }
 }
 
+// Formats a warnings[] array from generateWeeklySchedule into Telegram markdown.
+// Returns '' if there are no warnings. Each warning becomes a single bullet.
+export function formatWarningsSection(warnings) {
+  if (!warnings || warnings.length === 0) return ''
+  const lines = warnings.map(w => `• ${w.message}`).join('\n')
+  return `\n\n⚠️ *Setup warnings:*\n${lines}`
+}
+
 // Formats a schedule into Telegram markdown.
 // Works on raw assignment/gap arrays (from either live generation or JSONB DB read).
 export function formatScheduleMessage(assignments, gaps, weekStart) {
