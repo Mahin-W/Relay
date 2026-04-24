@@ -521,3 +521,20 @@ CREATE TABLE IF NOT EXISTS schedule_quality_scores (
   avg_fill_minutes INTEGER,
   UNIQUE(group_id, week_start)
 );
+
+-- ═══════════════════════════════════════════════════════════════
+-- DAILY REVENUE (granular per-day entries; weekly_revenue is a cache)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS daily_revenue (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  entry_date DATE NOT NULL,
+  amount NUMERIC(10,2) NOT NULL CHECK (amount >= 0),
+  note TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_revenue_group_date
+  ON daily_revenue(group_id, entry_date);

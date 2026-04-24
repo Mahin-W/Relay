@@ -45,6 +45,30 @@ export function formatWeekLabel(weekStart) {
   return `${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`
 }
 
+/**
+ * Build synthetic availability when no real availability was submitted.
+ * Returns one record per staff with a Telegram userId, flagged available_all.
+ * Staff without a userId are handled by the useFallback short-circuit in
+ * isAvailable() — they become eligible based on role match alone.
+ */
+function buildFallbackAvailability(resolvedStaff, weekStart, groupId) {
+  const records = []
+  for (const s of resolvedStaff) {
+    if (!s.userId) continue
+    records.push({
+      user_id: s.userId,
+      group_id: groupId,
+      week_start: weekStart,
+      available_shift_ids: [],
+      available_all: true,
+      unavailable: false,
+      raw_response: null,
+      collected_at: null,
+    })
+  }
+  return records
+}
+
 // Core scheduling algorithm.
 // Returns { assignments, gaps, weekStart, scheduleId }
 // Never throws — gaps are surfaced, never silently dropped.
@@ -59,6 +83,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
   const _promise = (async () => {
   try {
     let shifts, resolvedStaff, availabilityRecords, requirements, maxShiftsPerDay = 0, mockRules = null
+    let useFallback = false
 
     if (mockData) {
       // ── Test path: use provided data directly ─────────────────────────────
@@ -122,6 +147,14 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       maxShiftsPerDay = setupSession?.setup_data?.max_shifts_per_day ?? 0
     }
 
+    // ── Fallback: no availability submitted → synthesize from staff × role ────
+    // In this mode isAvailable() short-circuits to true, so the greedy loop
+    // picks candidates purely by role match + business rules.
+    if (availabilityRecords.length === 0 && resolvedStaff.length > 0) {
+      availabilityRecords = buildFallbackAvailability(resolvedStaff, weekStart, groupId)
+      useFallback = true
+    }
+
     // ── Availability lookup ───────────────────────────────────────────────────
     const availMap = {}
     for (const av of availabilityRecords) {
@@ -129,6 +162,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     }
 
     function isAvailable(userId, shiftId) {
+      if (useFallback) return true // role-match-only mode, ignore availability
       if (!userId) return false
       const av = availMap[userId]
       if (!av) return false // no response = not available
@@ -418,10 +452,18 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       ? (mockData.publishedCount != null ? mockData.publishedCount > 0 : false)
       : false  // live mode: caller should pass publishedCount via options if needed
 
-    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed, alreadyPublished }
+    const warnings = []
+    if (useFallback) {
+      warnings.push({
+        type: 'no_availability',
+        message: 'No availability was submitted for this week. Schedule generated from role matching only — please verify before publishing.',
+      })
+    }
+
+    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed, alreadyPublished, warnings }
   } catch (err) {
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
-    return { assignments: [], gaps: [], weekStart, scheduleId: null }
+    return { assignments: [], gaps: [], weekStart, scheduleId: null, warnings: [] }
   }
   })()
   _inProgress.set(_key, _promise)

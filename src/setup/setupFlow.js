@@ -1,4 +1,4 @@
-import { createSetupSession } from './setupDb.js'
+import { createSetupSession, getSetupSession, clearGroupSetupData } from './setupDb.js'
 import { logger } from '../logger.js'
 import { handleWelcomeStep, handleAddStaffStep, resetStaffStep } from './staffSteps.js'
 import { handlePhoneStep } from './phoneSteps.js'
@@ -20,15 +20,28 @@ export async function startSetupDM(bot, msg, groupId) {
     logger.error(`Could not fetch group info for ${groupId}: ${err.message}`)
   }
 
+  // If a previous setup was COMPLETED, wipe its config data so re-setup starts clean.
+  // Mid-wizard sessions (setup_complete=false) are preserved for resumption.
+  // Historical data (payroll, time_entries, coverage, tips) is never touched.
+  const existing = await getSetupSession(groupId)
+  const wasCompleted = existing?.setup_complete === true
+  if (wasCompleted) {
+    await clearGroupSetupData(groupId)
+  }
+
   await createSetupSession(groupId, groupName, managerId, dmChatId)
 
+  const resetNote = wasCompleted
+    ? `\n_(Previous setup cleared — payroll and time clock history preserved.)_\n`
+    : ''
+
   await bot.sendMessage(dmChatId,
-    `👋 Hey ${managerName}! Let's set up Relay for *${groupName}*.\n\n` +
+    `👋 Hey ${managerName}! Let's set up Relay for *${groupName}*.\n${resetNote}\n` +
     `First — what's your restaurant called?\n` +
     `_(Press send to use *"${groupName}"*)_`,
     { parse_mode: 'Markdown' })
 
-  logger.bot(`Setup DM started for group ${groupId} (${groupName}) by ${managerName}`)
+  logger.bot(`Setup DM started for group ${groupId} (${groupName}) by ${managerName}${wasCompleted ? ' — data cleared' : ''}`)
 }
 
 const RESET_RE = /^(reset|restart|clear|start over|redo)$/i

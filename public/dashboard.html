@@ -917,6 +917,247 @@
       box-sizing: border-box;
       font-family: inherit;
     }
+
+    /* ── Dark mode palette ── */
+    :root.dark {
+      --bg: #141218;
+      --surface: #1E1B22;
+      --surface-alt: #2A242F;
+      --surface-border: #3A3240;
+      --text: #EDE7E0;
+      --text-secondary: #BFB5AA;
+      --text-muted: #7A6F68;
+      --accent: #F07A3F;
+      --accent-hover: #FF9258;
+      --accent-light: #3A2820;
+      --success: #4FB386;
+      --success-light: #1C3028;
+      --sidebar-bg: #0E0C10;
+    }
+    :root.dark body { background: var(--bg); color: var(--text); }
+
+    /* ── Warning banner (schedule generate no-availability) ── */
+    .warning-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: #FEF3C7; border: 1px solid #F59E0B;
+      border-radius: 8px; padding: 12px 16px;
+      margin-bottom: 16px; font-size: 14px; color: #92400E;
+    }
+    :root.dark .warning-banner { background: #3A2A10; color: #FCD34D; border-color: #92400E; }
+    .warning-banner button {
+      margin-left: auto; background: none; border: none;
+      cursor: pointer; color: inherit; font-size: 16px;
+    }
+
+    /* ── Daily revenue grid ── */
+    .revenue-section { margin-top: 24px; }
+    .revenue-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 16px;
+    }
+    .week-total { font-weight: 700; font-size: 18px; color: var(--text); }
+    .revenue-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
+    }
+    .revenue-day {
+      background: var(--surface); border: 1px solid var(--surface-border);
+      border-radius: 8px; padding: 12px; min-height: 170px;
+      display: flex; flex-direction: column;
+    }
+    .day-label {
+      font-size: 11px; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .day-date { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+    .day-total { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .day-entries { flex: 1; overflow-y: auto; max-height: 110px; margin-bottom: 8px; }
+    .revenue-entry {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 12px; padding: 2px 0; border-bottom: 1px solid var(--surface-alt);
+    }
+    .entry-amount { font-weight: 600; color: var(--text); }
+    .entry-note {
+      color: var(--text-muted); flex: 1; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; font-size: 11px;
+    }
+    .entry-delete {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; padding: 0 2px; font-size: 11px;
+    }
+    .entry-delete:hover { color: #C0392B; }
+    .add-entry { margin-top: auto; }
+    .revenue-input, .note-input {
+      width: 100%; padding: 4px 6px;
+      border: 1px solid var(--surface-border); border-radius: 4px;
+      font-size: 12px; margin-bottom: 4px; background: var(--bg); color: var(--text);
+      font-family: inherit;
+    }
+    .note-input { font-size: 11px; color: var(--text); }
+    .add-btn {
+      width: 100%; padding: 4px;
+      background: var(--accent-light); border: 1px solid var(--accent);
+      border-radius: 4px; color: var(--accent);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      font-family: inherit;
+    }
+    .add-btn:hover { background: var(--accent); color: white; }
+
+    /* ── Revenue bar chart ── */
+    .revenue-chart { margin-top: 24px; padding: 16px 0; }
+    .chart-bars {
+      display: flex; gap: 8px; align-items: flex-end;
+      height: 140px; padding-bottom: 4px;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .chart-col {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; height: 100%;
+    }
+    .bar-container { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+    .bar-fill {
+      width: 100%; border-radius: 4px 4px 0 0;
+      min-height: 2px; transition: height 0.3s ease;
+      background: var(--accent);
+    }
+    .bar-label { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+    .bar-amount { font-size: 10px; color: var(--text-secondary); font-weight: 600; }
+
+    /* ── Responsive revenue grid ── */
+    @media (max-width: 900px) {
+      .revenue-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .revenue-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── Time clock table ── */
+    .timeclock-table { width: 100%; border-collapse: collapse; }
+    .timeclock-table th {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted);
+      padding: 8px 12px; text-align: left;
+      border-bottom: 2px solid var(--surface-border); background: var(--surface-alt);
+    }
+    .timeclock-table td {
+      padding: 12px; border-bottom: 1px solid var(--surface-border);
+      font-size: 14px; vertical-align: middle; color: var(--text);
+    }
+    .timeclock-table tr.expandable { cursor: pointer; }
+    .timeclock-table tr.expandable:hover td { background: var(--surface-alt); }
+    .row-warning td { border-left: 3px solid #F59E0B; }
+    .clock-entries-row td { background: var(--surface-alt); padding: 12px 24px; }
+    .clock-entries-row.hidden { display: none; }
+    .clock-entry {
+      display: flex; gap: 16px; align-items: center;
+      padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--surface-border);
+      color: var(--text-secondary);
+    }
+    .clock-entry:last-child { border-bottom: none; }
+    .text-warning { color: #D95F2B; font-weight: 600; }
+    .text-success { color: var(--success); font-weight: 600; }
+
+    /* ── Alert banner ── */
+    .alert-banner {
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .alert-banner.orange { background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E; }
+    :root.dark .alert-banner.orange { background: #3A2A10; color: #FCD34D; }
+    .alert-row { display: flex; align-items: center; gap: 8px; }
+    .alert-action {
+      margin-left: auto; padding: 4px 12px;
+      background: white; color: #92400E;
+      border: 1px solid #F59E0B; border-radius: 6px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      font-family: inherit;
+    }
+    .alert-action:hover { background: #FBF1B9; }
+
+    /* ── Event log ── */
+    .filter-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .filter-tab {
+      padding: 6px 16px; border-radius: 20px;
+      border: 1px solid var(--surface-border);
+      background: var(--surface); font-size: 13px;
+      cursor: pointer; color: var(--text-secondary);
+      font-family: inherit;
+    }
+    .filter-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+    .event-card {
+      display: flex; gap: 16px; align-items: flex-start;
+      background: var(--surface); border: 1px solid var(--surface-border);
+      border-radius: 10px; padding: 16px; margin-bottom: 12px;
+    }
+    .event-card.coverage  { border-left: 3px solid #D95F2B; }
+    .event-card.trade     { border-left: 3px solid #2D7D5A; }
+    .event-card.overtime  { border-left: 3px solid #F59E0B; }
+    .event-icon { font-size: 20px; flex-shrink: 0; }
+    .event-body { flex: 1; }
+    .event-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .event-meta { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .event-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge.green  { background: var(--success-light); color: var(--success); }
+    .badge.red    { background: #FEE2E2; color: #991B1B; }
+    .badge.orange { background: #FEF3C7; color: #92400E; }
+    .badge.grey   { background: var(--surface-alt); color: var(--text-muted); }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center; padding: 48px 24px;
+      background: var(--surface); border: 1px solid var(--surface-border);
+      border-radius: 12px; color: var(--text-secondary);
+    }
+    .empty-state .empty-icon { font-size: 40px; margin-bottom: 8px; }
+    .empty-state h3 { margin-bottom: 4px; color: var(--text); }
+
+    /* ── Settings sections ── */
+    .settings-section {
+      background: var(--surface); border: 1px solid var(--surface-border);
+      border-radius: 10px; padding: 20px; margin-bottom: 16px;
+    }
+    .settings-section-title {
+      font-size: 13px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--text-muted); margin-bottom: 16px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--surface-border);
+    }
+    .setting-row {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 12px 0;
+      border-bottom: 1px solid var(--surface-alt); gap: 16px;
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: 14px; font-weight: 500; color: var(--text); }
+    .setting-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .setting-input {
+      padding: 6px 10px; border: 1px solid var(--surface-border);
+      border-radius: 6px; font-size: 14px; width: 180px;
+      background: var(--bg); color: var(--text); font-family: inherit;
+    }
+    .setting-save-btn {
+      margin-top: 12px; padding: 8px 20px;
+      background: var(--accent); color: white;
+      border: none; border-radius: 6px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: inherit;
+    }
+    .setting-save-btn:hover { background: var(--accent-hover); }
+    .setting-save-btn.danger { background: #C0392B; }
+    .setting-save-btn.ghost { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent); }
+    .setting-save-btn.ghost:hover { background: var(--accent); color: white; }
+    .toggle {
+      width: 44px; height: 24px;
+      background: var(--surface-border); border-radius: 12px;
+      position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+    }
+    .toggle.on { background: var(--success); }
+    .toggle::after {
+      content: ''; width: 18px; height: 18px;
+      background: white; border-radius: 9px;
+      position: absolute; top: 3px; left: 3px; transition: left 0.2s;
+    }
+    .toggle.on::after { left: 23px; }
   </style>
 </head>
 <body>
@@ -958,6 +1199,10 @@
         <a class="nav-item" data-page="timeclock" onclick="navigateTo('timeclock')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span class="nav-item-label">Time Clock</span>
+        </a>
+        <a class="nav-item" data-page="eventlog" onclick="navigateTo('eventlog')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="nav-item-label">Event Log</span>
         </a>
         <a class="nav-item" data-page="settings" onclick="navigateTo('settings')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1006,6 +1251,7 @@
       staff: 'Staff',
       payroll: 'Payroll',
       timeclock: 'Time Clock',
+      eventlog: 'Event Log',
       settings: 'Settings'
     };
 
@@ -1436,9 +1682,23 @@
       const originalLabel = btn.innerHTML;
       btn.textContent = 'Generating...';
       try {
-        await api('/api/schedule/generate', 'POST', { weekStart });
-        showToast('Schedule generated! Reloading...');
-        loadPage('schedule');
+        const result = await api('/api/schedule/generate', 'POST', { weekStart });
+        const noAvail = (result && result.warnings || []).find(w => w.type === 'no_availability');
+        // Reload the schedule view first so the banner has a container to prepend into
+        const schedule = await loadScheduleData(currentScheduleWeek);
+        setContent(renderSchedulePage(schedule));
+        if (noAvail) {
+          const container = document.getElementById('page-content');
+          const existing = container.querySelector('.warning-banner');
+          if (existing) existing.remove();
+          const banner = document.createElement('div');
+          banner.className = 'warning-banner';
+          banner.innerHTML = `<span>⚠️</span><span>${escapeHtml(noAvail.message)}</span><button onclick="this.parentElement.remove()" aria-label="Dismiss">✕</button>`;
+          container.prepend(banner);
+          showToast('Schedule generated (role-based fallback)', 'warning');
+        } else {
+          showToast('Schedule generated');
+        }
       } catch (e) {
         showToast(e.message, 'error');
         btn.disabled = false;
@@ -1536,6 +1796,11 @@
         case 'timeclock':
           showSkeleton();
           loadTimeClockPage();
+          break;
+
+        case 'eventlog':
+          showSkeleton();
+          loadEventLogPage();
           break;
 
         case 'settings':
@@ -1668,19 +1933,20 @@
 
     async function loadPayrollPage() {
       try {
-        const [payroll, settings, tips] = await Promise.all([
+        const [payroll, settings, tips, revenue] = await Promise.all([
           api(`/api/payroll?week=${currentPayrollWeek}`),
           api(`/api/settings`),
-          api(`/api/tips?weeks=1`)
+          api(`/api/tips?weeks=1`),
+          api(`/api/revenue/daily?weekStart=${currentPayrollWeek}`)
         ]);
-        renderPayrollPage(payroll || [], settings || {}, tips || []);
+        renderPayrollPage(payroll || [], settings || {}, tips || [], revenue || {days:{},weekTotal:0});
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('payroll')");
       }
     }
 
-    function renderPayrollPage(payroll, settings, tips) {
+    function renderPayrollPage(payroll, settings, tips, revenue) {
       const totalPay = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
       const totalHrs = payroll.reduce((s, r) => s + (r.total_hours || 0), 0);
       const weekTips = tips.find(t => t.shift_date >= currentPayrollWeek) || null;
@@ -1693,71 +1959,151 @@
           <td>${formatCurrency(r.total_gross_pay || 0)}</td>
         </tr>`).join('');
 
+      // Disable the Next arrow when we're viewing the current week (don't navigate past)
+      const thisWeek = getCurrentWeekStart();
+      const atCurrent = currentPayrollWeek >= thisWeek;
+
       setContent(`
         <div class="page-header">
           <h2 class="page-title">Payroll</h2>
           <div style="display:flex;gap:8px;align-items:center">
             <button class="btn-small" onclick="changePayrollWeek(-7)">&larr; Prev</button>
-            <span style="font-size:14px;font-weight:600;color:#4A3F35">Week of ${formatWeekRange(currentPayrollWeek)}</span>
-            <button class="btn-small" onclick="changePayrollWeek(7)">Next &rarr;</button>
+            <span style="font-size:14px;font-weight:600;color:var(--text-secondary)">Week of ${formatWeekRange(currentPayrollWeek)}</span>
+            <button class="btn-small" onclick="changePayrollWeek(7)" ${atCurrent ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>Next &rarr;</button>
             <a href="/api/payroll/spreadsheet?week=${currentPayrollWeek}" download class="btn-small">📥 Export CSV</a>
           </div>
         </div>
 
-        <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(2,1fr)">
+        <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(3,1fr)">
           <div class="stat-card"><div class="stat-label">Total Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
           <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
+          <div class="stat-card"><div class="stat-label">Week Revenue</div><div class="stat-value">${formatCurrency(revenue.weekTotal || 0)}</div></div>
         </div>
 
-        <div class="card" style="margin-bottom:20px;padding:20px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-            <h3 style="margin:0;font-size:16px;font-weight:700">Log Revenue</h3>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span style="color:#4A3F35;font-size:14px">$</span>
-            <input id="revenue-input" type="number" placeholder="0.00" style="padding:8px 12px;border:1px solid #E8DFD0;border-radius:6px;font-size:14px;width:160px;background:#FAF7F2;font-family:inherit">
-            <button class="btn-primary" onclick="logRevenue()">Log Revenue</button>
-          </div>
-        </div>
+        ${renderRevenueSection(revenue)}
 
-        <div class="card">
+        <div class="card" style="margin-top:20px">
           <table class="data-table">
             <thead><tr><th>Staff</th><th>Role</th><th>Hours</th><th>Gross Pay</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#9A8880">No payroll data for this week</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No payroll data for this week</td></tr>'}</tbody>
           </table>
-          ${payroll.length ? `<div style="padding:12px;border-top:2px solid #E8DFD0;display:flex;justify-content:flex-end;gap:32px;font-weight:700">
+          ${payroll.length ? `<div style="padding:12px;border-top:2px solid var(--surface-border);display:flex;justify-content:flex-end;gap:32px;font-weight:700;color:var(--text)">
             <span>Total: ${totalHrs.toFixed(1)}h</span>
             <span>${formatCurrency(totalPay)}</span>
           </div>` : ''}
         </div>
 
         <div class="card" style="margin-top:20px;padding:20px">
-          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Tips This Week</h3>
+          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)">Tips This Week</h3>
           ${weekTips
-            ? `<p style="color:#4A3F35">$${weekTips.total_tips} logged on ${weekTips.shift_date}</p>`
+            ? `<p style="color:var(--text-secondary)">$${weekTips.total_tips} logged on ${weekTips.shift_date}</p>`
             : `<div style="display:flex;gap:8px;align-items:center">
-                <span style="color:#4A3F35;font-size:14px">$</span>
-                <input id="tips-input" type="number" placeholder="0.00" style="padding:8px 12px;border:1px solid #E8DFD0;border-radius:6px;font-size:14px;width:160px;background:#FAF7F2;font-family:inherit">
+                <span style="color:var(--text-secondary);font-size:14px">$</span>
+                <input id="tips-input" type="number" placeholder="0.00" style="padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;width:160px;background:var(--bg);color:var(--text);font-family:inherit">
                 <button class="btn-primary" onclick="logTips()">Log Tips</button>
               </div>`}
         </div>`);
     }
 
+    function renderRevenueSection(revenue) {
+      const days = revenue.days || {};
+      const dayOrder = Object.keys(days).sort();
+      const totals = dayOrder.map(d => Number(days[d].total || 0));
+      const maxAmount = Math.max(...totals, 1);
+
+      const dayLabel = dateStr => {
+        const d = parseDate(dateStr);
+        return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d.getDay() === 0 ? 6 : d.getDay() - 1];
+      };
+      const dayDate = dateStr => {
+        const d = parseDate(dateStr);
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return `${months[d.getMonth()]} ${d.getDate()}`;
+      };
+
+      const grid = dayOrder.map(date => {
+        const day = days[date];
+        const entries = (day.entries || []).map(e => `
+          <div class="revenue-entry">
+            <span class="entry-amount">$${Number(e.amount).toFixed(2)}</span>
+            <span class="entry-note">${escapeHtml(e.note || '')}</span>
+            <button class="entry-delete" onclick="deleteDailyRevenue(${e.id})" aria-label="Delete">✕</button>
+          </div>
+        `).join('');
+        return `
+          <div class="revenue-day">
+            <div class="day-label">${dayLabel(date)}</div>
+            <div class="day-date">${dayDate(date)}</div>
+            <div class="day-total">$${Number(day.total).toFixed(2)}</div>
+            <div class="day-entries">${entries || '<div style="font-size:11px;color:var(--text-muted)">No entries</div>'}</div>
+            <div class="add-entry">
+              <input type="number" class="revenue-input" placeholder="0.00" min="0" step="0.01" id="rev-${date}">
+              <input type="text" class="note-input" placeholder="note" id="note-${date}" maxlength="80">
+              <button class="add-btn" onclick="addDailyRevenue('${date}')">+ Add</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const bars = dayOrder.map(date => {
+        const amount = Number(days[date].total);
+        const pct = (amount / maxAmount) * 100;
+        return `
+          <div class="chart-col">
+            <div class="bar-container">
+              <div class="bar-fill" style="height:${pct}%" title="$${amount.toFixed(2)}"></div>
+            </div>
+            <div class="bar-label">${dayLabel(date)}</div>
+            <div class="bar-amount">$${amount.toFixed(0)}</div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="revenue-section">
+          <div class="revenue-header">
+            <h3 style="margin:0;font-size:16px;color:var(--text)">Daily Revenue</h3>
+            <div class="week-total">Week Total: <strong>$${Number(revenue.weekTotal || 0).toFixed(2)}</strong></div>
+          </div>
+          <div class="revenue-grid">${grid}</div>
+          <div class="revenue-chart"><div class="chart-bars">${bars}</div></div>
+        </div>
+      `;
+    }
+
+    async function addDailyRevenue(date) {
+      const amtEl = document.getElementById(`rev-${date}`);
+      const noteEl = document.getElementById(`note-${date}`);
+      const amount = parseFloat(amtEl?.value);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        showToast('Enter an amount greater than zero', 'error');
+        return;
+      }
+      try {
+        await api('/api/revenue/daily', 'POST', { date, amount, note: noteEl?.value || undefined });
+        await loadPayrollPage();
+        showToast('Revenue added');
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function deleteDailyRevenue(id) {
+      showModal('Delete revenue entry?', `<p style="color:var(--text-secondary)">This can't be undone.</p>`, async () => {
+        try {
+          await api(`/api/revenue/daily/${id}`, 'DELETE');
+          await loadPayrollPage();
+          showToast('Entry removed');
+        } catch (e) { showToast(e.message, 'error'); }
+      }, 'Delete');
+    }
+
     function changePayrollWeek(days) {
       const d = parseDate(currentPayrollWeek);
       d.setDate(d.getDate() + days);
-      currentPayrollWeek = formatDate(d);
+      const next = formatDate(d);
+      // Don't allow navigating past the current week (future planning not meaningful for payroll history)
+      if (days > 0 && next > getCurrentWeekStart()) return;
+      currentPayrollWeek = next;
       loadPayrollPage();
-    }
-
-    async function logRevenue() {
-      const val = parseFloat(document.getElementById('revenue-input')?.value);
-      if (!val || val <= 0) { showToast('Enter a valid revenue amount', 'error'); return; }
-      try {
-        const r = await api('/api/payroll/revenue', 'POST', { weekStart: currentPayrollWeek, revenue: val });
-        showToast(`Revenue logged. Labor: ${r && r.laborPercent != null ? r.laborPercent : '?'}%`);
-        loadPayrollPage();
-      } catch (e) { showToast(e.message, 'error'); }
     }
 
     async function logTips() {
@@ -1775,85 +2121,222 @@
     // ───────────────────────────────────────────
     async function loadTimeClockPage() {
       try {
-        const [live, entries] = await Promise.all([
-          api('/api/timeclock/live'),
-          api(`/api/timeclock?week=${getCurrentWeekStart()}`)
-        ]);
-        renderTimeClockPage(live || [], entries || []);
+        const data = await api(`/api/timeclock/weekly?weekStart=${currentScheduleWeek}`);
+        renderTimeClockPage(data || { rows: [] });
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('timeclock')");
       }
     }
 
-    function renderTimeClockPage(live, entries) {
-      const liveCards = live.map(e => `
-        <div class="live-card">
-          <div>
-            <div style="font-weight:700;font-size:15px">${escapeHtml(e.name)}</div>
-            <div style="color:#9A8880;font-size:12px">${escapeHtml(e.role)}</div>
-            <div style="color:#4A3F35;font-size:13px;margin-top:4px">
-              Clocked in: ${new Date(e.clock_in).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
-            </div>
-            <div style="color:#D95F2B;font-weight:600;font-size:13px">${Number(e.hoursSoFar || 0).toFixed(1)}h so far</div>
-          </div>
-          <button class="btn-small btn-danger" onclick="clockOutStaff(${e.staff_id},'${escapeJs(e.name)}')">Clock Out</button>
-        </div>`).join('');
+    function renderTimeClockPage(data) {
+      const rows = data.rows || [];
+      const missedRows = rows.filter(r => r.missedClockOuts > 0);
 
-      const entryRows = entries.map(e => `
-        <tr>
-          <td>${escapeHtml(e.name)}</td>
-          <td>${new Date(e.clock_in).toLocaleDateString()}</td>
-          <td>${new Date(e.clock_in).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
-          <td>${e.clock_out ? new Date(e.clock_out).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '<span style="color:#D95F2B">Still in</span>'}</td>
-          <td>${e.clock_out ? ((new Date(e.clock_out) - new Date(e.clock_in)) / 3600000).toFixed(1) + 'h' : '—'}</td>
-          <td><button class="btn-small" onclick="adjustClock(${e.staff_id},'${escapeJs(e.name)}',${e.id})">Adjust</button></td>
-        </tr>`).join('');
+      const alert = missedRows.length > 0 ? `
+        <div class="alert-banner orange">
+          <div class="alert-row"><strong>⚠️ ${missedRows.length} possible missed clock-out${missedRows.length === 1 ? '' : 's'}</strong></div>
+          ${missedRows.map(r => `
+            <div class="alert-row">
+              <span>${escapeHtml(r.staffName)} — ${r.missedClockOuts} open entr${r.missedClockOuts === 1 ? 'y' : 'ies'}</span>
+              <button class="alert-action" onclick="clockOutNow(${r.staffId})">Clock out now</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const statusBadge = r => {
+        if (r.missedClockOuts > 0) return '<span class="badge red">Missing clock-out</span>';
+        if (r.variance > 4) return '<span class="badge orange">Possible overtime</span>';
+        if (r.variance < -4) return '<span class="badge grey">Under scheduled</span>';
+        return '<span class="badge green">Normal</span>';
+      };
+
+      const rowClass = r => r.missedClockOuts > 0 ? 'row-warning' : '';
+      const varianceClass = r => r.variance > 0 ? 'text-success' : (r.variance < -2 ? 'text-warning' : '');
+
+      const rowsHtml = rows.map(r => `
+        <tr class="expandable ${rowClass(r)}" onclick="document.getElementById('entries-${r.staffId}').classList.toggle('hidden')">
+          <td>${escapeHtml(r.staffName)}</td>
+          <td>${escapeHtml(r.role || '')}</td>
+          <td>${r.shiftsScheduled}</td>
+          <td>${r.hoursScheduled.toFixed(1)}h</td>
+          <td>${r.hoursClocked.toFixed(1)}h</td>
+          <td class="${varianceClass(r)}">${r.variance >= 0 ? '+' : ''}${r.variance.toFixed(1)}h</td>
+          <td>${statusBadge(r)}</td>
+        </tr>
+        <tr class="clock-entries-row hidden" id="entries-${r.staffId}">
+          <td colspan="7">
+            ${(r.entries || []).map(e => `
+              <div class="clock-entry">
+                <span>${new Date(e.clockIn).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                <span>In: ${new Date(e.clockIn).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                <span>Out: ${e.clockOut ? new Date(e.clockOut).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '<span style="color:#D95F2B">⚠️ Missing</span>'}</span>
+                <span>${e.hours.toFixed(1)}h</span>
+                ${!e.clockOut ? `<button class="alert-action" onclick="event.stopPropagation(); clockOutNow(${r.staffId})">Clock Out</button>` : ''}
+              </div>
+            `).join('') || '<div style="color:var(--text-muted);font-size:12px">No clock entries this week</div>'}
+            <button class="alert-action" style="margin-top:8px" onclick="event.stopPropagation(); addManualEntry(${r.staffId}, '${escapeJs(r.staffName)}')">+ Add Manual Entry</button>
+          </td>
+        </tr>
+      `).join('');
 
       setContent(`
         <div class="page-header">
           <h2 class="page-title">Time Clock</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-small" onclick="changeScheduleWeek(-7)">&larr; Prev</button>
+            <span style="font-size:14px;font-weight:600;color:var(--text-secondary)">Week of ${formatWeekRange(currentScheduleWeek)}</span>
+            <button class="btn-small" onclick="changeScheduleWeek(7)">Next &rarr;</button>
+          </div>
         </div>
-
-        <div class="card" style="margin-bottom:20px;padding:20px">
-          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Currently Clocked In</h3>
-          ${live.length
-            ? `<div class="live-grid">${liveCards}</div>`
-            : '<p style="color:#9A8880;font-size:14px">No one is currently clocked in.</p>'}
-        </div>
-
-        <div class="card" style="padding:20px">
-          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">This Week's Clock Log</h3>
-          <table class="data-table">
-            <thead><tr><th>Staff</th><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Hours</th><th>Actions</th></tr></thead>
-            <tbody>${entryRows || '<tr><td colspan="6" style="text-align:center;color:#9A8880">No clock entries this week</td></tr>'}</tbody>
+        ${alert}
+        <div class="card">
+          <table class="timeclock-table">
+            <thead>
+              <tr>
+                <th>Staff</th><th>Role</th><th>Shifts</th>
+                <th>Scheduled</th><th>Clocked</th><th>Variance</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No staff this week</td></tr>'}</tbody>
           </table>
-        </div>`);
+        </div>
+      `);
     }
 
-    async function clockOutStaff(staffId, name) {
+    async function clockOutNow(staffId) {
       try {
         await api('/api/timeclock/override', 'POST', { staffId, action: 'clock_out' });
-        showToast(`${name} clocked out`);
-        loadTimeClockPage();
+        await loadTimeClockPage();
+        showToast('Clocked out');
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    function adjustClock(staffId, name, entryId) {
-      showModal(`Adjust ${name}'s Clock`,
-        `<label>Clock Out Time</label>
-         <input id="m-time" type="datetime-local" />`,
-        async () => {
-          const timeVal = document.getElementById('m-time').value;
-          if (!timeVal) { showToast('Select a time', 'error'); return; }
-          try {
+    function addManualEntry(staffId, staffName) {
+      const todayStr = formatDate(new Date());
+      showModal(`Add clock entry — ${staffName}`, `
+        <label>Date</label><input type="date" id="manual-date" value="${todayStr}" />
+        <label>Clock In</label><input type="time" id="manual-in" />
+        <label>Clock Out (optional)</label><input type="time" id="manual-out" />
+      `, async () => {
+        const date = document.getElementById('manual-date').value;
+        const clockIn = document.getElementById('manual-in').value;
+        const clockOut = document.getElementById('manual-out').value;
+        if (!date || !clockIn) { showToast('Date and Clock In are required', 'error'); return; }
+        try {
+          // Use ISO timestamp combining date+time for 'adjust' override
+          const clockInIso = new Date(`${date}T${clockIn}`).toISOString();
+          await api('/api/timeclock/override', 'POST', {
+            staffId, action: 'clock_in', time: clockInIso,
+          });
+          if (clockOut) {
+            const clockOutIso = new Date(`${date}T${clockOut}`).toISOString();
             await api('/api/timeclock/override', 'POST', {
-              staffId, action: 'adjust', time: new Date(timeVal).toISOString()
+              staffId, action: 'adjust', time: clockOutIso,
             });
-            showToast('Clock entry adjusted');
-            loadTimeClockPage();
-          } catch (e) { showToast(e.message, 'error'); }
-        }, 'Save Adjustment');
+          }
+          await loadTimeClockPage();
+          showToast('Entry added');
+        } catch (e) { showToast(e.message, 'error'); }
+      }, 'Add');
+    }
+
+    // ───────────────────────────────────────────
+    // ── PAGE: EVENT LOG ──
+    // ───────────────────────────────────────────
+    let currentEventFilter = 'all';
+    let cachedEvents = [];
+
+    async function loadEventLogPage() {
+      try {
+        const data = await api(`/api/events?weekStart=${currentScheduleWeek}`);
+        cachedEvents = data?.events || [];
+        renderEventLogPage();
+      } catch (e) {
+        showToast(e.message, 'error');
+        renderErrorInline("loadPage('eventlog')");
+      }
+    }
+
+    function renderEventLogPage() {
+      const filtered = currentEventFilter === 'all'
+        ? cachedEvents
+        : cachedEvents.filter(e => e.eventType === currentEventFilter);
+
+      const tabs = ['all', 'coverage', 'trade', 'overtime']
+        .map(t => `<button class="filter-tab ${t === currentEventFilter ? 'active' : ''}" onclick="filterEvents('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`)
+        .join('');
+
+      const cards = filtered.length === 0 ? `
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <h3>No events this week</h3>
+          <p>Coverage requests, trades, and overtime events will appear here.</p>
+        </div>
+      ` : filtered.map(renderEventCard).join('');
+
+      setContent(`
+        <div class="page-header">
+          <h2 class="page-title">Event Log</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-small" onclick="changeScheduleWeek(-7)">&larr; Prev</button>
+            <span style="font-size:14px;font-weight:600;color:var(--text-secondary)">Week of ${formatWeekRange(currentScheduleWeek)}</span>
+            <button class="btn-small" onclick="changeScheduleWeek(7)">Next &rarr;</button>
+          </div>
+        </div>
+        <div class="filter-tabs">${tabs}</div>
+        ${cards}
+      `);
+    }
+
+    function renderEventCard(e) {
+      const when = new Date(e.timestamp).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+      if (e.eventType === 'coverage') {
+        const badge = e.meta.status === 'covered'
+          ? `<span class="badge green">Filled${e.meta.fillMinutes != null ? ` in ${e.meta.fillMinutes} min` : ''}</span>`
+          : e.meta.status === 'cancelled' ? '<span class="badge grey">Cancelled</span>' : '<span class="badge red">Unfilled</span>';
+        const meta = e.meta.status === 'covered' ? `Covered by ${escapeHtml(e.meta.coveredBy || 'someone')}` : '';
+        return `
+          <div class="event-card coverage">
+            <div class="event-icon">📢</div>
+            <div class="event-body">
+              <div class="event-title">${escapeHtml(e.title)}</div>
+              <div class="event-meta">${meta} ${badge}</div>
+              <div class="event-time">${when}</div>
+            </div>
+          </div>`;
+      }
+      if (e.eventType === 'trade') {
+        const badge = e.meta.status === 'completed' ? '<span class="badge green">Completed</span>'
+                   : e.meta.status === 'cancelled' ? '<span class="badge grey">Cancelled</span>'
+                   : '<span class="badge orange">Open</span>';
+        const arrow = e.meta.to ? ` → ${escapeHtml(e.meta.to)}` : '';
+        return `
+          <div class="event-card trade">
+            <div class="event-icon">🔄</div>
+            <div class="event-body">
+              <div class="event-title">${escapeHtml(e.title)}</div>
+              <div class="event-meta">${escapeHtml(e.meta.from || '')}${arrow} ${badge}</div>
+              <div class="event-time">${when}</div>
+            </div>
+          </div>`;
+      }
+      // overtime
+      return `
+        <div class="event-card overtime">
+          <div class="event-icon">⚡</div>
+          <div class="event-body">
+            <div class="event-title">${escapeHtml(e.title)}</div>
+            <div class="event-meta">${e.meta.totalHours.toFixed(1)}hrs total — ${e.meta.overtimeHours.toFixed(1)}hrs overtime ($${e.meta.grossPay.toFixed(2)})</div>
+            <div class="event-time">Week of ${String(e.timestamp).slice(0,10)}</div>
+          </div>
+        </div>`;
+    }
+
+    function filterEvents(type) {
+      currentEventFilter = type;
+      renderEventLogPage();
     }
 
     // ───────────────────────────────────────────
@@ -1861,100 +2344,252 @@
     // ───────────────────────────────────────────
     async function loadSettingsPage() {
       try {
-        const [settings, rules, shifts, staff] = await Promise.all([
-          api('/api/settings'),
-          api('/api/rules'),
-          api('/api/shifts'),
-          api('/api/staff')
-        ]);
-        renderSettingsPage(settings || {}, rules || [], shifts || [], staff || []);
+        const config = await api('/api/settings/full');
+        renderSettingsPage(config || {});
+        // Restore dark-mode toggle visual state after render
+        const darkOn = document.documentElement.classList.contains('dark');
+        document.getElementById('dark-toggle')?.classList.toggle('on', darkOn);
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('settings')");
       }
     }
 
-    function renderSettingsPage(settings, rules, shifts, staff) {
-      const ruleRows = rules.map(r => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F4EFE6">
-          <span style="font-size:14px;color:#4A3F35">${escapeHtml(r.constraint_text || r.type)}</span>
-          <button class="btn-small btn-danger" onclick="deleteRule(${r.id})">🗑</button>
-        </div>`).join('');
+    function renderSettingsPage(config) {
+      const r = config.restaurant || {};
+      const staff = config.staff || [];
+      const shifts = config.shifts || [];
+      const rates = config.rates || [];
+      const overtime = config.overtime || {};
+      const tips = config.tips || {};
+      const budget = config.budget || {};
+      const rules = config.rules || [];
 
-      const shiftRows = shifts.map(s => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F4EFE6">
-          <span style="font-size:14px;color:#4A3F35">${escapeHtml(s.name)} — ${escapeHtml(s.day_of_week)}, ${escapeHtml(s.start_time)}–${escapeHtml(s.end_time)}</span>
-          <div>
-            <button class="btn-small" onclick="openEditShift(${s.id},'${escapeJs(s.name)}','${escapeJs(s.day_of_week)}','${escapeJs(s.start_time)}','${escapeJs(s.end_time)}')">Edit</button>
-            <button class="btn-small btn-danger" onclick="deleteShift(${s.id},'${escapeJs(s.name)}')">Delete</button>
-          </div>
-        </div>`).join('');
-
-      const staffOpts = staff.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-      // store staff options on window so add-rule can reach them safely
-      window.__staffOptsHtml = staffOpts;
+      // Store staff options on window for add-rule modal
+      window.__staffOptsHtml = staff.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
 
       setContent(`
         <div class="page-header"><h2 class="page-title">Settings</h2></div>
 
-        <div class="card" style="margin-bottom:20px;padding:20px">
-          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Restaurant</h3>
-          <label class="form-label">Restaurant Name</label>
-          <input id="s-name" value="${escapeHtml(settings.restaurantName || '')}" class="form-input" />
-          <button class="btn-primary" style="margin-top:12px" onclick="saveSettings()">Save</button>
-        </div>
-
-        <div class="card" style="margin-bottom:20px;padding:20px">
-          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700">Payroll</h3>
-          <label class="form-label">Weekly OT Threshold (hrs)</label>
-          <input id="s-ot-hrs" type="number" value="${settings.overtimeThreshold || 40}" class="form-input" style="width:120px" />
-          <label class="form-label" style="margin-top:12px">OT Multiplier</label>
-          <input id="s-ot-mult" type="number" step="0.1" value="${settings.overtimeMultiplier || 1.5}" class="form-input" style="width:120px" />
-          <label class="form-label" style="margin-top:12px">Weekly Labor Budget ($)</label>
-          <input id="s-budget" type="number" value="${settings.weeklyBudget || ''}" class="form-input" style="width:160px" />
-          <button class="btn-primary" style="margin-top:12px" onclick="savePayrollSettings()">Save</button>
-        </div>
-
-        <div class="card" style="margin-bottom:20px;padding:20px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-            <h3 style="margin:0;font-size:16px;font-weight:700">Business Rules</h3>
-            <button class="btn-primary" style="font-size:13px;padding:6px 14px" onclick="openAddRule()">+ Add Rule</button>
+        <div class="settings-section">
+          <div class="settings-section-title">Appearance</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Dark Mode</div>
+              <div class="setting-desc">Switch to dark theme — persists across sessions</div>
+            </div>
+            <div class="toggle" id="dark-toggle" onclick="toggleDarkMode()"></div>
           </div>
-          ${ruleRows || '<p style="color:#9A8880;font-size:14px">No rules yet.</p>'}
         </div>
 
-        <div class="card" style="padding:20px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-            <h3 style="margin:0;font-size:16px;font-weight:700">Shifts</h3>
-            <button class="btn-primary" style="font-size:13px;padding:6px 14px" onclick="openAddShift()">+ Add Shift</button>
+        <div class="settings-section">
+          <div class="settings-section-title">Restaurant</div>
+          <div class="setting-row">
+            <div class="setting-label">Name</div>
+            <input class="setting-input" id="rest-name" value="${escapeHtml(r.name || '')}">
           </div>
-          ${shiftRows || '<p style="color:#9A8880;font-size:14px">No shifts yet.</p>'}
-        </div>`);
+          <button class="setting-save-btn" onclick="saveRestaurant()">Save Restaurant</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Pay Rates</div>
+          ${rates.length === 0 ? '<div class="setting-desc">No rates configured yet.</div>' : rates.map(rt => `
+            <div class="setting-row">
+              <div class="setting-label">${escapeHtml(rt.roleName)}</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="setting-input" type="number" step="0.01" min="0" max="500"
+                  value="${rt.hourlyRate}" id="rate-${escapeJs(rt.roleName)}" style="width:100px">
+                <button class="setting-save-btn" style="margin-top:0;padding:6px 14px" onclick="saveRate('${escapeJs(rt.roleName)}')">Save</button>
+              </div>
+            </div>
+          `).join('')}
+          <button class="setting-save-btn ghost" onclick="addRate()">+ Add Rate</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Overtime</div>
+          <div class="setting-row">
+            <div class="setting-label">Weekly overtime enabled</div>
+            <div class="toggle ${overtime.overtime_enabled ? 'on' : ''}" id="ot-weekly-toggle" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Weekly threshold (hours)</div>
+            <input class="setting-input" type="number" min="1" max="80" step="0.5" id="ot-weekly-threshold" value="${overtime.weekly_threshold ?? 40}">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Weekly multiplier</div>
+            <input class="setting-input" type="number" min="1" max="3" step="0.05" id="ot-weekly-mult" value="${overtime.weekly_multiplier ?? 1.5}">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Daily overtime enabled</div>
+            <div class="toggle ${overtime.daily_overtime_enabled ? 'on' : ''}" id="ot-daily-toggle" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Daily threshold (hours)</div>
+            <input class="setting-input" type="number" min="1" max="24" step="0.5" id="ot-daily-threshold" value="${overtime.daily_threshold ?? 8}">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Daily multiplier</div>
+            <input class="setting-input" type="number" min="1" max="3" step="0.05" id="ot-daily-mult" value="${overtime.daily_multiplier ?? 1.5}">
+          </div>
+          <button class="setting-save-btn" onclick="saveOvertime()">Save Overtime</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Tips</div>
+          <div class="setting-row">
+            <div class="setting-label">Mode</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+                <input type="radio" name="tip-mode" value="pool" ${tips.mode === 'pool' ? 'checked' : ''}> Pool
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+                <input type="radio" name="tip-mode" value="individual" ${tips.mode === 'individual' ? 'checked' : ''}> Individual
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+                <input type="radio" name="tip-mode" value="cash" ${tips.mode === 'cash' ? 'checked' : ''}> Cash
+              </label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Split method</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+                <input type="radio" name="tip-split" value="hours" ${tips.splitMethod === 'hours' ? 'checked' : ''}> Hours worked
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+                <input type="radio" name="tip-split" value="equal" ${tips.splitMethod === 'equal' ? 'checked' : ''}> Equal split
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)">
+                <input type="radio" name="tip-split" value="points" ${tips.splitMethod === 'points' ? 'checked' : ''}> Role points
+              </label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Include BOH in tip pool</div>
+              <div class="setting-desc">Off = back-of-house excluded from distribution</div>
+            </div>
+            <div class="toggle ${tips.bohIncluded ? 'on' : ''}" id="tip-boh-toggle" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <button class="setting-save-btn" onclick="saveTips()">Save Tips</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Weekly Budget</div>
+          <div class="setting-row">
+            <div class="setting-label">Target labor budget ($/week)</div>
+            <input class="setting-input" type="number" min="0" step="10" id="budget-amount" value="${budget.weeklyBudget ?? ''}">
+          </div>
+          <button class="setting-save-btn" onclick="saveBudget()">Save Budget</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Shifts</div>
+          ${shifts.length === 0 ? '<div class="setting-desc">No shifts configured.</div>' : shifts.map(s => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">${escapeHtml(s.name)}</div>
+                <div class="setting-desc">${escapeHtml(s.dayOfWeek || '')} · ${escapeHtml(s.startTime || '')}–${escapeHtml(s.endTime || '')}</div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="setting-save-btn" style="margin-top:0;padding:6px 14px" onclick="openEditShift(${s.id},'${escapeJs(s.name)}','${escapeJs(s.dayOfWeek)}','${escapeJs(s.startTime)}','${escapeJs(s.endTime)}')">Edit</button>
+                <button class="setting-save-btn danger" style="margin-top:0;padding:6px 14px" onclick="deleteShift(${s.id},'${escapeJs(s.name)}')">Delete</button>
+              </div>
+            </div>
+          `).join('')}
+          <button class="setting-save-btn ghost" onclick="openAddShift()">+ Add Shift</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Business Rules</div>
+          ${rules.length === 0 ? '<div class="setting-desc">No rules configured.</div>' : rules.map(rule => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">${escapeHtml(rule.constraint_text || rule.type || '')}</div>
+                <div class="setting-desc">${escapeHtml(rule.type || '')}</div>
+              </div>
+              <button class="setting-save-btn danger" style="margin-top:0;padding:6px 14px" onclick="deleteRule(${rule.id})">Delete</button>
+            </div>
+          `).join('')}
+          <button class="setting-save-btn ghost" onclick="openAddRule()">+ Add Rule</button>
+        </div>
+      `);
     }
 
-    async function saveSettings() {
-      const name = document.getElementById('s-name')?.value.trim();
-      if (!name) { showToast('Restaurant name cannot be empty', 'error'); return; }
+    async function saveRestaurant() {
+      const name = document.getElementById('rest-name')?.value.trim();
+      if (!name) { showToast('Name cannot be empty', 'error'); return; }
       try {
-        await api('/api/settings', 'PATCH', { restaurantName: name });
-        showToast('Settings saved');
+        await api('/api/settings/full', 'PATCH', { restaurant: { name } });
+        showToast('Restaurant saved');
         const rn = document.getElementById('restaurant-name');
         if (rn) rn.textContent = name;
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function savePayrollSettings() {
-      const ot = parseFloat(document.getElementById('s-ot-hrs')?.value);
-      const mult = parseFloat(document.getElementById('s-ot-mult')?.value);
-      const budget = parseFloat(document.getElementById('s-budget')?.value);
+    async function saveRate(roleName) {
+      const rate = parseFloat(document.getElementById(`rate-${roleName}`)?.value);
+      if (!Number.isFinite(rate) || rate < 0) { showToast('Invalid rate', 'error'); return; }
       try {
-        await api('/api/settings', 'PATCH', {
-          overtimeThreshold: ot,
-          overtimeMultiplier: mult,
-          weeklyBudget: budget || undefined
-        });
-        showToast('Payroll settings saved');
+        await api('/api/rates', 'POST', { roleName, hourlyRate: rate });
+        showToast(`${roleName} saved`);
       } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function addRate() {
+      showModal('Add a role rate',
+        `<label>Role name</label><input id="new-role" placeholder="Server" maxlength="40" />
+         <label>Hourly rate</label><input id="new-rate" type="number" min="0" max="500" step="0.01" placeholder="15.50" />`,
+        async () => {
+          const roleName = document.getElementById('new-role').value.trim();
+          const rate = parseFloat(document.getElementById('new-rate').value);
+          if (!roleName || !Number.isFinite(rate) || rate < 0) { showToast('Invalid input', 'error'); return; }
+          try {
+            await api('/api/rates', 'POST', { roleName, hourlyRate: rate });
+            await loadSettingsPage();
+            showToast('Rate added');
+          } catch (e) { showToast(e.message, 'error'); }
+        }, 'Add');
+    }
+
+    async function saveOvertime() {
+      const body = { overtime: {
+        overtime_enabled: document.getElementById('ot-weekly-toggle').classList.contains('on'),
+        weekly_threshold: Number(document.getElementById('ot-weekly-threshold').value),
+        weekly_multiplier: Number(document.getElementById('ot-weekly-mult').value),
+        daily_overtime_enabled: document.getElementById('ot-daily-toggle').classList.contains('on'),
+        daily_threshold: Number(document.getElementById('ot-daily-threshold').value),
+        daily_multiplier: Number(document.getElementById('ot-daily-mult').value),
+      }};
+      try { await api('/api/settings/full', 'PATCH', body); showToast('Overtime saved'); }
+      catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function saveTips() {
+      const mode = document.querySelector('input[name="tip-mode"]:checked')?.value || 'pool';
+      const splitMethod = document.querySelector('input[name="tip-split"]:checked')?.value || 'hours';
+      const bohIncluded = document.getElementById('tip-boh-toggle').classList.contains('on');
+      try {
+        await api('/api/settings/full', 'PATCH', { tips: { mode, splitMethod, bohIncluded } });
+        showToast('Tips saved');
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function saveBudget() {
+      const v = parseFloat(document.getElementById('budget-amount')?.value);
+      if (!Number.isFinite(v) || v < 0) { showToast('Enter a valid amount', 'error'); return; }
+      try {
+        await api('/api/settings/full', 'PATCH', { budget: { weeklyBudget: v } });
+        showToast('Budget saved');
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function toggleDarkMode() {
+      const on = !document.documentElement.classList.contains('dark');
+      document.documentElement.classList.toggle('dark', on);
+      localStorage.setItem('darkMode', on ? 'true' : 'false');
+      document.getElementById('dark-toggle')?.classList.toggle('on', on);
     }
 
     async function deleteRule(id) {
@@ -2050,6 +2685,11 @@
 
     // ── Init ──
     (async function init() {
+      // Restore dark-mode preference from localStorage
+      if (localStorage.getItem('darkMode') === 'true') {
+        document.documentElement.classList.add('dark');
+      }
+
       // Set week label
       document.getElementById('week-label').textContent = 'Week of ' + formatWeekRange(getCurrentWeekStart());
 

@@ -919,6 +919,160 @@ router.post('/payroll/revenue', async (req, res) => {
   }
 })
 
+// ─── DAILY REVENUE ────────────────────────────────────────────────────────────
+
+function addDays(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().split('T')[0]
+}
+
+function mondayOf(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  const day = d.getUTCDay() // 0=Sun..6=Sat
+  const diff = day === 0 ? -6 : 1 - day
+  d.setUTCDate(d.getUTCDate() + diff)
+  return d.toISOString().split('T')[0]
+}
+
+async function recalcWeeklyRevenue(db, groupId, weekStart) {
+  const weekEnd = addDays(weekStart, 6)
+  const { data: rows } = await db
+    .from('daily_revenue')
+    .select('amount')
+    .eq('group_id', groupId)
+    .gte('entry_date', weekStart)
+    .lte('entry_date', weekEnd)
+  const total = (rows ?? []).reduce((s, r) => s + Number(r.amount || 0), 0)
+
+  const { data: existing } = await db
+    .from('weekly_revenue')
+    .select('total_labor_cost')
+    .eq('group_id', groupId)
+    .eq('week_start', weekStart)
+    .maybeSingle()
+
+  const laborCost = existing?.total_labor_cost ?? null
+  const laborPct = (laborCost != null && total > 0)
+    ? Number(((laborCost / total) * 100).toFixed(2))
+    : null
+
+  await db
+    .from('weekly_revenue')
+    .upsert(
+      { group_id: groupId, week_start: weekStart, revenue: total, total_labor_cost: laborCost, labor_percent: laborPct },
+      { onConflict: 'group_id,week_start' }
+    )
+
+  return { total: Number(total.toFixed(2)), laborPercent: laborPct }
+}
+
+// GET /api/revenue/daily?weekStart=YYYY-MM-DD
+router.get('/revenue/daily', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const weekStart = req.query.weekStart || getCurrentWeekStart()
+    const weekEnd = addDays(weekStart, 6)
+    const db = supabase()
+
+    const { data, error } = await db
+      .from('daily_revenue')
+      .select('id, entry_date, amount, note, created_at')
+      .eq('group_id', groupId)
+      .gte('entry_date', weekStart)
+      .lte('entry_date', weekEnd)
+      .order('entry_date', { ascending: true })
+      .order('created_at', { ascending: true })
+    if (error) throw error
+
+    const days = {}
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i)
+      days[d] = { total: 0, entries: [] }
+    }
+    for (const r of data ?? []) {
+      const key = String(r.entry_date).slice(0, 10)
+      if (!days[key]) days[key] = { total: 0, entries: [] }
+      days[key].total = Number((Number(days[key].total) + Number(r.amount)).toFixed(2))
+      days[key].entries.push({
+        id: r.id,
+        amount: Number(r.amount),
+        note: r.note,
+        created_at: r.created_at,
+      })
+    }
+    const weekTotal = Object.values(days).reduce((s, d) => s + Number(d.total), 0)
+
+    res.json({ weekStart, weekEnd, days, weekTotal: Number(weekTotal.toFixed(2)) })
+  } catch (err) {
+    console.error('GET /revenue/daily error:', err.message)
+    res.status(500).json({ error: 'Failed to load daily revenue' })
+  }
+})
+
+// POST /api/revenue/daily  body: { date, amount, note? }
+router.post('/revenue/daily', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { date, amount, note } = req.body ?? {}
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
+    }
+    const amt = Number(amount)
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'amount must be a positive number' })
+    }
+    const db = supabase()
+
+    const { data: inserted, error } = await db
+      .from('daily_revenue')
+      .insert({ group_id: groupId, entry_date: date, amount: amt, note: note || null })
+      .select()
+      .single()
+    if (error) throw error
+
+    const weekStart = mondayOf(date)
+    const { total } = await recalcWeeklyRevenue(db, groupId, weekStart)
+
+    res.status(201).json({ entry: inserted, dayTotal: total })
+  } catch (err) {
+    console.error('POST /revenue/daily error:', err.message)
+    res.status(500).json({ error: 'Failed to save revenue entry' })
+  }
+})
+
+// DELETE /api/revenue/daily/:id
+router.delete('/revenue/daily/:id', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid id' })
+    }
+    const db = supabase()
+
+    const { data: found, error: fErr } = await db
+      .from('daily_revenue')
+      .select('id, entry_date')
+      .eq('id', id)
+      .eq('group_id', groupId)
+      .maybeSingle()
+    if (fErr) throw fErr
+    if (!found) return res.status(404).json({ error: 'Entry not found' })
+
+    const { error } = await db.from('daily_revenue').delete().eq('id', id).eq('group_id', groupId)
+    if (error) throw error
+
+    const weekStart = mondayOf(found.entry_date)
+    await recalcWeeklyRevenue(db, groupId, weekStart)
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('DELETE /revenue/daily/:id error:', err.message)
+    res.status(500).json({ error: 'Failed to delete revenue entry' })
+  }
+})
+
 // GET /api/payroll/spreadsheet
 router.get('/payroll/spreadsheet', async (req, res) => {
   try {
@@ -1441,6 +1595,342 @@ router.post('/timeclock/override', async (req, res) => {
   } catch (err) {
     console.error('POST /timeclock/override error:', err.message)
     res.status(500).json({ error: 'Failed to process clock override' })
+  }
+})
+
+// ─── WEEKLY TIMECLOCK ─────────────────────────────────────────────────────────
+
+// GET /api/timeclock/weekly?weekStart=YYYY-MM-DD
+// Per-staff scheduled vs clocked hours + missed clock-outs + entry list.
+router.get('/timeclock/weekly', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const weekStart = req.query.weekStart || getCurrentWeekStart()
+    const weekEnd = addDays(weekStart, 6)
+    const weekEndExclusive = addDays(weekStart, 7)
+    const db = supabase()
+
+    const [staffRes, shiftsRes, assignRes, entriesRes] = await Promise.all([
+      db.from('staff').select('id, name, role').eq('group_id', groupId).eq('active', true),
+      db.from('shifts').select('id, name, start_time, end_time, day_of_week').eq('group_id', groupId),
+      db.from('schedule_assignments').select('staff_id, shift_id').eq('group_id', groupId).eq('week_start', weekStart),
+      db.from('time_entries').select('id, staff_id, shift_id, clock_in, clock_out')
+        .eq('group_id', groupId)
+        .gte('clock_in', `${weekStart}T00:00:00Z`)
+        .lt('clock_in', `${weekEndExclusive}T00:00:00Z`),
+    ])
+
+    const shifts = shiftsRes.data ?? []
+    const shiftMap = Object.fromEntries(shifts.map(s => [String(s.id), s]))
+    const assignments = assignRes.data ?? []
+    const entries = entriesRes.data ?? []
+
+    const scheduledHoursByStaff = {}
+    const shiftsByStaff = {}
+    for (const a of assignments) {
+      const sh = shiftMap[String(a.shift_id)]
+      if (!sh) continue
+      const hours = parseShiftHours(sh.start_time, sh.end_time)
+      scheduledHoursByStaff[a.staff_id] = (scheduledHoursByStaff[a.staff_id] ?? 0) + hours
+      shiftsByStaff[a.staff_id] = (shiftsByStaff[a.staff_id] ?? 0) + 1
+    }
+
+    const now = Date.now()
+    const MISSED_THRESHOLD_MS = 12 * 60 * 60 * 1000
+
+    const entriesByStaff = {}
+    for (const e of entries) {
+      const sid = e.staff_id
+      if (!sid) continue
+      if (!entriesByStaff[sid]) entriesByStaff[sid] = []
+      const clockInMs = new Date(e.clock_in).getTime()
+      const clockOutMs = e.clock_out ? new Date(e.clock_out).getTime() : null
+      const hours = clockOutMs
+        ? (clockOutMs - clockInMs) / 3600000
+        : Math.min((now - clockInMs) / 3600000, 24)
+      const missedClockOut = !e.clock_out && (now - clockInMs) > MISSED_THRESHOLD_MS
+      entriesByStaff[sid].push({
+        id: e.id,
+        shiftId: e.shift_id,
+        shiftName: shiftMap[String(e.shift_id)]?.name ?? null,
+        clockIn: e.clock_in,
+        clockOut: e.clock_out,
+        hours: Number(hours.toFixed(2)),
+        missedClockOut,
+      })
+    }
+
+    const rows = (staffRes.data ?? []).map(s => {
+      const hoursScheduled = Number((scheduledHoursByStaff[s.id] ?? 0).toFixed(2))
+      const staffEntries = entriesByStaff[s.id] ?? []
+      const hoursClocked = Number(staffEntries.reduce((sum, e) => sum + e.hours, 0).toFixed(2))
+      const missedCount = staffEntries.filter(e => e.missedClockOut).length
+      return {
+        staffId: s.id,
+        staffName: s.name,
+        role: s.role,
+        shiftsScheduled: shiftsByStaff[s.id] ?? 0,
+        hoursScheduled,
+        hoursClocked,
+        variance: Number((hoursClocked - hoursScheduled).toFixed(2)),
+        entries: staffEntries,
+        missedClockOuts: missedCount,
+      }
+    }).sort((a, b) => a.staffName.localeCompare(b.staffName))
+
+    res.json({ weekStart, weekEnd, rows })
+  } catch (err) {
+    console.error('GET /timeclock/weekly error:', err.message)
+    res.status(500).json({ error: 'Failed to load weekly timeclock' })
+  }
+})
+
+// ─── EVENT LOG ────────────────────────────────────────────────────────────────
+
+// GET /api/events?weekStart=YYYY-MM-DD&limit=50
+router.get('/events', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const weekStart = req.query.weekStart || getCurrentWeekStart()
+    const weekEndExclusive = addDays(weekStart, 7)
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const db = supabase()
+
+    const [coverageRes, tradeRes, payrollRes, staffRes] = await Promise.all([
+      db.from('coverage_requests')
+        .select('id, shift_description, requested_by, covered_by, status, created_at, covered_at')
+        .eq('group_id', groupId)
+        .gte('created_at', `${weekStart}T00:00:00Z`)
+        .lt('created_at', `${weekEndExclusive}T00:00:00Z`)
+        .order('created_at', { ascending: false }),
+      db.from('trade_requests')
+        .select('id, requester_name, accepted_by_name, shift_description, accepted_shift_description, status, created_at')
+        .eq('group_id', groupId)
+        .gte('created_at', `${weekStart}T00:00:00Z`)
+        .lt('created_at', `${weekEndExclusive}T00:00:00Z`)
+        .order('created_at', { ascending: false }),
+      db.from('payroll_records')
+        .select('staff_id, total_hours, total_gross_pay, week_start')
+        .eq('group_id', groupId)
+        .eq('week_start', weekStart),
+      db.from('staff').select('id, name').eq('group_id', groupId),
+    ])
+
+    const staffMap = Object.fromEntries((staffRes.data ?? []).map(s => [String(s.id), s.name]))
+    const events = []
+
+    for (const c of coverageRes.data ?? []) {
+      const fillMinutes = c.covered_at && c.created_at
+        ? Math.round((new Date(c.covered_at) - new Date(c.created_at)) / 60000)
+        : null
+      events.push({
+        eventType: 'coverage',
+        timestamp: c.created_at,
+        title: `${c.requested_by || 'Someone'} called out — ${c.shift_description}`,
+        meta: c.status === 'covered'
+          ? { status: 'covered', coveredBy: c.covered_by, fillMinutes }
+          : { status: c.status },
+      })
+    }
+
+    for (const t of tradeRes.data ?? []) {
+      events.push({
+        eventType: 'trade',
+        timestamp: t.created_at,
+        title: `Shift trade: ${t.requester_name}${t.accepted_by_name ? ` ↔ ${t.accepted_by_name}` : ' (open)'}`,
+        meta: {
+          status: t.status,
+          from: t.shift_description,
+          to: t.accepted_shift_description,
+        },
+      })
+    }
+
+    for (const p of payrollRes.data ?? []) {
+      if (Number(p.total_hours) > 40) {
+        events.push({
+          eventType: 'overtime',
+          timestamp: `${p.week_start}T00:00:00Z`,
+          title: `${staffMap[String(p.staff_id)] || 'Unknown'} — overtime week`,
+          meta: {
+            totalHours: Number(p.total_hours),
+            overtimeHours: Number((Number(p.total_hours) - 40).toFixed(2)),
+            grossPay: Number(p.total_gross_pay),
+          },
+        })
+      }
+    }
+
+    events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+
+    res.json({ weekStart, events: events.slice(0, limit) })
+  } catch (err) {
+    console.error('GET /events error:', err.message)
+    res.status(500).json({ error: 'Failed to load events' })
+  }
+})
+
+// ─── FULL SETTINGS ────────────────────────────────────────────────────────────
+
+// GET /api/settings/full — everything configurable in one call
+router.get('/settings/full', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const db = supabase()
+
+    const [sessionRes, staffRes, shiftsRes, ratesRes, overtimeRes, budgetRes, rulesRes] = await Promise.all([
+      db.from('setup_sessions').select('group_id, group_name, setup_data').eq('group_id', groupId).single(),
+      db.from('staff').select('id, name, role, active').eq('group_id', groupId).eq('active', true),
+      db.from('shifts').select('*').eq('group_id', groupId),
+      db.from('role_rates').select('role_name, hourly_rate').eq('group_id', groupId),
+      db.from('overtime_settings').select('*').eq('group_id', groupId).maybeSingle(),
+      db.from('labor_budgets').select('weekly_budget, currency').eq('group_id', groupId).maybeSingle(),
+      db.from('business_rules').select('*').eq('group_id', groupId).or('active.is.null,active.eq.true'),
+    ])
+
+    const shiftIds = (shiftsRes.data ?? []).map(s => s.id)
+    let requirements = []
+    if (shiftIds.length > 0) {
+      const { data } = await db.from('shift_requirements').select('*').in('shift_id', shiftIds)
+      requirements = data ?? []
+    }
+
+    const session = sessionRes.data || {}
+    const setupData = session.setup_data || {}
+
+    res.json({
+      restaurant: {
+        groupId: session.group_id,
+        name: session.group_name,
+      },
+      staff: (staffRes.data ?? []).map(s => ({ id: s.id, name: s.name, role: s.role })),
+      shifts: (shiftsRes.data ?? []).map(s => ({
+        id: s.id,
+        name: s.name,
+        dayOfWeek: s.day_of_week,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        requirements: requirements.filter(r => String(r.shift_id) === String(s.id))
+          .map(r => ({ id: r.id, role: r.role, count: r.count })),
+      })),
+      rates: (ratesRes.data ?? []).map(r => ({ roleName: r.role_name, hourlyRate: Number(r.hourly_rate) })),
+      overtime: overtimeRes.data || {
+        overtime_enabled: false,
+        weekly_threshold: 40,
+        weekly_multiplier: 1.5,
+        daily_overtime_enabled: false,
+        daily_threshold: 8,
+        daily_multiplier: 1.5,
+      },
+      tips: {
+        mode: setupData.tipMode || 'pool',
+        splitMethod: setupData.tipSplitMethod || 'hours',
+        bohIncluded: setupData.tipBohIncluded ?? false,
+      },
+      budget: {
+        weeklyBudget: budgetRes.data?.weekly_budget ?? null,
+        currency: budgetRes.data?.currency || 'USD',
+      },
+      rules: rulesRes.data ?? [],
+    })
+  } catch (err) {
+    console.error('GET /settings/full error:', err.message)
+    res.status(500).json({ error: 'Failed to load full settings' })
+  }
+})
+
+// PATCH /api/settings/full — update subsections independently
+router.patch('/settings/full', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const body = req.body ?? {}
+    const db = supabase()
+    const errors = {}
+    const updated = {}
+
+    if (body.restaurant?.name !== undefined) {
+      try {
+        const { error } = await db.from('setup_sessions').update({ group_name: body.restaurant.name }).eq('group_id', groupId)
+        if (error) throw error
+        updated.restaurant = true
+      } catch (e) { errors.restaurant = e.message }
+    }
+
+    if (body.overtime) {
+      try {
+        const ot = body.overtime
+        const { error } = await db.from('overtime_settings').upsert({
+          group_id: groupId,
+          overtime_enabled: ot.overtime_enabled,
+          weekly_threshold: ot.weekly_threshold,
+          weekly_multiplier: ot.weekly_multiplier,
+          daily_overtime_enabled: ot.daily_overtime_enabled,
+          daily_threshold: ot.daily_threshold,
+          daily_multiplier: ot.daily_multiplier,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'group_id' })
+        if (error) throw error
+        updated.overtime = true
+      } catch (e) { errors.overtime = e.message }
+    }
+
+    if (body.tips) {
+      try {
+        const { data: sess } = await db.from('setup_sessions').select('setup_data').eq('group_id', groupId).single()
+        const merged = {
+          ...(sess?.setup_data || {}),
+          tipMode: body.tips.mode,
+          tipSplitMethod: body.tips.splitMethod,
+          tipBohIncluded: body.tips.bohIncluded,
+        }
+        const { error } = await db.from('setup_sessions').update({ setup_data: merged }).eq('group_id', groupId)
+        if (error) throw error
+        updated.tips = true
+      } catch (e) { errors.tips = e.message }
+    }
+
+    if (body.budget?.weeklyBudget !== undefined) {
+      try {
+        const { error } = await db.from('labor_budgets').upsert({
+          group_id: groupId,
+          weekly_budget: Number(body.budget.weeklyBudget),
+          currency: body.budget.currency || 'USD',
+        }, { onConflict: 'group_id' })
+        if (error) throw error
+        updated.budget = true
+      } catch (e) { errors.budget = e.message }
+    }
+
+    if (Object.keys(updated).length === 0 && Object.keys(errors).length === 0) {
+      return res.status(400).json({ error: 'No updatable fields in body' })
+    }
+    res.json({ updated, errors: Object.keys(errors).length ? errors : undefined })
+  } catch (err) {
+    console.error('PATCH /settings/full error:', err.message)
+    res.status(500).json({ error: 'Failed to update settings' })
+  }
+})
+
+// POST /api/rates — add/update a role rate (used by Settings pay-rates section)
+router.post('/rates', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { roleName, hourlyRate } = req.body ?? {}
+    if (!roleName || typeof roleName !== 'string') return res.status(400).json({ error: 'roleName required' })
+    const rate = Number(hourlyRate)
+    if (!Number.isFinite(rate) || rate < 0 || rate > 500) return res.status(400).json({ error: 'hourlyRate must be 0–500' })
+
+    const db = supabase()
+    const { data, error } = await db
+      .from('role_rates')
+      .upsert({ group_id: groupId, role_name: roleName, hourly_rate: rate, updated_at: new Date().toISOString() }, { onConflict: 'group_id,role_name' })
+      .select()
+      .single()
+    if (error) throw error
+    res.json(data)
+  } catch (err) {
+    console.error('POST /rates error:', err.message)
+    res.status(500).json({ error: 'Failed to save rate' })
   }
 })
 
