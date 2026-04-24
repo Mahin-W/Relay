@@ -98,7 +98,8 @@ export async function seedMesaVerde(db) {
   // shifts + requirements
   for (const sh of SHIFTS) {
     db.shifts.push({ id: sh.id, group_id: GROUP_ID, name: sh.name, day_of_week: sh.day_of_week,
-      start_time: sh.start_time, end_time: sh.end_time, active: true, created_at: '2024-12-01T00:00:00Z' })
+      start_time: sh.start_time, end_time: sh.end_time, active: true, created_at: '2024-12-01T00:00:00Z',
+      recurringDays: sh.recurringDays ?? [sh.day_of_week] })
     for (const req of sh.requirements) {
       db.shiftRequirements.push({ id: db._nextId(), shift_id: sh.id, role: req.role, count: req.count })
     }

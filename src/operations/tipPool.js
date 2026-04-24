@@ -107,12 +107,14 @@ export function calculateTipSplit(totalTips, staff, splitMethod) {
     }
   } else {
     // 'hours' (default)
-    const totalHours = staff.reduce((s, x) => s + (x.hoursWorked || 0), 0)
+    // E.01: clamp negative hoursWorked to 0 before computing weights
+    const clampedHours = staff.map(s => Math.max(0, s.hoursWorked || 0))
+    const totalHours = clampedHours.reduce((a, b) => a + b, 0)
     if (totalHours === 0) {
-      // BH.11: zero-hour fallback → equal split to avoid NaN/Infinity
+      // BH.11 / E.01: zero-hour fallback → equal split to avoid NaN/Infinity
       rawAmounts = staff.map(() => totalTips / staff.length)
     } else {
-      rawAmounts = staff.map(s => ((s.hoursWorked || 0) / totalHours) * totalTips)
+      rawAmounts = clampedHours.map(h => (h / totalHours) * totalTips)
     }
   }
 
