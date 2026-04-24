@@ -20,18 +20,19 @@ export async function startSetupDM(bot, msg, groupId) {
     logger.error(`Could not fetch group info for ${groupId}: ${err.message}`)
   }
 
-  // If a previous setup was COMPLETED, wipe its config data so re-setup starts clean.
-  // Mid-wizard sessions (setup_complete=false) are preserved for resumption.
-  // Historical data (payroll, time_entries, coverage, tips) is never touched.
+  // /setup always starts fresh — wipe any existing config data for this group
+  // (staff, shifts, assignments, availability). Historical data (payroll,
+  // time_entries, coverage, tips, logs) is never touched. Running /setup means
+  // "start over" even if a previous attempt was abandoned mid-wizard.
   const existing = await getSetupSession(groupId)
-  const wasCompleted = existing?.setup_complete === true
-  if (wasCompleted) {
+  const hadData = !!existing
+  if (hadData) {
     await clearGroupSetupData(groupId)
   }
 
   await createSetupSession(groupId, groupName, managerId, dmChatId)
 
-  const resetNote = wasCompleted
+  const resetNote = hadData
     ? `\n_(Previous setup cleared — payroll and time clock history preserved.)_\n`
     : ''
 
@@ -41,7 +42,7 @@ export async function startSetupDM(bot, msg, groupId) {
     `_(Press send to use *"${groupName}"*)_`,
     { parse_mode: 'Markdown' })
 
-  logger.bot(`Setup DM started for group ${groupId} (${groupName}) by ${managerName}${wasCompleted ? ' — data cleared' : ''}`)
+  logger.bot(`Setup DM started for group ${groupId} (${groupName}) by ${managerName}${hadData ? ' — data cleared' : ''}`)
 }
 
 const RESET_RE = /^(reset|restart|clear|start over|redo)$/i

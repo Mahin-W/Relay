@@ -786,6 +786,25 @@ router.post('/schedule/generate', async (req, res) => {
     const { weekStart } = req.body
     if (!weekStart) return res.status(400).json({ error: 'weekStart is required' })
     const result = await generateWeeklySchedule(groupId, weekStart)
+
+    // The generator writes a JSONB draft to generated_schedules, but the
+    // dashboard /schedule view + the /schedule/approve route both read from
+    // the schedule_assignments TABLE. Sync the generated assignments into
+    // that table so everything downstream can see them.
+    const db = supabase()
+    await db.from('schedule_assignments').delete().eq('group_id', groupId).eq('week_start', weekStart)
+    if (result.assignments?.length > 0) {
+      const rows = result.assignments.map(a => ({
+        group_id: groupId,
+        shift_id: a.shiftId,
+        staff_id: a.staffId,
+        week_start: weekStart,
+        status: 'scheduled',
+      }))
+      const { error: insErr } = await db.from('schedule_assignments').insert(rows)
+      if (insErr) console.error('sync schedule_assignments error:', insErr.message)
+    }
+
     res.json(result)
   } catch (err) {
     console.error('POST /schedule/generate error:', err.message)

@@ -1949,7 +1949,13 @@
     function renderPayrollPage(payroll, settings, tips, revenue) {
       const totalPay = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
       const totalHrs = payroll.reduce((s, r) => s + (r.total_hours || 0), 0);
-      const weekTips = tips.find(t => t.shift_date >= currentPayrollWeek) || null;
+      // Sum tips entered this week (shift_date between this week's Mon and Sun)
+      const weekEnd = formatDate(new Date(parseDate(currentPayrollWeek).getTime() + 6 * 86400000));
+      const weekTipsTotal = (tips || [])
+        .filter(t => t.shift_date >= currentPayrollWeek && t.shift_date <= weekEnd)
+        .reduce((s, t) => s + Number(t.total_tips || 0), 0);
+      const today = formatDate(new Date());
+      const isTodayInWeek = today >= currentPayrollWeek && today <= weekEnd;
 
       const rows = payroll.map(r => `
         <tr>
@@ -1974,10 +1980,31 @@
           </div>
         </div>
 
-        <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(3,1fr)">
-          <div class="stat-card"><div class="stat-label">Total Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
+        <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card"><div class="stat-label">Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
           <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
           <div class="stat-card"><div class="stat-label">Week Revenue</div><div class="stat-value">${formatCurrency(revenue.weekTotal || 0)}</div></div>
+          <div class="stat-card"><div class="stat-label">Week Tips</div><div class="stat-value">${formatCurrency(weekTipsTotal)}</div></div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;padding:20px">
+          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">Quick add for today ${isTodayInWeek ? `<span style="font-size:12px;font-weight:400;color:var(--text-muted)">(${today})</span>` : `<span style="font-size:12px;font-weight:400;color:var(--text-muted)">(disabled — not viewing this week)</span>`}</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Revenue ($)</label>
+              <div style="display:flex;gap:8px">
+                <input id="quick-revenue" type="number" min="0" step="0.01" placeholder="0.00" ${isTodayInWeek ? '' : 'disabled'} style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+                <button class="btn-primary" onclick="quickAddRevenue()" ${isTodayInWeek ? '' : 'disabled'}>Add</button>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Tips ($)</label>
+              <div style="display:flex;gap:8px">
+                <input id="quick-tips" type="number" min="0" step="0.01" placeholder="0.00" ${isTodayInWeek ? '' : 'disabled'} style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+                <button class="btn-primary" onclick="quickAddTips()" ${isTodayInWeek ? '' : 'disabled'}>Add</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         ${renderRevenueSection(revenue)}
@@ -1991,18 +2018,38 @@
             <span>Total: ${totalHrs.toFixed(1)}h</span>
             <span>${formatCurrency(totalPay)}</span>
           </div>` : ''}
-        </div>
-
-        <div class="card" style="margin-top:20px;padding:20px">
-          <h3 style="margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)">Tips This Week</h3>
-          ${weekTips
-            ? `<p style="color:var(--text-secondary)">$${weekTips.total_tips} logged on ${weekTips.shift_date}</p>`
-            : `<div style="display:flex;gap:8px;align-items:center">
-                <span style="color:var(--text-secondary);font-size:14px">$</span>
-                <input id="tips-input" type="number" placeholder="0.00" style="padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;width:160px;background:var(--bg);color:var(--text);font-family:inherit">
-                <button class="btn-primary" onclick="logTips()">Log Tips</button>
-              </div>`}
         </div>`);
+    }
+
+    async function quickAddRevenue() {
+      const el = document.getElementById('quick-revenue');
+      const amount = parseFloat(el?.value);
+      if (!Number.isFinite(amount) || amount <= 0) { showToast('Enter an amount greater than zero', 'error'); return; }
+      const date = formatDate(new Date());
+      try {
+        await api('/api/revenue/daily', 'POST', { date, amount });
+        if (el) el.value = '';
+        await loadPayrollPage();
+        showToast(`$${amount.toFixed(2)} revenue added for today`);
+      } catch (e) {
+        const msg = /does not exist/i.test(e.message || '')
+          ? 'Daily revenue table not found — run the daily_revenue migration SQL in Supabase'
+          : (e.message || 'Failed to add revenue');
+        showToast(msg, 'error');
+      }
+    }
+
+    async function quickAddTips() {
+      const el = document.getElementById('quick-tips');
+      const totalTips = parseFloat(el?.value);
+      if (!Number.isFinite(totalTips) || totalTips <= 0) { showToast('Enter an amount greater than zero', 'error'); return; }
+      const shiftDate = formatDate(new Date());
+      try {
+        await api('/api/tips', 'POST', { shiftDate, totalTips });
+        if (el) el.value = '';
+        await loadPayrollPage();
+        showToast(`$${totalTips.toFixed(2)} tips added for today`);
+      } catch (e) { showToast(e.message || 'Failed to add tips', 'error'); }
     }
 
     function renderRevenueSection(revenue) {
