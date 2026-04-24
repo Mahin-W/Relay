@@ -1576,6 +1576,7 @@
 
     function renderScheduleTable(schedule, compact) {
       const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const DAY_FULL = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
       const staff = schedule?.staff || [];
       const showHours = !compact;
 
@@ -1609,7 +1610,7 @@
         html += `</td>`;
 
         days.forEach(day => {
-          const shifts = member.shifts?.[day.toLowerCase()] || member.shifts?.[day] || [];
+          const shifts = member.shifts?.[DAY_FULL[day]] || member.shifts?.[day.toLowerCase()] || member.shifts?.[day] || [];
           html += `<td>`;
           if (Array.isArray(shifts)) {
             shifts.forEach(s => {
@@ -2026,28 +2027,38 @@
         </div>
 
         <div class="card" style="margin-bottom:20px;padding:20px">
-          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">Quick add <span style="font-size:12px;font-weight:400;color:var(--text-muted)">— pick any day + category</span></h3>
+          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">Log revenue</h3>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <div>
-              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Revenue</label>
+              <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">For right now <span style="font-weight:400;text-transform:none">(${today})</span></div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <input id="quick-rev-date" type="date" value="${today}" max="${weekEnd}" min="${currentPayrollWeek}" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">
-                <select id="quick-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">${categorySelectOptions(isTodayInWeek ? (new Date().getHours() < 15 ? 'lunch' : 'dinner') : 'dinner')}</select>
-                <input id="quick-rev-amount" type="number" min="0" step="0.01" placeholder="0.00" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
-                <button class="btn-primary" onclick="quickAddRevenue()">Add</button>
+                <select id="now-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">${categorySelectOptions(new Date().getHours() < 15 ? 'lunch' : 'dinner')}</select>
+                <input id="now-rev-amount" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+                <button class="btn-primary" onclick="addRevenueNow()">Add now</button>
               </div>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Tips (today only)</label>
+              <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">For a specific date</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="any-rev-date" type="date" value="${today}" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">
+                <select id="any-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">${categorySelectOptions('dinner')}</select>
+                <input id="any-rev-amount" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+                <button class="btn-primary" onclick="addRevenueAnyDate()">Add</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Tips today</div>
               <div style="display:flex;gap:8px">
-                <input id="quick-tips" type="number" min="0" step="0.01" placeholder="0.00" ${isTodayInWeek ? '' : 'disabled'} style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
-                <button class="btn-primary" onclick="quickAddTips()" ${isTodayInWeek ? '' : 'disabled'}>Add</button>
+                <input id="quick-tips" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+                <button class="btn-primary" onclick="quickAddTips()">Add</button>
               </div>
             </div>
           </div>
         </div>
 
-        ${renderRevenueSection(revenue)}
+        ${renderRevenueChartOnly(revenue)}
 
         <div class="card" style="margin-top:20px">
           <table class="data-table">
@@ -2061,13 +2072,7 @@
         </div>`);
     }
 
-    async function quickAddRevenue() {
-      const dateEl = document.getElementById('quick-rev-date');
-      const amtEl = document.getElementById('quick-rev-amount');
-      const catEl = document.getElementById('quick-rev-cat');
-      const date = dateEl?.value;
-      const amount = parseFloat(amtEl?.value);
-      const category = catEl?.value || 'other';
+    async function _submitRevenue(date, amount, category, amtEl) {
       if (!date) { showToast('Pick a date', 'error'); return; }
       if (!Number.isFinite(amount) || amount <= 0) { showToast('Enter an amount greater than zero', 'error'); return; }
       try {
@@ -2083,6 +2088,32 @@
       }
     }
 
+    async function addRevenueNow() {
+      const amtEl = document.getElementById('now-rev-amount');
+      const category = document.getElementById('now-rev-cat')?.value || 'other';
+      const amount = parseFloat(amtEl?.value);
+      const date = formatDate(new Date()); // today, always
+      return _submitRevenue(date, amount, category, amtEl);
+    }
+
+    async function addRevenueAnyDate() {
+      const amtEl = document.getElementById('any-rev-amount');
+      const date = document.getElementById('any-rev-date')?.value;
+      const category = document.getElementById('any-rev-cat')?.value || 'other';
+      const amount = parseFloat(amtEl?.value);
+      return _submitRevenue(date, amount, category, amtEl);
+    }
+
+    // Legacy — called by the old daily-grid path. Kept so any in-flight
+    // rendering doesn't error; the new grid no longer uses it.
+    async function addDailyRevenue(date) {
+      const amtEl = document.getElementById(`rev-${date}`);
+      const catEl = document.getElementById(`cat-${date}`);
+      const amount = parseFloat(amtEl?.value);
+      const category = catEl?.value || 'other';
+      return _submitRevenue(date, amount, category, amtEl);
+    }
+
     async function quickAddTips() {
       const el = document.getElementById('quick-tips');
       const totalTips = parseFloat(el?.value);
@@ -2096,11 +2127,66 @@
       } catch (e) { showToast(e.message || 'Failed to add tips', 'error'); }
     }
 
-    function renderRevenueSection(revenue) {
+    function renderRevenueChartOnly(revenue) {
       const days = revenue.days || {};
       const dayOrder = Object.keys(days).sort();
       const totals = dayOrder.map(d => Number(days[d].total || 0));
       const maxAmount = Math.max(...totals, 1);
+
+      const dayLabel = dateStr => {
+        const d = parseDate(dateStr);
+        return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d.getDay() === 0 ? 6 : d.getDay() - 1];
+      };
+
+      // Stacked bar chart — each day's total split into colored segments by category
+      const bars = dayOrder.map(date => {
+        const dayTotal = Number(days[date].total);
+        const pct = (dayTotal / maxAmount) * 100;
+        const byCat = days[date].byCategory || {};
+        const segments = CATEGORY_ORDER
+          .filter(c => (byCat[c] || 0) > 0)
+          .map(c => {
+            const catPct = dayTotal > 0 ? (byCat[c] / dayTotal) * 100 : 0;
+            return `<div class="bar-segment" style="height:${catPct}%;background:${categoryColor(c)}" title="${categoryLabel(c)}: $${byCat[c].toFixed(2)}"></div>`;
+          }).join('');
+        return `
+          <div class="chart-col">
+            <div class="bar-container">
+              <div class="bar-fill" style="height:${pct}%;background:transparent;display:flex;flex-direction:column-reverse" title="$${dayTotal.toFixed(2)}">${segments}</div>
+            </div>
+            <div class="bar-label">${dayLabel(date)}</div>
+            <div class="bar-amount">$${dayTotal.toFixed(0)}</div>
+          </div>
+        `;
+      }).join('');
+
+      const usedCats = new Set();
+      for (const d of Object.values(days)) for (const c of Object.keys(d.byCategory || {})) usedCats.add(c);
+      const legend = CATEGORY_ORDER.filter(c => usedCats.has(c)).map(c => `
+        <span class="legend-item">
+          <span class="category-dot" style="background:${categoryColor(c)}"></span>
+          ${categoryLabel(c)}
+        </span>
+      `).join('') || '<span style="color:var(--text-muted);font-size:12px">No entries this week yet</span>';
+
+      return `
+        <div class="card" style="margin-top:20px;padding:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h3 style="margin:0;font-size:16px;color:var(--text)">Week Revenue</h3>
+            <div class="week-total">Total: <strong>$${Number(revenue.weekTotal || 0).toFixed(2)}</strong></div>
+          </div>
+          <div class="chart-legend">${legend}</div>
+          <div class="chart-bars">${bars}</div>
+        </div>
+      `;
+    }
+
+    // Dead code from the old 7-column grid — kept shallow so any stale
+    // reference via bfcache / browser-back resolves safely. Not used.
+    function renderRevenueSection(revenue) { return renderRevenueChartOnly(revenue); }
+    function _unused_revenueGrid(revenue) {
+      const days = revenue.days || {};
+      const dayOrder = Object.keys(days).sort();
 
       const dayLabel = dateStr => {
         const d = parseDate(dateStr);

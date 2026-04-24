@@ -1805,7 +1805,7 @@ router.get('/settings/full', async (req, res) => {
     const groupId = req.manager.groupId
     const db = supabase()
 
-    const [sessionRes, staffRes, shiftsRes, ratesRes, overtimeRes, budgetRes, rulesRes] = await Promise.all([
+    const [sessionRes, staffRes, shiftsRes, ratesRes, overtimeRes, budgetRes, rulesRes, tipsRes] = await Promise.all([
       db.from('setup_sessions').select('group_id, group_name, setup_data').eq('group_id', groupId).single(),
       db.from('staff').select('id, name, role, active').eq('group_id', groupId).eq('active', true),
       db.from('shifts').select('*').eq('group_id', groupId),
@@ -1813,6 +1813,7 @@ router.get('/settings/full', async (req, res) => {
       db.from('overtime_settings').select('*').eq('group_id', groupId).maybeSingle(),
       db.from('labor_budgets').select('weekly_budget, currency').eq('group_id', groupId).maybeSingle(),
       db.from('business_rules').select('*').eq('group_id', groupId).or('active.is.null,active.eq.true'),
+      db.from('restaurant_tip_settings').select('mode, split_method, boh_included').eq('group_id', groupId).maybeSingle(),
     ])
 
     const shiftIds = (shiftsRes.data ?? []).map(s => s.id)
@@ -1850,9 +1851,9 @@ router.get('/settings/full', async (req, res) => {
         daily_multiplier: 1.5,
       },
       tips: {
-        mode: setupData.tipMode || 'pool',
-        splitMethod: setupData.tipSplitMethod || 'hours',
-        bohIncluded: setupData.tipBohIncluded ?? false,
+        mode: tipsRes.data?.mode || setupData.tipMode || 'pool',
+        splitMethod: tipsRes.data?.split_method || setupData.tipSplitMethod || 'hours',
+        bohIncluded: tipsRes.data?.boh_included ?? setupData.tipBohIncluded ?? false,
       },
       budget: {
         weeklyBudget: budgetRes.data?.weekly_budget ?? null,
@@ -1903,14 +1904,13 @@ router.patch('/settings/full', async (req, res) => {
 
     if (body.tips) {
       try {
-        const { data: sess } = await db.from('setup_sessions').select('setup_data').eq('group_id', groupId).single()
-        const merged = {
-          ...(sess?.setup_data || {}),
-          tipMode: body.tips.mode,
-          tipSplitMethod: body.tips.splitMethod,
-          tipBohIncluded: body.tips.bohIncluded,
-        }
-        const { error } = await db.from('setup_sessions').update({ setup_data: merged }).eq('group_id', groupId)
+        const { error } = await db.from('restaurant_tip_settings').upsert({
+          group_id: groupId,
+          mode: body.tips.mode,
+          split_method: body.tips.splitMethod,
+          boh_included: body.tips.bohIncluded,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'group_id' })
         if (error) throw error
         updated.tips = true
       } catch (e) { errors.tips = e.message }
