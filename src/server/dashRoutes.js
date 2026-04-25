@@ -1806,7 +1806,7 @@ router.get('/settings/full', async (req, res) => {
     const db = supabase()
 
     const [sessionRes, staffRes, shiftsRes, ratesRes, overtimeRes, budgetRes, rulesRes, tipsRes] = await Promise.all([
-      db.from('setup_sessions').select('group_id, group_name, setup_data').eq('group_id', groupId).single(),
+      db.from('setup_sessions').select('group_id, group_name, phone, setup_data').eq('group_id', groupId).single(),
       db.from('staff').select('id, name, role, active').eq('group_id', groupId).eq('active', true),
       db.from('shifts').select('*').eq('group_id', groupId),
       db.from('role_rates').select('role_name, hourly_rate').eq('group_id', groupId),
@@ -1830,6 +1830,7 @@ router.get('/settings/full', async (req, res) => {
       restaurant: {
         groupId: session.group_id,
         name: session.group_name,
+        phone: session.phone || null,
       },
       staff: (staffRes.data ?? []).map(s => ({ id: s.id, name: s.name, role: s.role })),
       shifts: (shiftsRes.data ?? []).map(s => ({
@@ -1876,10 +1877,15 @@ router.patch('/settings/full', async (req, res) => {
     const errors = {}
     const updated = {}
 
-    if (body.restaurant?.name !== undefined) {
+    if (body.restaurant) {
       try {
-        const { error } = await db.from('setup_sessions').update({ group_name: body.restaurant.name }).eq('group_id', groupId)
-        if (error) throw error
+        const patch = {}
+        if (body.restaurant.name !== undefined) patch.group_name = body.restaurant.name
+        if (body.restaurant.phone !== undefined) patch.phone = body.restaurant.phone || null
+        if (Object.keys(patch).length > 0) {
+          const { error } = await db.from('setup_sessions').update(patch).eq('group_id', groupId)
+          if (error) throw error
+        }
         updated.restaurant = true
       } catch (e) { errors.restaurant = e.message }
     }
@@ -1935,6 +1941,43 @@ router.patch('/settings/full', async (req, res) => {
   } catch (err) {
     console.error('PATCH /settings/full error:', err.message)
     res.status(500).json({ error: 'Failed to update settings' })
+  }
+})
+
+// PUT /api/shifts/:id/requirements — replace the role requirements list for a shift
+// Body: { requirements: [{ role: string, count: number }, ...] }
+router.put('/shifts/:id/requirements', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const shiftId = Number(req.params.id)
+    if (!Number.isInteger(shiftId) || shiftId <= 0) return res.status(400).json({ error: 'Invalid shift id' })
+    const reqs = Array.isArray(req.body?.requirements) ? req.body.requirements : null
+    if (!reqs) return res.status(400).json({ error: 'requirements array required' })
+
+    const db = supabase()
+    // Verify shift belongs to this group (prevents cross-tenant edits)
+    const { data: shift } = await db.from('shifts').select('id').eq('id', shiftId).eq('group_id', groupId).maybeSingle()
+    if (!shift) return res.status(404).json({ error: 'Shift not found' })
+
+    const cleaned = []
+    for (const r of reqs) {
+      const role = String(r.role || '').trim()
+      const count = Number(r.count)
+      if (!role || !Number.isInteger(count) || count < 0 || count > 50) continue
+      if (count > 0) cleaned.push({ shift_id: shiftId, role, count })
+    }
+
+    // Replace existing rows for this shift
+    const { error: delErr } = await db.from('shift_requirements').delete().eq('shift_id', shiftId)
+    if (delErr) throw delErr
+    if (cleaned.length > 0) {
+      const { error: insErr } = await db.from('shift_requirements').insert(cleaned)
+      if (insErr) throw insErr
+    }
+    res.json({ success: true, count: cleaned.length })
+  } catch (err) {
+    console.error('PUT /shifts/:id/requirements error:', err.message)
+    res.status(500).json({ error: 'Failed to save requirements' })
   }
 })
 

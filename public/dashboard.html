@@ -2326,7 +2326,8 @@
         const data = await api(`/api/timeclock/weekly?weekStart=${currentScheduleWeek}`);
         renderTimeClockPage(data || { rows: [] });
       } catch (e) {
-        showToast(e.message, 'error');
+        console.error('loadTimeClockPage failed:', e);
+        showToast(e.message || 'Failed to load time clock', 'error');
         renderErrorInline("loadPage('timeclock')");
       }
     }
@@ -2357,31 +2358,39 @@
       const rowClass = r => r.missedClockOuts > 0 ? 'row-warning' : '';
       const varianceClass = r => r.variance > 0 ? 'text-success' : (r.variance < -2 ? 'text-warning' : '');
 
-      const rowsHtml = rows.map(r => `
+      const rowsHtml = rows.map(r => {
+        const hSched = Number(r.hoursScheduled || 0);
+        const hClock = Number(r.hoursClocked || 0);
+        const varH = Number(r.variance || 0);
+        return `
         <tr class="expandable ${rowClass(r)}" onclick="document.getElementById('entries-${r.staffId}').classList.toggle('hidden')">
-          <td>${escapeHtml(r.staffName)}</td>
+          <td>${escapeHtml(r.staffName || '')}</td>
           <td>${escapeHtml(r.role || '')}</td>
-          <td>${r.shiftsScheduled}</td>
-          <td>${r.hoursScheduled.toFixed(1)}h</td>
-          <td>${r.hoursClocked.toFixed(1)}h</td>
-          <td class="${varianceClass(r)}">${r.variance >= 0 ? '+' : ''}${r.variance.toFixed(1)}h</td>
+          <td>${r.shiftsScheduled || 0}</td>
+          <td>${hSched.toFixed(1)}h</td>
+          <td>${hClock.toFixed(1)}h</td>
+          <td class="${varianceClass({ variance: varH })}">${varH >= 0 ? '+' : ''}${varH.toFixed(1)}h</td>
           <td>${statusBadge(r)}</td>
         </tr>
         <tr class="clock-entries-row hidden" id="entries-${r.staffId}">
           <td colspan="7">
-            ${(r.entries || []).map(e => `
+            ${(r.entries || []).map(e => {
+              const ci = e.clockIn ? new Date(e.clockIn) : null;
+              const co = e.clockOut ? new Date(e.clockOut) : null;
+              const eh = Number(e.hours || 0);
+              return `
               <div class="clock-entry">
-                <span>${new Date(e.clockIn).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                <span>In: ${new Date(e.clockIn).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
-                <span>Out: ${e.clockOut ? new Date(e.clockOut).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '<span style="color:#D95F2B">⚠️ Missing</span>'}</span>
-                <span>${e.hours.toFixed(1)}h</span>
-                ${!e.clockOut ? `<button class="alert-action" onclick="event.stopPropagation(); clockOutNow(${r.staffId})">Clock Out</button>` : ''}
-              </div>
-            `).join('') || '<div style="color:var(--text-muted);font-size:12px">No clock entries this week</div>'}
-            <button class="alert-action" style="margin-top:8px" onclick="event.stopPropagation(); addManualEntry(${r.staffId}, '${escapeJs(r.staffName)}')">+ Add Manual Entry</button>
+                <span>${ci ? ci.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '—'}</span>
+                <span>In: ${ci ? ci.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '—'}</span>
+                <span>Out: ${co ? co.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '<span style="color:#D95F2B">⚠️ Missing</span>'}</span>
+                <span>${eh.toFixed(1)}h</span>
+                ${!co ? `<button class="alert-action" onclick="event.stopPropagation(); clockOutNow(${r.staffId})">Clock Out</button>` : ''}
+              </div>`;
+            }).join('') || '<div style="color:var(--text-muted);font-size:12px">No clock entries this week</div>'}
+            <button class="alert-action" style="margin-top:8px" onclick="event.stopPropagation(); addManualEntry(${r.staffId}, '${escapeJs(r.staffName || '')}')">+ Add Manual Entry</button>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
 
       setContent(`
         <div class="page-header">
@@ -2590,6 +2599,13 @@
             <div class="setting-label">Name</div>
             <input class="setting-input" id="rest-name" value="${escapeHtml(r.name || '')}">
           </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Phone (login)</div>
+              <div class="setting-desc">The number you use to receive your dashboard login code</div>
+            </div>
+            <input class="setting-input" id="rest-phone" placeholder="+1 555 123 4567" value="${escapeHtml(r.phone || '')}">
+          </div>
           <button class="setting-save-btn" onclick="saveRestaurant()">Save Restaurant</button>
         </div>
 
@@ -2688,18 +2704,27 @@
 
         <div class="settings-section">
           <div class="settings-section-title">Shifts</div>
-          ${shifts.length === 0 ? '<div class="setting-desc">No shifts configured.</div>' : shifts.map(s => `
+          ${shifts.length === 0 ? '<div class="setting-desc">No shifts configured.</div>' : shifts.map(s => {
+            const reqsLabel = (s.requirements && s.requirements.length > 0)
+              ? s.requirements.map(r => `${r.count} ${escapeHtml(r.role)}`).join(' · ')
+              : '<span style="color:var(--text-muted)">no role requirements set</span>';
+            // Stash the full shift on window so the edit modal can retrieve requirements
+            // without needing to round-trip through inline onclick string interpolation.
+            window.__shiftCache = window.__shiftCache || {};
+            window.__shiftCache[s.id] = s;
+            return `
             <div class="setting-row">
-              <div>
+              <div style="flex:1">
                 <div class="setting-label">${escapeHtml(s.name)}</div>
                 <div class="setting-desc">${escapeHtml(s.dayOfWeek || '')} · ${escapeHtml(s.startTime || '')}–${escapeHtml(s.endTime || '')}</div>
+                <div class="setting-desc" style="margin-top:4px">Roles: ${reqsLabel}</div>
               </div>
-              <div style="display:flex;gap:8px">
-                <button class="setting-save-btn" style="margin-top:0;padding:6px 14px" onclick="openEditShift(${s.id},'${escapeJs(s.name)}','${escapeJs(s.dayOfWeek)}','${escapeJs(s.startTime)}','${escapeJs(s.endTime)}')">Edit</button>
+              <div style="display:flex;gap:8px;flex-shrink:0">
+                <button class="setting-save-btn" style="margin-top:0;padding:6px 14px" onclick="openEditShiftFull(${s.id})">Edit</button>
                 <button class="setting-save-btn danger" style="margin-top:0;padding:6px 14px" onclick="deleteShift(${s.id},'${escapeJs(s.name)}')">Delete</button>
               </div>
-            </div>
-          `).join('')}
+            </div>`;
+          }).join('')}
           <button class="setting-save-btn ghost" onclick="openAddShift()">+ Add Shift</button>
         </div>
 
@@ -2721,9 +2746,10 @@
 
     async function saveRestaurant() {
       const name = document.getElementById('rest-name')?.value.trim();
+      const phone = document.getElementById('rest-phone')?.value.trim() || '';
       if (!name) { showToast('Name cannot be empty', 'error'); return; }
       try {
-        await api('/api/settings/full', 'PATCH', { restaurant: { name } });
+        await api('/api/settings/full', 'PATCH', { restaurant: { name, phone } });
         showToast('Restaurant saved');
         const rn = document.getElementById('restaurant-name');
         if (rn) rn.textContent = name;
@@ -2785,6 +2811,75 @@
         await api('/api/settings/full', 'PATCH', { budget: { weeklyBudget: v } });
         showToast('Budget saved');
       } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    // ── Edit-shift modal with role requirements editor ──
+    function openEditShiftFull(shiftId) {
+      const shift = (window.__shiftCache || {})[shiftId];
+      if (!shift) { showToast('Shift not found in cache — reload the page', 'error'); return; }
+      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const dayOpts = days.map(d => `<option value="${d}" ${d === shift.dayOfWeek ? 'selected' : ''}>${d}</option>`).join('');
+      // Requirements as editable rows (role text + count number)
+      window.__editingReqs = (shift.requirements || []).map(r => ({ role: r.role, count: r.count }));
+
+      function reqsHtml() {
+        const list = window.__editingReqs || [];
+        const rows = list.map((r, i) => `
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+            <input type="text" placeholder="Role" value="${escapeHtml(r.role || '')}" style="flex:1;padding:6px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)" oninput="window.__editingReqs[${i}].role = this.value">
+            <input type="number" min="0" max="50" placeholder="Count" value="${r.count}" style="width:80px;padding:6px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)" oninput="window.__editingReqs[${i}].count = parseInt(this.value)||0">
+            <button class="setting-save-btn danger" style="margin-top:0;padding:4px 10px;font-size:12px" onclick="window.__editingReqs.splice(${i},1);_redrawReqs()">✕</button>
+          </div>
+        `).join('');
+        return `<div id="reqs-list">${rows || '<div style="color:var(--text-muted);font-size:12px;margin-bottom:6px">No role requirements yet.</div>'}</div>
+          <button class="setting-save-btn ghost" style="margin-top:4px;padding:6px 14px" onclick="window.__editingReqs.push({role:'',count:1});_redrawReqs()">+ Add Role</button>`;
+      }
+
+      window._redrawReqs = () => {
+        const wrap = document.getElementById('reqs-wrapper');
+        if (wrap) wrap.innerHTML = reqsHtml();
+      };
+
+      showModal(`Edit Shift: ${shift.name}`,
+        `<label>Name</label><input id="m-sname" value="${escapeHtml(shift.name)}" />
+         <label>Day</label><select id="m-sday">${dayOpts}</select>
+         <label>Start Time</label><input id="m-sstart" type="time" value="${escapeHtml(_toHHMM(shift.startTime))}" />
+         <label>End Time</label><input id="m-send" type="time" value="${escapeHtml(_toHHMM(shift.endTime))}" />
+         <label style="margin-top:12px">Role requirements</label>
+         <div id="reqs-wrapper">${reqsHtml()}</div>`,
+        async () => {
+          const name = document.getElementById('m-sname').value.trim();
+          const day = document.getElementById('m-sday').value;
+          const start = document.getElementById('m-sstart').value;
+          const end = document.getElementById('m-send').value;
+          if (!name || !day || !start || !end) { showToast('All shift fields required', 'error'); return; }
+          try {
+            // Save shift fields
+            await api(`/api/shifts/${shiftId}`, 'PATCH', {
+              name, day_of_week: day, start_time: start, end_time: end,
+            });
+            // Save role requirements (replaces existing)
+            const cleaned = (window.__editingReqs || [])
+              .map(r => ({ role: String(r.role || '').trim(), count: parseInt(r.count) || 0 }))
+              .filter(r => r.role && r.count > 0);
+            await api(`/api/shifts/${shiftId}/requirements`, 'PUT', { requirements: cleaned });
+            await loadSettingsPage();
+            showToast('Shift updated');
+          } catch (e) { showToast(e.message || 'Failed to save', 'error'); }
+        }, 'Save');
+    }
+
+    // Convert "11:00 AM" / "8:00 PM" to "HH:MM" for <input type="time"> compatibility
+    function _toHHMM(t) {
+      if (!t) return '';
+      const m = String(t).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+      if (!m) return String(t);
+      let h = parseInt(m[1]);
+      const mm = m[2] || '00';
+      const ap = (m[3] || '').toLowerCase();
+      if (ap === 'pm' && h !== 12) h += 12;
+      if (ap === 'am' && h === 12) h = 0;
+      return `${String(h).padStart(2,'0')}:${mm}`;
     }
 
     function toggleDarkMode() {
