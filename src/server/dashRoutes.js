@@ -2004,4 +2004,88 @@ router.post('/rates', async (req, res) => {
   }
 })
 
+// ─── ROLES ROUTES ─────────────────────────────────────────────────────────────
+
+// GET /api/roles — distinct roles across shift_requirements, role_rates, staff
+router.get('/roles', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const db = supabase()
+
+    const [shiftsRes, ratesRes, staffRes] = await Promise.all([
+      db.from('shifts').select('id').eq('group_id', groupId),
+      db.from('role_rates').select('role_name, hourly_rate').eq('group_id', groupId),
+      db.from('staff').select('role').eq('group_id', groupId).eq('active', true),
+    ])
+
+    const groupShiftIds = new Set((shiftsRes.data || []).map(s => String(s.id)))
+
+    // Roles from shift_requirements (filtered to this group's shifts via join)
+    const reqRoles = new Map()
+    if (groupShiftIds.size > 0) {
+      const { data: reqs } = await db
+        .from('shift_requirements')
+        .select('role, shift_id, count')
+        .in('shift_id', [...groupShiftIds])
+      for (const r of (reqs || [])) {
+        reqRoles.set(r.role, (reqRoles.get(r.role) || 0) + 1)
+      }
+    }
+
+    // Rate map: role_name → hourly_rate
+    const ratesMap = new Map()
+    for (const r of (ratesRes.data || [])) {
+      ratesMap.set(r.role_name, Number(r.hourly_rate))
+    }
+
+    // Staff count per role
+    const staffRoles = new Map()
+    for (const s of (staffRes.data || [])) {
+      if (!s.role) continue
+      staffRoles.set(s.role, (staffRoles.get(s.role) || 0) + 1)
+    }
+
+    const allRoles = new Set([...reqRoles.keys(), ...ratesMap.keys(), ...staffRoles.keys()])
+    const result = Array.from(allRoles).sort().map(role => ({
+      role,
+      rate: ratesMap.has(role) ? ratesMap.get(role) : null,
+      staffCount: staffRoles.get(role) || 0,
+      shiftCount: reqRoles.get(role) || 0,
+    }))
+
+    res.json(result)
+  } catch (err) {
+    console.error('GET /roles error:', err.message)
+    res.status(500).json({ error: 'Failed to load roles' })
+  }
+})
+
+// PATCH /api/roles/:role — update hourly rate for a role
+router.patch('/roles/:role', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const role = decodeURIComponent(req.params.role)
+    const { rate } = req.body ?? {}
+    if (!role) return res.status(400).json({ error: 'role is required' })
+    const rateNum = Number(rate)
+    if (!Number.isFinite(rateNum) || rateNum < 0 || rateNum > 500) {
+      return res.status(400).json({ error: 'rate must be 0–500' })
+    }
+    const db = supabase()
+    const { data, error } = await db
+      .from('role_rates')
+      .upsert(
+        { group_id: groupId, role_name: role, hourly_rate: rateNum, updated_at: new Date().toISOString() },
+        { onConflict: 'group_id,role_name' }
+      )
+      .select()
+      .single()
+    if (error) throw error
+    res.json({ role, rate: Number(data.hourly_rate) })
+  } catch (err) {
+    console.error('PATCH /roles/:role error:', err.message)
+    res.status(500).json({ error: 'Failed to update role rate' })
+  }
+})
+
 export default router
