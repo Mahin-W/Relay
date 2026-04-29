@@ -1238,6 +1238,30 @@
       background: var(--surface); border: 1px solid var(--surface-border);
       border-radius: 10px; padding: 20px; margin-bottom: 16px;
     }
+    .summary-bar-wrap {
+      display: flex; align-items: center;
+      gap: 12px; padding: 8px 0;
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .summary-bar-label {
+      width: 80px; font-size: 13px;
+      color: var(--text-muted); font-weight: 500;
+    }
+    .summary-bar-track {
+      flex: 1; height: 8px;
+      background: var(--surface-border);
+      border-radius: 4px; overflow: hidden;
+    }
+    .summary-bar-fill {
+      height: 100%; border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .summary-bar-amount {
+      width: 80px; font-size: 13px;
+      font-weight: 600; text-align: right;
+      color: var(--text);
+    }
+
     .settings-section-title {
       font-size: 13px; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.07em;
@@ -1342,9 +1366,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           <span class="nav-item-label">Payroll</span>
         </a>
-        <a class="nav-item" data-page="timeclock" onclick="navigateTo('timeclock')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span class="nav-item-label">Time Clock</span>
+        <a class="nav-item" data-page="income" onclick="navigateTo('income')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span class="nav-item-label">Income</span>
         </a>
         <a class="nav-item" data-page="eventlog" onclick="navigateTo('eventlog')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -1396,6 +1420,7 @@
       schedule: 'Schedule',
       staff: 'Staff',
       payroll: 'Payroll',
+      income: 'Income',
       timeclock: 'Time Clock',
       eventlog: 'Event Log',
       settings: 'Settings'
@@ -1575,6 +1600,19 @@
         document.getElementById('restaurant-name').textContent = data.restaurantName || 'My Business';
       } catch {
         // redirect handled in apiFetch
+      }
+    }
+
+    async function applyNavPreferences() {
+      try {
+        const s = await api('/api/settings');
+        const hidden = Array.isArray(s?.hiddenPages) ? s.hiddenPages : [];
+        document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+          const page = el.dataset.page;
+          el.style.display = hidden.includes(page) ? 'none' : '';
+        });
+      } catch {
+        // fail silently — show all nav items
       }
     }
 
@@ -1941,6 +1979,11 @@
           loadPayrollPage();
           break;
 
+        case 'income':
+          showSkeleton();
+          loadIncomePage();
+          break;
+
         case 'timeclock':
           showSkeleton();
           loadTimeClockPage();
@@ -2078,6 +2121,7 @@
     // ── PAGE: PAYROLL ──
     // ───────────────────────────────────────────
     let currentPayrollWeek = getCurrentWeekStart();
+    let currentIncomeWeek  = getCurrentWeekStart();
 
     // Revenue categories — loaded dynamically from /api/revenue/types
     const CATEGORY_PALETTE = [
@@ -2117,43 +2161,38 @@
 
     async function loadPayrollPage() {
       try {
-        const [payroll, settings, tips, revenue] = await Promise.all([
+        const [payroll, settings] = await Promise.all([
           api(`/api/payroll?week=${currentPayrollWeek}`),
-          api(`/api/settings`),
-          api(`/api/tips?weeks=1`),
-          api(`/api/revenue/daily?weekStart=${currentPayrollWeek}`)
+          api('/api/settings'),
         ]);
-        renderPayrollPage(payroll || [], settings || {}, tips || [], revenue || {days:{},weekTotal:0});
-        await buildCategorySelector('now-rev-cat');
-        await buildCategorySelector('any-rev-cat');
+        renderPayrollPage(payroll || [], settings || {});
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('payroll')");
       }
     }
 
-    function renderPayrollPage(payroll, settings, tips, revenue) {
+    function renderPayrollPage(payroll, settings) {
       const totalPay = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
       const totalHrs = payroll.reduce((s, r) => s + (r.total_hours || 0), 0);
-      // Sum tips entered this week (shift_date between this week's Mon and Sun)
-      const weekEnd = formatDate(new Date(parseDate(currentPayrollWeek).getTime() + 6 * 86400000));
-      const weekTipsTotal = (tips || [])
-        .filter(t => t.shift_date >= currentPayrollWeek && t.shift_date <= weekEnd)
-        .reduce((s, t) => s + Number(t.total_tips || 0), 0);
-      const today = formatDate(new Date());
-      const isTodayInWeek = today >= currentPayrollWeek && today <= weekEnd;
+      const avgRate  = totalHrs > 0 ? totalPay / totalHrs : 0;
+      const staffPaid = payroll.filter(r => (r.total_hours || 0) > 0).length;
+
+      const rateOf = r => (r.total_hours || 0) > 0
+        ? (r.total_gross_pay || 0) / (r.total_hours || 0) : 0;
 
       const rows = payroll.map(r => `
         <tr>
-          <td>${escapeHtml(r.name)}</td>
-          <td><span class="role-badge">${escapeHtml(r.role)}</span></td>
-          <td>${(r.total_hours || 0).toFixed(1)}</td>
-          <td>${formatCurrency(r.total_gross_pay || 0)}</td>
+          <td>${escapeHtml(r.name || '')}</td>
+          <td><span class="role-badge">${escapeHtml(r.role || '')}</span></td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${(r.total_hours || 0).toFixed(1)}h</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(rateOf(r))}/h</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">${formatCurrency(r.total_gross_pay || 0)}</td>
         </tr>`).join('');
 
-      // Disable the Next arrow when we're viewing the current week (don't navigate past)
       const thisWeek = getCurrentWeekStart();
       const atCurrent = currentPayrollWeek >= thisWeek;
+      const incomeHidden = (settings.hiddenPages || []).includes('income');
 
       setContent(`
         <div class="page-header">
@@ -2169,8 +2208,204 @@
         <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(4,1fr)">
           <div class="stat-card"><div class="stat-label">Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
           <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
-          <div class="stat-card"><div class="stat-label">Week Revenue</div><div class="stat-value">${formatCurrency(revenue.weekTotal || 0)}</div></div>
-          <div class="stat-card"><div class="stat-label">Week Tips</div><div class="stat-value">${formatCurrency(weekTipsTotal)}</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Hourly Rate</div><div class="stat-value">${totalHrs > 0 ? formatCurrency(avgRate) : '—'}</div></div>
+          <div class="stat-card"><div class="stat-label">Staff Paid</div><div class="stat-value">${staffPaid}</div></div>
+        </div>
+
+        <div class="card">
+          <table class="data-table payroll-table">
+            <thead><tr>
+              <th>Name</th><th>Role</th>
+              <th style="text-align:right">Hours</th>
+              <th style="text-align:right">Rate</th>
+              <th style="text-align:right">Gross Pay</th>
+            </tr></thead>
+            <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">No payroll data for this week. Generate and approve a schedule to calculate payroll.</td></tr>'}</tbody>
+            ${payroll.length ? `<tfoot><tr style="border-top:2px solid var(--surface-border);font-weight:700;color:var(--text)">
+              <td>TOTAL</td><td>—</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${totalHrs.toFixed(1)}h</td>
+              <td style="text-align:right">—</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(totalPay)}</td>
+            </tr></tfoot>` : ''}
+          </table>
+        </div>
+
+        ${incomeHidden ? `<div style="margin-top:16px;text-align:center">
+          <a onclick="navigateTo('income')" style="font-size:13px;color:var(--accent);cursor:pointer;text-decoration:none">Track revenue and tips →</a>
+        </div>` : ''}
+      `);
+    }
+
+    // ───────────────────────────────────────────
+    // ── PAGE: INCOME ──
+    // ───────────────────────────────────────────
+    async function loadIncomePage() {
+      try {
+        const [payroll, revenue, tips, settings] = await Promise.all([
+          api(`/api/payroll?week=${currentIncomeWeek}`),
+          api(`/api/revenue/daily?weekStart=${currentIncomeWeek}`),
+          api(`/api/tips?weeks=4`),
+          api('/api/settings'),
+        ]);
+        renderIncomePage(
+          payroll || [],
+          revenue || { days: {}, weekTotal: 0 },
+          tips || [],
+          settings || {}
+        );
+        await buildCategorySelector('now-rev-cat');
+        await buildCategorySelector('any-rev-cat');
+      } catch (e) {
+        showToast(e.message, 'error');
+        renderErrorInline("loadPage('income')");
+      }
+    }
+
+    function changeIncomeWeek(days) {
+      const d = parseDate(currentIncomeWeek);
+      d.setDate(d.getDate() + days);
+      const next = formatDate(d);
+      if (days > 0 && next > getCurrentWeekStart()) return;
+      currentIncomeWeek = next;
+      loadIncomePage();
+    }
+
+    function renderDailyRevenueGrid(revenue) {
+      const days = revenue.days || {};
+      const dayOrder = Object.keys(days).sort();
+      const dayLabel = dateStr => {
+        const d = parseDate(dateStr);
+        return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d.getDay() === 0 ? 6 : d.getDay() - 1];
+      };
+      const dayDate = dateStr => {
+        const d = parseDate(dateStr);
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return `${months[d.getMonth()]} ${d.getDate()}`;
+      };
+
+      const grid = dayOrder.map(date => {
+        const day = days[date];
+        const entries = (day.entries || []).map(e => `
+          <div class="revenue-entry">
+            <span class="category-dot" style="background:${categoryColor(e.category)}" title="${categoryLabel(e.category)}"></span>
+            <span class="entry-amount">$${Number(e.amount).toFixed(2)}</span>
+            <span class="entry-note">${escapeHtml(e.note || categoryLabel(e.category))}</span>
+            <button class="entry-delete" onclick="deleteDailyRevenue(${e.id})" aria-label="Delete">✕</button>
+          </div>`).join('');
+        return `
+          <div class="revenue-day">
+            <div class="day-label">${dayLabel(date)}</div>
+            <div class="day-date">${dayDate(date)}</div>
+            <div class="day-total">$${Number(day.total).toFixed(2)}</div>
+            <div class="day-entries">${entries || '<div style="font-size:11px;color:var(--text-muted)">No entries</div>'}</div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="card" style="padding:20px;margin-bottom:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--text)">Daily Revenue</h3>
+            <div class="week-total">Total: <strong>$${Number(revenue.weekTotal || 0).toFixed(2)}</strong></div>
+          </div>
+          <div class="revenue-grid">${grid}</div>
+        </div>`;
+    }
+
+    function renderIncomePage(payroll, revenue, tips, settings) {
+      const today = formatDate(new Date());
+      const weekEnd = formatDate(new Date(parseDate(currentIncomeWeek).getTime() + 6 * 86400000));
+      const thisWeek = getCurrentWeekStart();
+      const atCurrent = currentIncomeWeek >= thisWeek;
+
+      const totalLabor = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
+      const weekRevenue = Number(revenue.weekTotal || 0);
+      const weekTipsRows = (tips || []).filter(t => t.shift_date >= currentIncomeWeek && t.shift_date <= weekEnd);
+      const weekTipsTotal = weekTipsRows.reduce((s, t) => s + Number(t.total_tips || 0), 0);
+      const tipsCount = weekTipsRows.length;
+      const revenueEntries = Object.values(revenue.days || {}).reduce((n, d) => n + ((d.entries || []).length), 0);
+
+      const laborPctNum = weekRevenue > 0 ? (totalLabor / weekRevenue) * 100 : null;
+      const laborPctText = laborPctNum === null ? 'N/A' : `${laborPctNum.toFixed(1)}%`;
+      const laborPctColor = laborPctNum === null ? 'var(--text-muted)'
+        : laborPctNum < 30 ? 'var(--success)'
+        : laborPctNum <= 40 ? 'var(--accent)'
+        : 'var(--color-danger)';
+      const laborPctSub = laborPctNum === null ? 'Log revenue to calculate' : 'of revenue';
+
+      const net = weekRevenue - totalLabor;
+      const netColor = weekRevenue === 0 ? 'var(--text)'
+        : net >= 0 ? 'var(--success)' : 'var(--color-danger)';
+
+      const tipsRows = (tips || []).map(t => {
+        const d = parseDate(t.shift_date);
+        const fmt = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' +
+          ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + d.getDate();
+        return `<tr>
+          <td>${fmt}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(Number(t.total_tips || 0))}</td>
+          <td style="color:var(--text-muted);font-size:12px">${escapeHtml(t.split_method || 'pool')}</td>
+        </tr>`;
+      }).join('');
+
+      const showSummary = weekRevenue > 0;
+      const pct = v => Math.max(0, Math.min(100, weekRevenue > 0 ? (v / weekRevenue) * 100 : 0));
+
+      const summaryHtml = !showSummary ? '' : `
+        <div class="card" style="margin-top:20px;padding:20px">
+          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">This week at a glance</h3>
+          <div class="summary-bar-wrap">
+            <div class="summary-bar-label">Revenue</div>
+            <div class="summary-bar-track"><div class="summary-bar-fill" style="width:100%;background:var(--accent)"></div></div>
+            <div class="summary-bar-amount">${formatCurrency(weekRevenue)}</div>
+          </div>
+          <div class="summary-bar-wrap">
+            <div class="summary-bar-label">Labor</div>
+            <div class="summary-bar-track"><div class="summary-bar-fill" style="width:${pct(totalLabor)}%;background:#D97706"></div></div>
+            <div class="summary-bar-amount">${formatCurrency(totalLabor)}</div>
+          </div>
+          <div class="summary-bar-wrap">
+            <div class="summary-bar-label">Tips</div>
+            <div class="summary-bar-track"><div class="summary-bar-fill" style="width:${pct(weekTipsTotal)}%;background:var(--success)"></div></div>
+            <div class="summary-bar-amount">${formatCurrency(weekTipsTotal)}</div>
+          </div>
+          <div class="summary-bar-wrap" style="border-bottom:none">
+            <div class="summary-bar-label">Net</div>
+            <div class="summary-bar-track"></div>
+            <div class="summary-bar-amount" style="color:${netColor}">${formatCurrency(net)}</div>
+          </div>
+        </div>`;
+
+      setContent(`
+        <div class="page-header">
+          <h2 class="page-title">Income</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-small" onclick="changeIncomeWeek(-7)">&larr; Prev</button>
+            <span style="font-size:14px;font-weight:600;color:var(--text-secondary)">Week of ${formatWeekRange(currentIncomeWeek)}</span>
+            <button class="btn-small" onclick="changeIncomeWeek(7)" ${atCurrent ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>Next &rarr;</button>
+          </div>
+        </div>
+
+        <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card">
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-value">${formatCurrency(weekRevenue)}</div>
+            <div class="stat-sub">${revenueEntries} ${revenueEntries === 1 ? 'entry' : 'entries'} this week</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Tips</div>
+            <div class="stat-value">${formatCurrency(weekTipsTotal)}</div>
+            <div class="stat-sub">${tipsCount} tip ${tipsCount === 1 ? 'record' : 'records'}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Labor %</div>
+            <div class="stat-value" style="color:${laborPctColor}">${laborPctText}</div>
+            <div class="stat-sub">${laborPctSub}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Net</div>
+            <div class="stat-value" style="color:${netColor}">${formatCurrency(net)}</div>
+            <div class="stat-sub">after labor costs</div>
+          </div>
         </div>
 
         <div class="card" style="margin-bottom:20px;padding:20px">
@@ -2194,29 +2429,28 @@
               </div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-            <div>
-              <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Tips today</div>
-              <div style="display:flex;gap:8px">
-                <input id="quick-tips" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
-                <button class="btn-primary" onclick="quickAddTips()">Add</button>
-              </div>
-            </div>
-          </div>
         </div>
 
+        ${renderDailyRevenueGrid(revenue)}
         ${renderRevenueChartOnly(revenue)}
 
-        <div class="card" style="margin-top:20px">
+        <div class="card" style="margin-top:20px;padding:20px">
+          <h3 style="margin:0 0 12px;font-size:16px;font-weight:700;color:var(--text)">Tips</h3>
+          <div style="margin-bottom:16px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Add tips for today</div>
+            <div style="display:flex;gap:8px">
+              <input id="quick-tips" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
+              <button class="btn-primary" onclick="quickAddTips()">Add Tips</button>
+            </div>
+          </div>
           <table class="data-table">
-            <thead><tr><th>Staff</th><th>Role</th><th>Hours</th><th>Gross Pay</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No payroll data for this week</td></tr>'}</tbody>
+            <thead><tr><th>Date</th><th style="text-align:right">Amount</th><th>Notes</th></tr></thead>
+            <tbody>${tipsRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px">No tips recorded yet.</td></tr>'}</tbody>
           </table>
-          ${payroll.length ? `<div style="padding:12px;border-top:2px solid var(--surface-border);display:flex;justify-content:flex-end;gap:32px;font-weight:700;color:var(--text)">
-            <span>Total: ${totalHrs.toFixed(1)}h</span>
-            <span>${formatCurrency(totalPay)}</span>
-          </div>` : ''}
-        </div>`);
+        </div>
+
+        ${summaryHtml}
+      `);
     }
 
     async function _submitRevenue(date, amount, category, amtEl) {
@@ -2225,7 +2459,7 @@
       try {
         await api('/api/revenue/daily', 'POST', { date, amount, category: category || null });
         if (amtEl) amtEl.value = '';
-        await loadPayrollPage();
+        await (currentPage === 'income' ? loadIncomePage() : loadPayrollPage());
         const label = category ? ` (${category})` : '';
         showToast(`$${amount.toFixed(2)}${label} added for ${date}`);
       } catch (e) {
@@ -2272,7 +2506,7 @@
       try {
         await api('/api/tips', 'POST', { shiftDate, totalTips });
         if (el) el.value = '';
-        await loadPayrollPage();
+        await (currentPage === 'income' ? loadIncomePage() : loadPayrollPage());
         showToast(`$${totalTips.toFixed(2)} tips added for today`);
       } catch (e) { showToast(e.message || 'Failed to add tips', 'error'); }
     }
@@ -2442,7 +2676,7 @@
       showModal('Delete revenue entry?', `<p style="color:var(--text-secondary)">This can't be undone.</p>`, async () => {
         try {
           await api(`/api/revenue/daily/${id}`, 'DELETE');
-          await loadPayrollPage();
+          await (currentPage === 'income' ? loadIncomePage() : loadPayrollPage());
           showToast('Entry removed');
         } catch (e) { showToast(e.message, 'error'); }
       }, 'Delete');
@@ -2775,6 +3009,25 @@
       } catch (err) { showToast('Failed to remove', 'error'); }
     }
 
+    async function toggleNavPage(pageId) {
+      const toggle = document.getElementById(`nav-toggle-${pageId}`);
+      if (!toggle) return;
+      const isCurrentlyOn = toggle.classList.contains('on');
+      try {
+        const settings = await api('/api/settings');
+        const hidden = Array.isArray(settings.hiddenPages) ? settings.hiddenPages : [];
+        const newHidden = isCurrentlyOn
+          ? Array.from(new Set([...hidden, pageId]))
+          : hidden.filter(p => p !== pageId);
+        await api('/api/settings', 'PATCH', { hiddenPages: newHidden });
+        toggle.classList.toggle('on');
+        await applyNavPreferences();
+        showToast(isCurrentlyOn ? `${pageId} hidden` : `${pageId} shown in nav`);
+      } catch (e) {
+        showToast(e.message || 'Failed to update', 'error');
+      }
+    }
+
     function renderSettingsPage(config) {
       const r = config.restaurant || {};
       const staff = config.staff || [];
@@ -2800,6 +3053,26 @@
             </div>
             <div class="toggle" id="dark-toggle" onclick="toggleDarkMode()"></div>
           </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Dashboard Navigation</div>
+          <div class="setting-desc" style="margin-bottom:12px">Show or hide sections you don't need.</div>
+          ${[
+            { id: 'income',    label: 'Income',     desc: 'Revenue and tips tracking' },
+            { id: 'timeclock', label: 'Time Clock', desc: 'Clock-in/out tracking' },
+            { id: 'eventlog',  label: 'Event Log',  desc: 'Coverage, trades, overtime history' },
+          ].map(p => {
+            const isOn = !(config.hiddenPages || []).includes(p.id);
+            return `
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">${p.label}</div>
+                <div class="setting-desc">${p.desc}</div>
+              </div>
+              <div class="toggle ${isOn ? 'on' : ''}" id="nav-toggle-${p.id}" onclick="toggleNavPage('${p.id}')"></div>
+            </div>`;
+          }).join('')}
         </div>
 
         <div class="settings-section">
@@ -3209,6 +3482,9 @@
 
       // Check auth
       await checkAuth();
+
+      // Apply nav visibility preferences
+      await applyNavPreferences();
 
       // Route from hash
       const hash = window.location.hash.replace('#', '');

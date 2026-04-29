@@ -1354,6 +1354,7 @@ router.get('/settings', async (req, res) => {
       overtimeThreshold: overtime?.weekly_threshold,
       overtimeMultiplier: session?.setup_data?.overtimeMultiplier || overtime?.weekly_multiplier,
       weeklyBudget: budget?.weekly_budget,
+      hiddenPages: Array.isArray(session?.setup_data?.hiddenPages) ? session.setup_data.hiddenPages : [],
     })
   } catch (err) {
     console.error('GET /settings error:', err.message)
@@ -1365,8 +1366,8 @@ router.get('/settings', async (req, res) => {
 router.patch('/settings', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const { tipMode, overtimeThreshold, overtimeMultiplier, weeklyBudget, restaurantName } = req.body
-    if (!tipMode && overtimeThreshold === undefined && overtimeMultiplier === undefined && weeklyBudget === undefined && !restaurantName) {
+    const { tipMode, overtimeThreshold, overtimeMultiplier, weeklyBudget, restaurantName, hiddenPages } = req.body
+    if (!tipMode && overtimeThreshold === undefined && overtimeMultiplier === undefined && weeklyBudget === undefined && !restaurantName && hiddenPages === undefined) {
       return res.status(400).json({ error: 'At least one setting field is required' })
     }
     const db = supabase()
@@ -1375,10 +1376,11 @@ router.patch('/settings', async (req, res) => {
     if (restaurantName) {
       updates.push(db.from('setup_sessions').update({ group_name: restaurantName }).eq('group_id', groupId))
     }
-    if (tipMode !== undefined || overtimeMultiplier !== undefined) {
+    if (tipMode !== undefined || overtimeMultiplier !== undefined || hiddenPages !== undefined) {
       const patch = {}
       if (tipMode !== undefined) patch.tipMode = tipMode
       if (overtimeMultiplier !== undefined) patch.overtimeMultiplier = overtimeMultiplier
+      if (hiddenPages !== undefined) patch.hiddenPages = Array.isArray(hiddenPages) ? hiddenPages : []
       updates.push(
         db.rpc('jsonb_merge_setup_data', { p_group_id: groupId, p_patch: patch })
           .then(() => {})
@@ -1945,6 +1947,7 @@ router.get('/settings/full', async (req, res) => {
         currency: budgetRes.data?.currency || 'USD',
       },
       rules: rulesRes.data ?? [],
+      hiddenPages: Array.isArray(setupData.hiddenPages) ? setupData.hiddenPages : [],
     })
   } catch (err) {
     console.error('GET /settings/full error:', err.message)
