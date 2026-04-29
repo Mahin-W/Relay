@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="relay-favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     /* ─── Reset ─────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -813,84 +813,158 @@
         <h2 class="reveal">Everything you need, one screen.</h2>
         <p class="reveal">Real-time schedule, coverage tracking, labor costs, and team insights — all updating automatically from your group chat.</p>
       </div>
-      <div class="reveal delay-1" style="background:#1C1410;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card-hover);max-width:960px;margin:0 auto">
+      <div class="reveal delay-1" style="background:#1C1410;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card-hover);max-width:960px;margin:0 auto;font-family:'DM Sans',system-ui,sans-serif">
         <!-- Browser chrome -->
-        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:rgba(250,247,242,0.06);border-bottom:1px solid rgba(250,247,242,0.08)">
-          <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></span>
-          <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></span>
-          <span style="width:12px;height:12px;border-radius:50%;background:#28C840"></span>
-          <span style="flex:1;text-align:center;font-size:12px;color:rgba(250,247,242,0.4)">getrelay-app.netlify.app/dashboard</span>
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:rgba(250,247,242,0.05);border-bottom:1px solid rgba(250,247,242,0.07)">
+          <span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span>
+          <span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span>
+          <span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span>
+          <span style="flex:1;text-align:center;font-size:11px;color:rgba(250,247,242,0.35);letter-spacing:0.01em">relay.app/dashboard</span>
         </div>
         <!-- Mock dashboard content -->
-        <div style="display:flex;min-height:340px">
+        <div style="display:flex;min-height:400px">
           <!-- Sidebar mock -->
-          <div style="width:180px;background:#1C1410;padding:20px 16px;border-right:1px solid rgba(250,247,242,0.08);flex-shrink:0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px">
-              <div style="width:24px;height:24px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center">
+          <div style="width:176px;background:#131009;padding:18px 14px 18px;border-right:1px solid rgba(250,247,242,0.06);flex-shrink:0;display:flex;flex-direction:column">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:22px;padding:0 2px">
+              <div style="width:24px;height:24px;background:var(--accent);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="14" height="14"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/><polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/><polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
               </div>
-              <span style="color:rgba(250,247,242,0.9);font-weight:700;font-size:14px">Relay</span>
+              <div>
+                <div style="color:rgba(250,247,242,0.92);font-weight:700;font-size:13px;line-height:1.2">Relay</div>
+                <div style="color:rgba(250,247,242,0.35);font-size:10px;line-height:1.2">Mesa Verde Kitchen</div>
+              </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              <div style="padding:8px 12px;border-radius:6px;font-size:13px;font-weight:600;color:var(--accent);background:rgba(217,95,43,0.1);border-left:3px solid var(--accent)">Overview</div>
-              <div style="padding:8px 12px;font-size:13px;color:rgba(250,247,242,0.4)">Schedule</div>
-              <div style="padding:8px 12px;font-size:13px;color:rgba(250,247,242,0.4)">Staff</div>
-              <div style="padding:8px 12px;font-size:13px;color:rgba(250,247,242,0.4)">Payroll</div>
+            <div style="display:flex;flex-direction:column;gap:2px;flex:1">
+              <div style="padding:8px 10px;border-radius:6px;font-size:12px;font-weight:600;color:var(--accent);background:rgba(217,95,43,0.12);border-left:3px solid var(--accent);display:flex;align-items:center;gap:7px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Overview
+              </div>
+              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Schedule
+              </div>
+              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Staff
+              </div>
+              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Payroll
+              </div>
+              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Time Clock
+              </div>
+              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Settings
+              </div>
             </div>
           </div>
           <!-- Main content mock -->
-          <div style="flex:1;background:#FAF7F2;padding:20px">
+          <div style="flex:1;background:#FAF7F2;padding:18px;overflow:hidden">
             <!-- Stat cards -->
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
-              <div style="background:white;border-radius:8px;padding:14px;border:1px solid #E8DFD0">
-                <div style="font-size:10px;color:#9A8880;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px">Staff</div>
-                <div style="font-size:22px;font-weight:700;color:#1C1410">12</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px">
+              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
+                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Staff Scheduled</div>
+                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">12</div>
               </div>
-              <div style="background:white;border-radius:8px;padding:14px;border:1px solid #E8DFD0">
-                <div style="font-size:10px;color:#9A8880;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px">Shifts</div>
-                <div style="font-size:22px;font-weight:700;color:#1C1410">38</div>
+              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
+                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Shifts This Week</div>
+                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">38</div>
               </div>
-              <div style="background:white;border-radius:8px;padding:14px;border:1px solid #E8DFD0">
-                <div style="font-size:10px;color:#9A8880;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px">Coverage</div>
-                <div style="font-size:22px;font-weight:700;color:#1C1410">2</div>
-                <div style="font-size:10px;color:#D95F2B;margin-top:2px">Avg 14min fill</div>
+              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
+                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Coverage Requests</div>
+                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">2</div>
+                <div style="font-size:9px;color:#D95F2B;margin-top:3px;font-weight:500">Avg 14min to fill</div>
               </div>
-              <div style="background:white;border-radius:8px;padding:14px;border:1px solid #E8DFD0">
-                <div style="font-size:10px;color:#9A8880;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;margin-bottom:6px">Labor Cost</div>
-                <div style="font-size:22px;font-weight:700;color:#1C1410">$3,240</div>
-                <div style="font-size:10px;color:#2D7D5A;margin-top:2px">28% of revenue</div>
+              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
+                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Labor Cost</div>
+                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">$3,240</div>
+                <div style="font-size:9px;color:#2D7D5A;margin-top:3px;font-weight:500">28% of revenue</div>
               </div>
             </div>
             <!-- Schedule preview -->
-            <div style="background:white;border-radius:8px;padding:14px;border:1px solid #E8DFD0">
-              <div style="font-size:12px;font-weight:700;color:#1C1410;margin-bottom:10px">This Week's Schedule</div>
-              <div style="display:grid;grid-template-columns:90px repeat(7,1fr);gap:4px;font-size:10px">
-                <div style="color:#9A8880;font-weight:600"></div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Mon</div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Tue</div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Wed</div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Thu</div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Fri</div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Sat</div>
-                <div style="color:#9A8880;font-weight:600;text-align:center">Sun</div>
+            <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0;margin-bottom:10px">
+              <div style="font-size:11px;font-weight:700;color:#1C1410;margin-bottom:9px;letter-spacing:-0.01em">This Week's Schedule</div>
+              <div style="display:grid;grid-template-columns:80px repeat(7,1fr);gap:3px;font-size:9px">
+                <div style="color:#9A8880;font-weight:700;padding:3px 0"></div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Mon</div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Tue</div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Wed</div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Thu</div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Fri</div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Sat</div>
+                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Sun</div>
                 <!-- Row 1 -->
-                <div style="font-weight:600;color:#1C1410;padding:4px 0">Alex M.</div>
-                <div style="background:#FDF0E8;color:#B84D20;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Lunch</div>
+                <div style="font-weight:600;color:#1C1410;padding:3px 0;font-size:10px">Alex M.</div>
+                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
                 <div></div>
-                <div style="background:#FDF0E8;color:#B84D20;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Lunch</div>
+                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
                 <div></div>
-                <div style="background:rgba(217,95,43,0.1);color:#9A3E18;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Dinner</div>
-                <div style="background:rgba(217,95,43,0.1);color:#9A3E18;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Dinner</div>
+                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
+                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
                 <div></div>
                 <!-- Row 2 -->
-                <div style="font-weight:600;color:#1C1410;padding:4px 0">Sam K.</div>
-                <div style="background:rgba(217,95,43,0.1);color:#9A3E18;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Dinner</div>
-                <div style="background:rgba(217,95,43,0.1);color:#9A3E18;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Dinner</div>
+                <div style="font-weight:600;color:#1C1410;padding:3px 0;font-size:10px">Sam K.</div>
+                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
+                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
                 <div></div>
-                <div style="background:#FDF0E8;color:#B84D20;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Lunch</div>
-                <div style="background:#FDF0E8;color:#B84D20;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Lunch</div>
+                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
+                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
                 <div></div>
-                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:4px;padding:2px 6px;text-align:center;font-weight:500">Brunch</div>
+                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Brunch</div>
+                <!-- Row 3 -->
+                <div style="font-weight:600;color:#1C1410;padding:3px 0;font-size:10px">Jordan T.</div>
+                <div></div>
+                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Brunch</div>
+                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Brunch</div>
+                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
+                <div></div>
+                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
+                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
+              </div>
+            </div>
+            <!-- Bottom two panels -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <!-- Recent activity -->
+              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
+                <div style="font-size:11px;font-weight:700;color:#1C1410;margin-bottom:9px;letter-spacing:-0.01em">Recent Activity</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
+                    <span style="width:6px;height:6px;background:#D95F2B;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
+                    <span style="color:#4A3F35;flex:1;line-height:1.4">Alex called out Friday dinner — coverage filled in 11 min</span>
+                    <span style="color:#9A8880;white-space:nowrap;font-size:9px">2hr ago</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
+                    <span style="width:6px;height:6px;background:#2D7D5A;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
+                    <span style="color:#4A3F35;flex:1;line-height:1.4">Sam and Jordan confirmed shift swap for Saturday</span>
+                    <span style="color:#9A8880;white-space:nowrap;font-size:9px">5hr ago</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
+                    <span style="width:6px;height:6px;background:#9A8880;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
+                    <span style="color:#4A3F35;flex:1;line-height:1.4">Schedule published to Telegram — 12 staff notified</span>
+                    <span style="color:#9A8880;white-space:nowrap;font-size:9px">Yesterday</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Relay's insights -->
+              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
+                <div style="font-size:11px;font-weight:700;color:#1C1410;margin-bottom:9px;letter-spacing:-0.01em">Relay's Insights</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
+                    <span style="width:6px;height:6px;background:#D95F2B;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
+                    <span style="color:#4A3F35;flex:1;line-height:1.4">Friday dinner has been understaffed 3 weeks in a row</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
+                    <span style="width:6px;height:6px;background:#2D7D5A;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
+                    <span style="color:#4A3F35;flex:1;line-height:1.4">Labor cost is down 4% from last week — nice work</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
+                    <span style="width:6px;height:6px;background:#E5A100;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
+                    <span style="color:#4A3F35;flex:1;line-height:1.4">Sam K. is at 38hrs — 2 more shifts risk overtime</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
