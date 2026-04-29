@@ -39,6 +39,36 @@ function parseShiftTime(timeStr) {
   }
 }
 
+/**
+ * Resolve a shift's end time to an absolute Date, accounting for overnight
+ * shifts (e.g. start 10 PM, end 2 AM → end is tomorrow) AND for the early-AM
+ * case where a "today's lunch" reference time still parses to a future moment
+ * even though the shift was actually yesterday's.
+ */
+function resolveShiftEnd(startStr, endStr) {
+  const now = new Date()
+  const start = parseShiftTime(startStr)
+  const end = parseShiftTime(endStr)
+  if (!end) return null
+
+  // If both start and end are far in the future today, we're probably running
+  // before sunrise and parseShiftTime anchored "today's lunch" to noon today
+  // when the staff is referring to yesterday's lunch. Push everything back 24h
+  // when (a) start is more than 4h in the future, AND (b) we're in the early
+  // morning hours (before 7 AM local time).
+  let s = start
+  let e = end
+  if (start && now.getHours() < 7 && (start.getTime() - now.getTime()) > 4 * 3600 * 1000) {
+    s = new Date(start.getTime() - 24 * 3600 * 1000)
+    e = new Date(end.getTime() - 24 * 3600 * 1000)
+  }
+  if (s && e < s) {
+    // Overnight shift — push end forward by 24h
+    return new Date(e.getTime() + 24 * 3600 * 1000)
+  }
+  return e
+}
+
 export async function handleLateArrival(bot, msg, intent, db = null) {
   const _findShiftForToday = db?.findShiftForToday ?? null
   const _getSetupSession = db?.getSetupSession ?? getSetupSession
@@ -64,7 +94,7 @@ export async function handleLateArrival(bot, msg, intent, db = null) {
   // BUG 1.14: validate shift hasn't already ended
   if (shiftInfo) {
     const shift = shiftInfo.shift ?? shiftInfo
-    const endTime = parseShiftTime(shift.end_time)
+    const endTime = resolveShiftEnd(shift.start_time, shift.end_time)
     if (endTime && endTime < new Date()) {
       await bot.sendMessage(msg.chat.id,
         `That shift already ended — if you were a no-show, talk to your manager.`)

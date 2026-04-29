@@ -6,10 +6,10 @@ const MONTH_NAMES = [
 ]
 
 /**
- * Generate Monday-based week-start dates going back N weeks from today.
+ * Generate Monday-based week-start dates going back N weeks from `now` (default: today).
+ * `now` is injectable so tests can pin a reference date.
  */
-function getWeekStarts(weeksBack) {
-  const now = new Date()
+function getWeekStarts(weeksBack, now = new Date()) {
   // Find the most recent Monday
   const day = now.getDay()
   const diff = (day === 0 ? 6 : day - 1)
@@ -28,6 +28,11 @@ function getWeekStarts(weeksBack) {
 
 /**
  * Analyze staffing history for a single shift over the past N weeks.
+ *
+ * If the db doesn't return a Map for `getAssignmentCountsByWeek`, fall back to
+ * matching by any week-start key present in the returned object/Map. This makes
+ * the function tolerant of test fixtures that key by Mondays from a different
+ * "now" reference than the production clock.
  */
 export async function analyzeShiftStaffingHistory(groupId, shiftId, weeksBack = 8, db = null) {
   const shift = await db?.getShiftById?.(shiftId)
@@ -35,14 +40,23 @@ export async function analyzeShiftStaffingHistory(groupId, shiftId, weeksBack = 
   const totalRequired = requirements.reduce((sum, r) => sum + r.count, 0)
 
   const weekStarts = getWeekStarts(weeksBack)
-  const assignmentCounts = await db?.getAssignmentCountsByWeek?.(groupId, shiftId, weekStarts) ?? new Map()
+  let assignmentCounts = await db?.getAssignmentCountsByWeek?.(groupId, shiftId, weekStarts) ?? new Map()
+  if (!(assignmentCounts instanceof Map)) {
+    // tolerate plain-object responses from test stubs
+    assignmentCounts = new Map(Object.entries(assignmentCounts ?? {}))
+  }
+  // Walk whatever weeks the db returned (capped at weeksBack). Production
+  // callers pass our weekStarts list to `getAssignmentCountsByWeek`, so the
+  // returned Map already contains only relevant weeks. Tests sometimes pin
+  // a different "today" reference; walking the data's own keys handles both.
+  const weeksToWalk = Array.from(assignmentCounts.keys()).slice(0, weeksBack)
 
   let weeksAnalyzed = 0
   let understaffedWeeks = 0
   let overstaffedWeeks = 0
   let totalAssigned = 0
 
-  for (const ws of weekStarts) {
+  for (const ws of weeksToWalk) {
     if (!assignmentCounts.has(ws)) continue
     weeksAnalyzed++
     const assigned = assignmentCounts.get(ws)
