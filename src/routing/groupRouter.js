@@ -13,7 +13,7 @@ import { handlePartialCoverageOffer } from '../coverage/partialCoverage.js'
 import { handleWhoIsWorkingQuery } from '../schedule/currentShift.js'
 import { detectManagerCoverageRequest, handleManagerCoveragePost } from '../coverage/managerCoverage.js'
 import { detectStaffRemoval, handleRemoveStaff } from '../setup/staffManager.js'
-import { parseRevenueInput } from '../analytics/laborCost.js'
+import { extractRevenueFromGroupMessage } from '../analytics/laborCost.js'
 
 export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin) {
   const groupName = msg.chat.title || 'Unknown Group'
@@ -36,7 +36,7 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
 
   // ── F3: Revenue messages in group chat must be redirected to DM ──────────
   try {
-    const revenueAmount = parseRevenueInput(msg.text)
+    const revenueAmount = extractRevenueFromGroupMessage(msg.text)
     if (revenueAmount > 0) {
       // Find manager username for the mention
       let managerMention = 'Manager'

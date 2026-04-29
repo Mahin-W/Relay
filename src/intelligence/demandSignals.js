@@ -31,7 +31,7 @@ const FALSE_POSITIVE_PATTERNS = [
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 export function extractDemandSignal(text) {
-  if (!text || text.trim() === '') return null
+  if (typeof text !== 'string' || text.trim() === '') return null
   const lower = text.toLowerCase()
 
   // Check false positives first

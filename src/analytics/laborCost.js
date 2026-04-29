@@ -50,6 +50,33 @@ export function parseRevenueInput(text) {
   return hasK ? num * 1000 : num
 }
 
+// Words that signal "this is talking about money but NOT total revenue".
+// Used by the group-message passive detector below to avoid false positives
+// like "tips were $200" → "@manager, please DM me that revenue figure".
+const NON_REVENUE_KEYWORDS = [
+  'tip', 'tips', 'tipped', 'gratuity',
+  'paid', 'payment', 'paycheck', 'paycheque',
+  'deposit', 'cashout', 'cash-out', 'cash out',
+  'change', 'refund', 'comp', 'comped',
+  'rent', 'invoice', 'bill',
+]
+
+// Stricter version for passive group-message detection.
+// Returns the parsed amount only when the message clearly looks like a
+// revenue report (and not tips, deposits, refunds, etc.).
+export function extractRevenueFromGroupMessage(text) {
+  if (!text || typeof text !== 'string') return null
+  const lower = text.toLowerCase()
+
+  // Reject if any non-revenue keyword is present as a standalone token.
+  for (const kw of NON_REVENUE_KEYWORDS) {
+    const re = new RegExp(`\\b${kw}\\b`, 'i')
+    if (re.test(lower)) return null
+  }
+
+  return parseRevenueInput(text)
+}
+
 // ── calculateLaborCostPercent ────────────────────────────────────────────────
 
 export function calculateLaborCostPercent(totalLaborCost, revenue) {
@@ -57,6 +84,17 @@ export function calculateLaborCostPercent(totalLaborCost, revenue) {
     return {
       percent: null,
       label: 'Revenue is $0 — cannot calculate labor %',
+      status: 'unknown',
+      benchmark: 'Industry average: 25–35%',
+    }
+  }
+
+  // Defensive: if either input is non-finite, return a clear "unknown" state
+  // instead of a misleading "Critical" label.
+  if (!Number.isFinite(totalLaborCost) || !Number.isFinite(revenue)) {
+    return {
+      percent: null,
+      label: 'Labor cost data unavailable — cannot calculate %',
       status: 'unknown',
       benchmark: 'Industry average: 25–35%',
     }

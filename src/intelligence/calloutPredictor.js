@@ -16,14 +16,20 @@ export async function getCalloutHistory(groupId, staffId, weeksBack = 8, db = nu
     rows = await db.getCalloutHistory(groupId, staffId)
   } else {
     const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
+    // coverage_requests has neither day_of_week nor shift_name — they live on
+    // the joined shifts row.
     const { data, error } = await supabase
       .from('coverage_requests')
-      .select('day_of_week, shift_name, created_at')
+      .select('matched_shift_id, created_at, shifts:matched_shift_id(name, day_of_week)')
       .eq('group_id', groupId)
       .eq('requester_telegram_id', staffId)
       .gte('created_at', cutoff)
     if (error) throw error
-    rows = data || []
+    rows = (data || []).map(r => ({
+      day_of_week: r.shifts?.day_of_week,
+      shift_name: r.shifts?.name,
+      created_at: r.created_at,
+    }))
   }
 
   if (rows.length === 0) {
@@ -56,6 +62,9 @@ export async function getCalloutHistory(groupId, staffId, weeksBack = 8, db = nu
  * Returns { probability, riskLevel, keyFactors }
  */
 export function calculateCalloutProbability(signals) {
+  if (signals == null || typeof signals !== 'object' || Array.isArray(signals)) {
+    return { probability: 0, riskLevel: 'low', keyFactors: [] }
+  }
   const {
     historicalCalloutRateThisDay = 0,
     historicalCalloutRateThisShift = 0,
