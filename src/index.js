@@ -423,7 +423,7 @@ bot.onText(/^\/setphone(.*)/, async (msg, match) => {
     const session = await getManagerGroup(userId)
     if (!session) {
       await bot.sendMessage(msg.chat.id,
-        "I couldn't find a Relay setup linked to your account. Make sure you've completed setup in your restaurant's group first.")
+        "I couldn't find a Relay setup linked to your account. Make sure you've completed setup in your business's group first.")
       return
     }
 

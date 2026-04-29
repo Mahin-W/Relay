@@ -38,7 +38,7 @@ export async function startSetupDM(bot, msg, groupId) {
 
   await bot.sendMessage(dmChatId,
     `👋 Hey ${managerName}! Let's set up Relay for *${groupName}*.\n${resetNote}\n` +
-    `First — what's your restaurant called?\n` +
+    `First — what's your business called?\n` +
     `_(Press send to use *"${groupName}"*)_`,
     { parse_mode: 'Markdown' })
 
@@ -93,7 +93,7 @@ async function handleReset(bot, msg, session) {
   switch (session.step) {
     case 'welcome':
       await bot.sendMessage(chatId,
-        `What's your restaurant called?\n_(Press send to use *"${session.group_name}"*)_`,
+        `What's your business called?\n_(Press send to use *"${session.group_name}"*)_`,
         { parse_mode: 'Markdown' })
       break
     case 'add_shifts':

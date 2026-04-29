@@ -342,7 +342,7 @@ export async function handleTipMessage(bot, msg, db = null) {
 
   const group = await _getManagerGroup(userId)
   if (!group) {
-    await bot.sendMessage(chatId, `No restaurant found for your account. Run /setup first.`)
+    await bot.sendMessage(chatId, `No setup found for your account. Run /setup first.`)
     return true
   }
 
@@ -414,7 +414,7 @@ export async function handleTipModeCommand(bot, msg, args, db = null) {
 
   const group = await _getManagerGroup(userId)
   if (!group) {
-    await bot.sendMessage(chatId, `No restaurant found. Run /setup first.`)
+    await bot.sendMessage(chatId, `No setup found. Run /setup first.`)
     return
   }
 
@@ -490,7 +490,7 @@ export async function handleTipHistory(bot, msg, db = null) {
 
   const group = await _getManagerGroup(userId)
   if (!group) {
-    await bot.sendMessage(chatId, `No restaurant found. Run /setup first.`)
+    await bot.sendMessage(chatId, `No setup found. Run /setup first.`)
     return
   }
 

@@ -18,7 +18,7 @@ export async function startTipSettingsStep(bot, chatId, groupId, setupData, db =
     setup_data: { ...(setupData ?? {}), tip_stage: 'ask_mode' },
   }, db)
   await bot.sendMessage(chatId,
-    `💰 *Tip settings*\nHow does your restaurant handle tips?\n\n` +
+    `💰 *Tip settings*\nHow does your business handle tips?\n\n` +
     `1️⃣ Pool and split\n` +
     `2️⃣ Staff keep own\n` +
     `3️⃣ Cash manual\n\n` +

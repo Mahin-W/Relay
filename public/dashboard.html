@@ -1286,6 +1286,24 @@
       position: absolute; top: 3px; left: 3px; transition: left 0.2s;
     }
     .toggle.on::after { left: 23px; }
+    .revenue-type-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3, 12px) 0;
+      border-bottom: 1px solid var(--color-border-light, var(--surface-border));
+    }
+    .revenue-type-row:last-child { border-bottom: none; }
+    .type-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-primary, var(--text));
+    }
+    .empty-state-inline {
+      padding: var(--space-4, 16px) 0;
+      color: var(--color-text-muted, var(--text-muted));
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -1554,7 +1572,7 @@
     async function checkAuth() {
       try {
         const data = await apiFetch('/api/auth/me');
-        document.getElementById('restaurant-name').textContent = data.restaurantName || 'My Restaurant';
+        document.getElementById('restaurant-name').textContent = data.restaurantName || 'My Business';
       } catch {
         // redirect handled in apiFetch
       }
@@ -2061,21 +2079,40 @@
     // ───────────────────────────────────────────
     let currentPayrollWeek = getCurrentWeekStart();
 
-    // Revenue category → color + label. Keep in sync with ALLOWED_CATEGORIES in dashRoutes.js.
-    const REV_CATEGORIES = {
-      lunch:     { label: 'Lunch',     color: '#F5A623' },
-      dinner:    { label: 'Dinner',    color: '#4A90E2' },
-      brunch:    { label: 'Brunch',    color: '#2D7D5A' },
-      breakfast: { label: 'Breakfast', color: '#E8C547' },
-      bar:       { label: 'Bar',       color: '#D95F2B' },
-      catering:  { label: 'Catering',  color: '#9B59B6' },
-      other:     { label: 'Other',     color: '#9A8880' },
-    };
-    const CATEGORY_ORDER = ['lunch','dinner','brunch','breakfast','bar','catering','other'];
-    function categoryColor(cat) { return REV_CATEGORIES[cat]?.color || REV_CATEGORIES.other.color; }
-    function categoryLabel(cat) { return REV_CATEGORIES[cat]?.label || 'Other'; }
-    function categorySelectOptions(selected) {
-      return CATEGORY_ORDER.map(c => `<option value="${c}" ${c === selected ? 'selected' : ''}>${REV_CATEGORIES[c].label}</option>`).join('');
+    // Revenue categories — loaded dynamically from /api/revenue/types
+    const CATEGORY_PALETTE = [
+      '#F5A623', '#4A90E2', '#2D7D5A', '#E8C547',
+      '#D95F2B', '#9B59B6', '#9A8880', '#3498DB',
+      '#E74C3C', '#2ECC71'
+    ];
+    function categoryColor(cat) {
+      if (!cat) return CATEGORY_PALETTE[6];
+      let h = 0;
+      for (let i = 0; i < cat.length; i++) h = (h * 31 + cat.charCodeAt(i)) & 0xfffffff;
+      return CATEGORY_PALETTE[h % CATEGORY_PALETTE.length];
+    }
+    function categoryLabel(cat) { return cat || 'Other'; }
+
+    let _revenueTypes = null;
+    async function getRevenueTypes() {
+      if (_revenueTypes !== null) return _revenueTypes;
+      try { _revenueTypes = await api('/api/revenue/types'); } catch (e) { _revenueTypes = []; }
+      return _revenueTypes;
+    }
+    function invalidateRevenueTypesCache() { _revenueTypes = null; }
+
+    async function buildCategorySelector(selectId) {
+      const types = await getRevenueTypes();
+      const sel = document.getElementById(selectId);
+      if (!sel) return;
+      const wrap = sel.closest('.cat-wrap') || sel.parentElement;
+      if (!types || types.length === 0) {
+        if (wrap) wrap.style.display = 'none';
+        return;
+      }
+      if (wrap) wrap.style.display = '';
+      sel.innerHTML = '<option value="">Category</option>' +
+        types.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('');
     }
 
     async function loadPayrollPage() {
@@ -2087,6 +2124,8 @@
           api(`/api/revenue/daily?weekStart=${currentPayrollWeek}`)
         ]);
         renderPayrollPage(payroll || [], settings || {}, tips || [], revenue || {days:{},weekTotal:0});
+        await buildCategorySelector('now-rev-cat');
+        await buildCategorySelector('any-rev-cat');
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('payroll')");
@@ -2140,7 +2179,7 @@
             <div>
               <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">For right now <span style="font-weight:400;text-transform:none">(${today})</span></div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <select id="now-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">${categorySelectOptions(new Date().getHours() < 15 ? 'lunch' : 'dinner')}</select>
+                <div class="cat-wrap"><select id="now-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit"></select></div>
                 <input id="now-rev-amount" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
                 <button class="btn-primary" onclick="addRevenueNow()">Add now</button>
               </div>
@@ -2149,7 +2188,7 @@
               <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">For a specific date</div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
                 <input id="any-rev-date" type="date" value="${today}" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">
-                <select id="any-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit">${categorySelectOptions('dinner')}</select>
+                <div class="cat-wrap"><select id="any-rev-cat" style="padding:8px 10px;border:1px solid var(--surface-border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:inherit"></select></div>
                 <input id="any-rev-amount" type="number" min="0" step="0.01" placeholder="Amount $" style="flex:1;min-width:100px;padding:8px 12px;border:1px solid var(--surface-border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit">
                 <button class="btn-primary" onclick="addRevenueAnyDate()">Add</button>
               </div>
@@ -2184,10 +2223,11 @@
       if (!date) { showToast('Pick a date', 'error'); return; }
       if (!Number.isFinite(amount) || amount <= 0) { showToast('Enter an amount greater than zero', 'error'); return; }
       try {
-        await api('/api/revenue/daily', 'POST', { date, amount, category });
+        await api('/api/revenue/daily', 'POST', { date, amount, category: category || null });
         if (amtEl) amtEl.value = '';
         await loadPayrollPage();
-        showToast(`$${amount.toFixed(2)} ${categoryLabel(category)} added for ${date}`);
+        const label = category ? ` (${category})` : '';
+        showToast(`$${amount.toFixed(2)}${label} added for ${date}`);
       } catch (e) {
         const msg = /does not exist|column.*does not exist/i.test(e.message || '')
           ? 'daily_revenue table/columns missing — run the migration SQL in Supabase'
@@ -2198,16 +2238,18 @@
 
     async function addRevenueNow() {
       const amtEl = document.getElementById('now-rev-amount');
-      const category = document.getElementById('now-rev-cat')?.value || 'other';
+      const catEl = document.getElementById('now-rev-cat');
+      const category = (catEl && catEl.closest('.cat-wrap')?.offsetParent !== null) ? catEl.value || null : null;
       const amount = parseFloat(amtEl?.value);
-      const date = formatDate(new Date()); // today, always
+      const date = formatDate(new Date());
       return _submitRevenue(date, amount, category, amtEl);
     }
 
     async function addRevenueAnyDate() {
       const amtEl = document.getElementById('any-rev-amount');
       const date = document.getElementById('any-rev-date')?.value;
-      const category = document.getElementById('any-rev-cat')?.value || 'other';
+      const catEl = document.getElementById('any-rev-cat');
+      const category = (catEl && catEl.closest('.cat-wrap')?.offsetParent !== null) ? catEl.value || null : null;
       const amount = parseFloat(amtEl?.value);
       return _submitRevenue(date, amount, category, amtEl);
     }
@@ -2251,11 +2293,11 @@
         const dayTotal = Number(days[date].total);
         const pct = (dayTotal / maxAmount) * 100;
         const byCat = days[date].byCategory || {};
-        const segments = CATEGORY_ORDER
+        const segments = Object.keys(byCat)
           .filter(c => (byCat[c] || 0) > 0)
           .map(c => {
             const catPct = dayTotal > 0 ? (byCat[c] / dayTotal) * 100 : 0;
-            return `<div class="bar-segment" style="height:${catPct}%;background:${categoryColor(c)}" title="${categoryLabel(c)}: $${byCat[c].toFixed(2)}"></div>`;
+            return `<div class="bar-segment" style="height:${catPct}%;background:${categoryColor(c)}" title="${escapeHtml(categoryLabel(c))}: $${byCat[c].toFixed(2)}"></div>`;
           }).join('');
         return `
           <div class="chart-col">
@@ -2270,10 +2312,10 @@
 
       const usedCats = new Set();
       for (const d of Object.values(days)) for (const c of Object.keys(d.byCategory || {})) usedCats.add(c);
-      const legend = CATEGORY_ORDER.filter(c => usedCats.has(c)).map(c => `
+      const legend = Array.from(usedCats).map(c => `
         <span class="legend-item">
           <span class="category-dot" style="background:${categoryColor(c)}"></span>
-          ${categoryLabel(c)}
+          ${escapeHtml(categoryLabel(c))}
         </span>
       `).join('') || '<span style="color:var(--text-muted);font-size:12px">No entries this week yet</span>';
 
@@ -2323,7 +2365,7 @@
             <div class="day-total">$${Number(day.total).toFixed(2)}</div>
             <div class="day-entries">${entries || '<div style="font-size:11px;color:var(--text-muted)">No entries</div>'}</div>
             <div class="add-entry">
-              <select class="note-input" id="cat-${date}">${categorySelectOptions('dinner')}</select>
+              <select class="note-input" id="cat-${date}"></select>
               <input type="number" class="revenue-input" placeholder="0.00" min="0" step="0.01" id="rev-${date}">
               <input type="text" class="note-input" placeholder="note" id="note-${date}" maxlength="80">
               <button class="add-btn" onclick="addDailyRevenue('${date}')">+ Add</button>
@@ -2337,11 +2379,11 @@
         const dayTotal = Number(days[date].total);
         const pct = (dayTotal / maxAmount) * 100;
         const byCat = days[date].byCategory || {};
-        const segments = CATEGORY_ORDER
+        const segments = Object.keys(byCat)
           .filter(c => (byCat[c] || 0) > 0)
           .map(c => {
             const catPct = dayTotal > 0 ? (byCat[c] / dayTotal) * 100 : 0;
-            return `<div class="bar-segment" style="height:${catPct}%;background:${categoryColor(c)}" title="${categoryLabel(c)}: $${byCat[c].toFixed(2)}"></div>`;
+            return `<div class="bar-segment" style="height:${catPct}%;background:${categoryColor(c)}" title="${escapeHtml(categoryLabel(c))}: $${byCat[c].toFixed(2)}"></div>`;
           }).join('');
         return `
           <div class="chart-col">
@@ -2357,10 +2399,10 @@
       // Legend showing only the categories that actually appear this week
       const usedCats = new Set();
       for (const d of Object.values(days)) for (const c of Object.keys(d.byCategory || {})) usedCats.add(c);
-      const legend = CATEGORY_ORDER.filter(c => usedCats.has(c)).map(c => `
+      const legend = Array.from(usedCats).map(c => `
         <span class="legend-item">
           <span class="category-dot" style="background:${categoryColor(c)}"></span>
-          ${categoryLabel(c)}
+          ${escapeHtml(categoryLabel(c))}
         </span>
       `).join('') || '<span style="color:var(--text-muted);font-size:12px">No entries yet</span>';
 
@@ -2668,10 +2710,69 @@
         // Restore dark-mode toggle visual state after render
         const darkOn = document.documentElement.classList.contains('dark');
         document.getElementById('dark-toggle')?.classList.toggle('on', darkOn);
+        await renderRevenueTypesSettings();
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('settings')");
       }
+    }
+
+    async function renderRevenueTypesSettings() {
+      const section = document.getElementById('revenue-types-section');
+      if (!section) return;
+      let types = [];
+      try { types = await api('/api/revenue/types'); } catch (e) { types = []; }
+      const listHtml = types.length === 0
+        ? `<div class="empty-state-inline"><p>No categories configured. The category selector will be hidden when logging revenue.</p></div>`
+        : types.map(t => `
+          <div class="revenue-type-row" data-id="${t.id}">
+            <span class="type-name">${escapeHtml(t.name)}</span>
+            <button class="setting-save-btn danger" style="margin-top:0;padding:4px 12px;font-size:13px" onclick="deleteRevenueType(${t.id})">Remove</button>
+          </div>`).join('');
+      section.innerHTML = `
+        <div class="settings-section-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Revenue Categories</span>
+          <button class="setting-save-btn ghost" style="margin-top:0;padding:4px 12px;font-size:13px" onclick="showAddRevenueType()">+ Add</button>
+        </div>
+        <div class="setting-desc" style="margin-bottom:8px">Labels for daily revenue entries. If empty, the category field is hidden when logging revenue.</div>
+        <div id="revenue-types-list">${listHtml}</div>
+        <div id="add-type-inline" style="display:none;margin-top:12px">
+          <div style="display:flex;gap:8px">
+            <input class="setting-input" id="new-type-input" placeholder="e.g. Morning, Online, Events" style="flex:1">
+            <button class="setting-save-btn" style="margin-top:0" onclick="submitNewRevenueType()">Add</button>
+            <button class="setting-save-btn ghost" style="margin-top:0" onclick="hideAddRevenueType()">Cancel</button>
+          </div>
+        </div>`;
+    }
+
+    function showAddRevenueType() {
+      document.getElementById('add-type-inline').style.display = 'block';
+      document.getElementById('new-type-input').focus();
+    }
+
+    function hideAddRevenueType() {
+      document.getElementById('add-type-inline').style.display = 'none';
+      document.getElementById('new-type-input').value = '';
+    }
+
+    async function submitNewRevenueType() {
+      const name = document.getElementById('new-type-input').value.trim();
+      if (!name) { showToast('Enter a category name', 'error'); return; }
+      try {
+        await api('/api/revenue/types', 'POST', { name });
+        invalidateRevenueTypesCache();
+        await renderRevenueTypesSettings();
+        showToast(`"${name}" added`);
+      } catch (err) { showToast(err.message || 'Failed to add', 'error'); }
+    }
+
+    async function deleteRevenueType(id) {
+      try {
+        await api(`/api/revenue/types/${id}`, 'DELETE');
+        invalidateRevenueTypesCache();
+        await renderRevenueTypesSettings();
+        showToast('Category removed');
+      } catch (err) { showToast('Failed to remove', 'error'); }
     }
 
     function renderSettingsPage(config) {
@@ -2702,7 +2803,7 @@
         </div>
 
         <div class="settings-section">
-          <div class="settings-section-title">Restaurant</div>
+          <div class="settings-section-title">Your Business</div>
           <div class="setting-row">
             <div class="setting-label">Name</div>
             <input class="setting-input" id="rest-name" value="${escapeHtml(r.name || '')}">
@@ -2714,7 +2815,7 @@
             </div>
             <input class="setting-input" id="rest-phone" placeholder="+1 555 123 4567" value="${escapeHtml(r.phone || '')}">
           </div>
-          <button class="setting-save-btn" onclick="saveRestaurant()">Save Restaurant</button>
+          <button class="setting-save-btn" onclick="saveRestaurant()">Save</button>
         </div>
 
         <div class="settings-section">
@@ -2836,7 +2937,9 @@
           <button class="setting-save-btn ghost" onclick="openAddShift()">+ Add Shift</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="revenue-types-section"></div>
+
+        <div class="settings-section" id="business-rules-section">
           <div class="settings-section-title">Business Rules</div>
           ${rules.length === 0 ? '<div class="setting-desc">No rules configured.</div>' : rules.map(rule => `
             <div class="setting-row">
@@ -2858,7 +2961,7 @@
       if (!name) { showToast('Name cannot be empty', 'error'); return; }
       try {
         await api('/api/settings/full', 'PATCH', { restaurant: { name, phone } });
-        showToast('Restaurant saved');
+        showToast('Saved');
         const rn = document.getElementById('restaurant-name');
         if (rn) rn.textContent = name;
       } catch (e) { showToast(e.message, 'error'); }

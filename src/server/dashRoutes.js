@@ -986,8 +986,6 @@ async function recalcWeeklyRevenue(db, groupId, weekStart) {
   return { total: Number(total.toFixed(2)), laborPercent: laborPct }
 }
 
-const ALLOWED_CATEGORIES = new Set(['lunch', 'dinner', 'brunch', 'breakfast', 'bar', 'catering', 'other'])
-
 // GET /api/revenue/daily?weekStart=YYYY-MM-DD
 router.get('/revenue/daily', async (req, res) => {
   try {
@@ -1047,24 +1045,32 @@ router.post('/revenue/daily', async (req, res) => {
     if (!Number.isFinite(amt) || amt <= 0) {
       return res.status(400).json({ error: 'amount must be a positive number' })
     }
-    let cat = (category || 'other').toLowerCase()
-    if (!ALLOWED_CATEGORIES.has(cat)) cat = 'other'
+    const cat = (typeof category === 'string' && category.trim()) ? category.trim() : null
     const db = supabase()
 
-    const { data: inserted, error } = await db
+    const { data: inserted, error: insertErr } = await db
       .from('daily_revenue')
       .insert({ group_id: groupId, entry_date: date, amount: amt, note: note || null, category: cat })
       .select()
       .single()
-    if (error) throw error
+    if (insertErr) {
+      console.error('[daily_revenue insert]', insertErr)
+      return res.status(500).json({ error: insertErr.message })
+    }
 
     const weekStart = mondayOf(date)
-    const { total } = await recalcWeeklyRevenue(db, groupId, weekStart)
+    let weeklyTotal = null
+    try {
+      const result = await recalcWeeklyRevenue(db, groupId, weekStart)
+      weeklyTotal = result.total
+    } catch (rollupErr) {
+      console.error('[recalcWeeklyRevenue]', rollupErr)
+    }
 
-    res.status(201).json({ entry: inserted, dayTotal: total })
+    return res.status(201).json({ entry: inserted, dayTotal: weeklyTotal })
   } catch (err) {
-    console.error('POST /revenue/daily error:', err.message)
-    res.status(500).json({ error: 'Failed to save revenue entry' })
+    console.error('[POST /revenue/daily]', err.message, err.stack)
+    return res.status(500).json({ error: err.message || 'Failed to save revenue entry' })
   }
 })
 
@@ -1097,6 +1103,72 @@ router.delete('/revenue/daily/:id', async (req, res) => {
   } catch (err) {
     console.error('DELETE /revenue/daily/:id error:', err.message)
     res.status(500).json({ error: 'Failed to delete revenue entry' })
+  }
+})
+
+// GET /api/revenue/types
+router.get('/revenue/types', async (req, res) => {
+  const { groupId } = req.manager
+  const db = supabase()
+  try {
+    const { data, error } = await db
+      .from('revenue_types')
+      .select('id, name, sort_order')
+      .eq('group_id', groupId)
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return res.json(data || [])
+  } catch (err) {
+    console.error('[GET /revenue/types]', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/revenue/types
+router.post('/revenue/types', async (req, res) => {
+  const { groupId } = req.manager
+  const { name } = req.body ?? {}
+  if (!name?.trim()) {
+    return res.status(400).json({ error: 'Name is required' })
+  }
+  const db = supabase()
+  try {
+    const { data, error } = await db
+      .from('revenue_types')
+      .insert({ group_id: groupId, name: name.trim(), sort_order: 0 })
+      .select()
+      .single()
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'That category already exists' })
+      }
+      throw error
+    }
+    return res.status(201).json(data)
+  } catch (err) {
+    console.error('[POST /revenue/types]', err)
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/revenue/types/:id
+router.delete('/revenue/types/:id', async (req, res) => {
+  const { groupId } = req.manager
+  const { id } = req.params
+  const db = supabase()
+  try {
+    const { error } = await db
+      .from('revenue_types')
+      .update({ active: false })
+      .eq('id', id)
+      .eq('group_id', groupId)
+    if (error) throw error
+    return res.json({ success: true })
+  } catch (err) {
+    console.error('[DELETE /revenue/types]', err)
+    return res.status(500).json({ error: err.message })
   }
 })
 
@@ -1326,7 +1398,7 @@ router.patch('/settings', async (req, res) => {
     // fire-and-forget notification
     const bot = req.app.locals.bot
     getSessionChats(db, groupId).then(({ managerDm }) =>
-      safeSend(bot, managerDm, `⚙️ Restaurant settings updated via dashboard.`)
+      safeSend(bot, managerDm, `⚙️ Settings updated via dashboard.`)
     ).catch(() => {})
   } catch (err) {
     console.error('PATCH /settings error:', err.message)

@@ -45,7 +45,7 @@ export async function handleClockIn(bot, msg, db = null) {
   const userId = msg.from?.id
   const groupId = await resolveGroupId(userId, db)
   if (!groupId) {
-    await bot.sendMessage(msg.chat.id, "I don't have you linked to a restaurant group yet. Send /start in your group first.")
+    await bot.sendMessage(msg.chat.id, "I don't have you linked to a group yet. Send /start in your group first.")
     return true
   }
 
@@ -113,7 +113,7 @@ export async function handleClockOut(bot, msg, db = null) {
   const userId = msg.from?.id
   const groupId = await resolveGroupId(userId, db)
   if (!groupId) {
-    await bot.sendMessage(msg.chat.id, "I don't have you linked to a restaurant group yet. Send /start in your group first.")
+    await bot.sendMessage(msg.chat.id, "I don't have you linked to a group yet. Send /start in your group first.")
     return true
   }
 

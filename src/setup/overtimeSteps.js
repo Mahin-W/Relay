@@ -146,6 +146,6 @@ export async function startOvertimeStep(bot, chatId, groupId, setupData, db = nu
     setup_data: { ...(setupData ?? {}), overtime_stage: 'ask_enabled' },
   }, db)
   await bot.sendMessage(chatId,
-    `⏰ *Overtime settings*\nDoes your restaurant pay overtime?\nReply *yes* or *no*`,
+    `⏰ *Overtime settings*\nDoes your business pay overtime?\nReply *yes* or *no*`,
     { parse_mode: 'Markdown' })
 }
