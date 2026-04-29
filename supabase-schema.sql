@@ -441,6 +441,175 @@ CREATE INDEX IF NOT EXISTS idx_demand_signals_group_week
   ON demand_signals(group_id, week_start);
 
 -- ═══════════════════════════════════════════════════════════════
+-- INTELLIGENCE LAYER — patterns, learning, recurring constraints
+-- ═══════════════════════════════════════════════════════════════
+
+-- weekly_quality_scores — per-week schedule quality grade
+-- Note: superseded `schedule_quality_scores`; both names accepted for back-compat.
+CREATE TABLE IF NOT EXISTS weekly_quality_scores (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  week_start DATE NOT NULL,
+  score INTEGER CHECK (score >= 0 AND score <= 100),
+  grade TEXT,
+  draft_edits INTEGER DEFAULT 0,
+  coverage_requests INTEGER DEFAULT 0,
+  no_shows INTEGER DEFAULT 0,
+  avg_fill_minutes INTEGER,
+  unconfirmed_count INTEGER DEFAULT 0,
+  weeks_of_data INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(group_id, week_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_quality_group_week
+  ON weekly_quality_scores(group_id, week_start DESC);
+
+-- restaurant_tip_settings — tip mode/split-method configuration per group
+CREATE TABLE IF NOT EXISTS restaurant_tip_settings (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL UNIQUE,
+  mode TEXT DEFAULT 'pool',                  -- 'pool' | 'individual'
+  split_method TEXT DEFAULT 'hours',         -- 'hours' | 'equal'
+  boh_included BOOLEAN DEFAULT FALSE,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- cross_training — which roles each staff member is qualified to work
+CREATE TABLE IF NOT EXISTS cross_training (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  staff_id BIGINT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  role_id BIGINT,                            -- nullable; some callsites store role_name
+  role_name TEXT,
+  proficiency TEXT DEFAULT 'training',       -- 'training' | 'competent' | 'proficient'
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(group_id, staff_id, role_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cross_training_group_staff
+  ON cross_training(group_id, staff_id) WHERE active;
+
+-- recurring_constraints — durable "never on Mondays" / "out by 4pm" preferences
+CREATE TABLE IF NOT EXISTS recurring_constraints (
+  id BIGSERIAL PRIMARY KEY,
+  staff_id BIGINT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL,
+  type TEXT NOT NULL,                        -- 'day_off' | 'available_days' | 'time_constraint' | etc.
+  day_of_week TEXT,
+  days JSONB,                                -- list of days for available_days/day_off
+  before_time TEXT,
+  after_time TEXT,
+  latest_end TEXT,
+  latest_end_mon_thu TEXT,
+  reason TEXT,
+  note TEXT,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(staff_id, group_id, day_of_week, type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recurring_constraints_staff
+  ON recurring_constraints(staff_id, group_id) WHERE active;
+
+-- discovered_patterns — auto-detected scheduling patterns awaiting manager review
+CREATE TABLE IF NOT EXISTS discovered_patterns (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  type TEXT NOT NULL,                        -- 'avoid_day' | 'staff_pairing' | 'shift_preference' | etc.
+  staff_id_a BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  staff_id_b BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  shift_id BIGINT REFERENCES shifts(id) ON DELETE SET NULL,
+  day_of_week TEXT,
+  confidence DECIMAL(3,2),
+  weeks_analyzed INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending',             -- 'pending' | 'accepted' | 'dismissed'
+  responded_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_discovered_patterns_group
+  ON discovered_patterns(group_id, status);
+
+-- coverage_confirmations — historical record of who covered which shift
+CREATE TABLE IF NOT EXISTS coverage_confirmations (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  request_id BIGINT REFERENCES coverage_requests(id) ON DELETE CASCADE,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE SET NULL,
+  covered_by TEXT,
+  response_minutes INTEGER,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_coverage_confirmations_group
+  ON coverage_confirmations(group_id, created_at DESC);
+
+-- staff_availability_windows — bounded availability (days + before/after time)
+CREATE TABLE IF NOT EXISTS staff_availability_windows (
+  id BIGSERIAL PRIMARY KEY,
+  staff_id BIGINT NOT NULL UNIQUE REFERENCES staff(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL,
+  days_available JSONB,
+  before_time TEXT,
+  after_time TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- staff_members — registered staff identity (telegram_id ↔ staff link)
+-- Used by availability learning. Distinct from `staff` (which is the roster).
+CREATE TABLE IF NOT EXISTS staff_members (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  telegram_id BIGINT,
+  name TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(group_id, telegram_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_staff_members_group_telegram
+  ON staff_members(group_id, telegram_id);
+
+-- availability_outcomes — per-day comparison of stated vs actual availability
+CREATE TABLE IF NOT EXISTS availability_outcomes (
+  id BIGSERIAL PRIMARY KEY,
+  group_id TEXT NOT NULL,
+  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  day_of_week TEXT NOT NULL,
+  stated_available BOOLEAN,
+  actual_outcome TEXT,                       -- 'worked' | 'callout' | 'no_show' | 'unavailable'
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_availability_outcomes_group_staff
+  ON availability_outcomes(group_id, staff_id, week_start DESC);
+
+-- Make sure role_rates has updated_at (some deploys missed the column)
+ALTER TABLE role_rates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+-- Make sure time_entries has alerted_at (used by missed clock-out cron)
+ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS alerted_at TIMESTAMPTZ;
+
+-- Add the missing FK so PostgREST can embed `staff(...)` in time-clock selects
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'time_entries_staff_id_fkey'
+  ) THEN
+    ALTER TABLE time_entries
+      ADD CONSTRAINT time_entries_staff_id_fkey
+      FOREIGN KEY (staff_id) REFERENCES staff(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY — anon access for all tables
 -- ═══════════════════════════════════════════════════════════════
 
@@ -458,7 +627,13 @@ BEGIN
       'noshow_warnings', 'onboarding_pending', 'payroll_records', 'weekly_revenue',
       'labor_budgets', 'manager_log_entries', 'time_entries',
       'business_rules', 'schedule_edit_events', 'learned_preferences', 'morale_events',
-      'demand_signals', 'partial_coverage'
+      'demand_signals', 'partial_coverage',
+      -- Tables added in the schema reconciliation pass
+      'tip_records', 'recognition_events', 'schedule_quality_scores',
+      'daily_revenue', 'revenue_types',
+      'weekly_quality_scores', 'restaurant_tip_settings', 'cross_training',
+      'recurring_constraints', 'discovered_patterns', 'coverage_confirmations',
+      'staff_availability_windows', 'staff_members', 'availability_outcomes'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);

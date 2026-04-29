@@ -23,6 +23,17 @@ function getCurrentWeekStart() {
   return monday.toISOString().split('T')[0]
 }
 
+// Validates a YYYY-MM-DD date string. Returns null for invalid input so
+// callers can fall back to the current week instead of 500-ing.
+function safeWeekParam(raw) {
+  if (raw == null || raw === '') return null
+  if (typeof raw !== 'string') return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
+  const d = new Date(`${raw}T00:00:00Z`)
+  if (isNaN(d.getTime())) return null
+  return raw
+}
+
 function parseShiftHours(startTime, endTime) {
   if (!startTime || !endTime) return 0
   const [sh, sm] = startTime.split(':').map(Number)
@@ -36,7 +47,7 @@ function parseShiftHours(startTime, endTime) {
 router.get('/overview', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.week || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
     const [staffRes, assignRes, coverageRes, payrollRes, revenueRes, qualityRes, receiptsRes] = await Promise.all([
@@ -100,7 +111,7 @@ router.get('/overview', async (req, res) => {
 router.get('/schedule', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.week || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
     const [assignRes, staffRes, shiftRes] = await Promise.all([
@@ -250,7 +261,7 @@ router.get('/activity', async (req, res) => {
 router.get('/intelligence', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.week || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
     const [qualityRes, demandRes] = await Promise.all([
@@ -614,7 +625,7 @@ router.delete('/shifts/:id', async (req, res) => {
 router.get('/schedule-list', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.week || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
     const [assignRes, staffRes, shiftRes] = await Promise.all([
@@ -870,7 +881,7 @@ router.post('/schedule/approve', async (req, res) => {
 router.get('/payroll', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const week = req.query.week || getCurrentWeekStart()
+    const week = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
     const { data: records, error } = await db
@@ -990,7 +1001,7 @@ async function recalcWeeklyRevenue(db, groupId, weekStart) {
 router.get('/revenue/daily', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.weekStart || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.weekStart) || getCurrentWeekStart()
     const weekEnd = addDays(weekStart, 6)
     const db = supabase()
 
@@ -1176,7 +1187,7 @@ router.delete('/revenue/types/:id', async (req, res) => {
 router.get('/payroll/spreadsheet', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const week = req.query.week || getCurrentWeekStart()
+    const week = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
     const { data: records, error } = await db
@@ -1415,17 +1426,18 @@ router.get('/rules', async (req, res) => {
     const db = supabase()
     const { data, error } = await db
       .from('business_rules')
-      .select('*, staff!business_rules_subject_staff_id_fkey(name), staff!business_rules_object_staff_id_fkey(name)')
+      .select(`*,
+        subject:staff!business_rules_subject_staff_id_fkey(name),
+        object:staff!business_rules_object_staff_id_fkey(name)`)
       .eq('group_id', groupId)
       .or('active.is.null,active.eq.true')
       .order('created_at', { ascending: false })
     if (error) throw error
 
-    // Supabase join aliases may vary; normalize the result
     const rules = (data || []).map(r => ({
       ...r,
-      subject_name: r['staff!business_rules_subject_staff_id_fkey']?.name || null,
-      object_name: r['staff!business_rules_object_staff_id_fkey']?.name || null,
+      subject_name: r.subject?.name || null,
+      object_name: r.object?.name || null,
     }))
     res.json(rules)
   } catch (err) {
@@ -1574,7 +1586,7 @@ router.post('/coverage', async (req, res) => {
 router.get('/timeclock', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const week = req.query.week || getCurrentWeekStart()
+    const week = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
     const { data, error } = await db
       .from('time_entries')
@@ -1704,7 +1716,7 @@ router.post('/timeclock/override', async (req, res) => {
 router.get('/timeclock/weekly', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.weekStart || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.weekStart) || getCurrentWeekStart()
     const weekEnd = addDays(weekStart, 6)
     const weekEndExclusive = addDays(weekStart, 7)
     const db = supabase()
@@ -1790,7 +1802,7 @@ router.get('/timeclock/weekly', async (req, res) => {
 router.get('/events', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const weekStart = req.query.weekStart || getCurrentWeekStart()
+    const weekStart = safeWeekParam(req.query.weekStart) || getCurrentWeekStart()
     const weekEndExclusive = addDays(weekStart, 7)
     const limit = Math.min(Number(req.query.limit) || 50, 200)
     const db = supabase()
@@ -2065,7 +2077,7 @@ router.post('/rates', async (req, res) => {
     const db = supabase()
     const { data, error } = await db
       .from('role_rates')
-      .upsert({ group_id: groupId, role_name: roleName, hourly_rate: rate, updated_at: new Date().toISOString() }, { onConflict: 'group_id,role_name' })
+      .upsert({ group_id: groupId, role_name: roleName, hourly_rate: rate }, { onConflict: 'group_id,role_name' })
       .select()
       .single()
     if (error) throw error
@@ -2147,7 +2159,7 @@ router.patch('/roles/:role', async (req, res) => {
     const { data, error } = await db
       .from('role_rates')
       .upsert(
-        { group_id: groupId, role_name: role, hourly_rate: rateNum, updated_at: new Date().toISOString() },
+        { group_id: groupId, role_name: role, hourly_rate: rateNum },
         { onConflict: 'group_id,role_name' }
       )
       .select()

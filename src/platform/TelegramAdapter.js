@@ -51,6 +51,14 @@ export class TelegramAdapter extends PlatformAdapter {
     return this._bot.on(event, fn)
   }
 
+  once(event, fn) {
+    return this._bot.once(event, fn)
+  }
+
+  removeListener(event, fn) {
+    return this._bot.removeListener(event, fn)
+  }
+
   deleteWebHook(options) {
     return this._bot.deleteWebHook(options)
   }

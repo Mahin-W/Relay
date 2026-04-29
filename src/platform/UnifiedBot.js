@@ -62,6 +62,16 @@ export class UnifiedBot {
     if (adapter?.on) return adapter.on(event, fn)
   }
 
+  once(event, fn) {
+    const adapter = this._getDefault()
+    if (adapter?.once) return adapter.once(event, fn)
+  }
+
+  removeListener(event, fn) {
+    const adapter = this._getDefault()
+    if (adapter?.removeListener) return adapter.removeListener(event, fn)
+  }
+
   deleteWebHook(options) {
     const adapter = this._getDefault()
     if (adapter?.deleteWebHook) return adapter.deleteWebHook(options)
