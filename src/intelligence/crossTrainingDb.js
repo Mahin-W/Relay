@@ -39,7 +39,7 @@ export async function getCrossTrainingForStaff(staffId, groupId, includeTraining
   if (db?.getCrossTrainingForStaff) return db.getCrossTrainingForStaff(staffId, groupId, includeTraining)
   let query = supabase
     .from('cross_training')
-    .select('role_id, proficiency, roles(role_name)')
+    .select('role_id, proficiency')
     .eq('staff_id', staffId)
     .eq('group_id', groupId)
     .eq('active', true)
@@ -50,7 +50,7 @@ export async function getCrossTrainingForStaff(staffId, groupId, includeTraining
   if (error) throw error
   return (data ?? []).map(r => ({
     roleId: r.role_id,
-    roleName: r.roles?.role_name ?? 'Unknown',
+    roleName: r.role_name ?? `Role ${r.role_id}`,
     proficiency: r.proficiency,
   }))
 }
@@ -80,7 +80,7 @@ export async function getAllCrossTraining(groupId, db = null) {
   if (db?.getAllCrossTraining) return db.getAllCrossTraining(groupId)
   const { data, error } = await supabase
     .from('cross_training')
-    .select('staff_id, role_id, proficiency, staff(name), roles(role_name)')
+    .select('staff_id, role_id, proficiency, staff(name)')
     .eq('group_id', groupId)
     .eq('active', true)
   if (error) throw error
@@ -89,7 +89,7 @@ export async function getAllCrossTraining(groupId, db = null) {
     if (!grouped[r.staff_id]) grouped[r.staff_id] = []
     grouped[r.staff_id].push({
       roleId: r.role_id,
-      roleName: r.roles?.role_name ?? 'Unknown',
+      roleName: r.role_name ?? `Role ${r.role_id}`,
       proficiency: r.proficiency,
     })
   }

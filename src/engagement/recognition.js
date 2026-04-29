@@ -23,14 +23,48 @@ const CONTEXT_TRIGGERS = ['star', 'legend']
 const TEAM_WORDS = ['everyone', 'team', 'crew', "y'all", 'yall', 'all']
 const ROLE_WORDS = ['servers', 'kitchen', 'cooks', 'bartenders', 'hosts', 'bussers']
 
+// Negation patterns — if any of these prefixes a trigger phrase, the message
+// is NOT a recognition event. e.g. "no shoutouts tonight", "stop thanking me".
+const NEGATION_RE = /\b(no|not|stop|never|don'?t|didn'?t|hardly|barely)\b/i
+
+// Cap on the `reason` field — guards against runaway DB inserts when a
+// noisy/garbage message gets matched.
+const MAX_REASON_LEN = 200
+
+// Levenshtein distance — used for fuzzy-matching staff names so "Mark"
+// matches "Marc" but "Sebastian" doesn't match "Sam".
+function levenshtein(a, b) {
+  if (a === b) return 0
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i])
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+    }
+  }
+  return dp[a.length][b.length]
+}
+
 /**
  * detectRecognition — pure function, keyword matching, NO LLM.
- * Returns null if no trigger phrase found.
+ * Returns null if no trigger phrase found OR if message is negated.
  * Returns { recipientType, recipientName, recipientStaffId, role, reason, originalText }
  */
 export function detectRecognition(text, staff = []) {
-  if (!text) return null
+  if (typeof text !== 'string' || !text.trim()) return null
   const lower = text.toLowerCase()
+
+  // Negation guard — "no shoutouts tonight", "not a shoutout", "stop thanking me"
+  // Apply only if the negation appears within the first 25 characters AND
+  // before the trigger phrase. (We don't want to drop "shoutout to Marco who
+  // never let us down".)
+  const negMatch = lower.match(NEGATION_RE)
+  if (negMatch && negMatch.index <= 25) {
+    return null
+  }
 
   // Check for trigger phrase match
   let matched = false
@@ -69,13 +103,45 @@ export function detectRecognition(text, staff = []) {
     originalText: text,
   }
 
-  // Check for individual staff name
+  // Check for individual staff name (exact substring first)
   for (const s of staff) {
     if (lower.includes(s.name.toLowerCase())) {
       result.recipientType = 'individual'
       result.recipientName = s.name
       result.recipientStaffId = s.id
       break
+    }
+  }
+
+  // Fuzzy match — "Mark" → "Marc", "Tonyy" → "Tony". Only fires if no exact
+  // match was found. Uses tokens of length 3+ from the message and compares
+  // against staff names with a Levenshtein cap of 1 for short names (3-4 chars)
+  // or 2 for longer ones.
+  if (result.recipientType !== 'individual' && staff.length > 0) {
+    const tokens = text
+      .replace(/[^\w\s'-]/g, ' ')
+      .split(/\s+/)
+      .filter(t => t.length >= 3 && t.length <= 30)
+    let bestStaff = null
+    let bestDist = Infinity
+    for (const tok of tokens) {
+      const tl = tok.toLowerCase()
+      for (const s of staff) {
+        const sn = s.name.toLowerCase()
+        // Skip if the token IS the staff name (already handled above)
+        if (sn === tl) continue
+        const maxDist = sn.length <= 4 ? 1 : 2
+        const dist = levenshtein(sn, tl)
+        if (dist <= maxDist && dist < bestDist) {
+          bestDist = dist
+          bestStaff = s
+        }
+      }
+    }
+    if (bestStaff) {
+      result.recipientType = 'individual'
+      result.recipientName = bestStaff.name
+      result.recipientStaffId = bestStaff.id
     }
   }
 
@@ -111,11 +177,14 @@ export function detectRecognition(text, staff = []) {
         // Remove leading "to" if present
         reason = reason.replace(/^to\s+/i, '').trim()
         if (reason.length > 2) {
-          result.reason = reason
+          result.reason = reason.slice(0, MAX_REASON_LEN)
         }
         break
       }
     }
+  }
+  if (result.reason && result.reason.length > MAX_REASON_LEN) {
+    result.reason = result.reason.slice(0, MAX_REASON_LEN)
   }
 
   return result

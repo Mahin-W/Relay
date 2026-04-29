@@ -15,13 +15,22 @@ export async function analyzeCoveragePatterns(groupId, weeksBack = 6, db = null)
     coverageRows = await db.getCoverageHistory(groupId, weeksBack)
   } else {
     const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
+    // coverage_requests doesn't have `day_of_week` or `shift_name` columns of its own;
+    // pull them from the joined `shifts` row instead.
     const { data, error } = await supabase
       .from('coverage_requests')
-      .select('requested_by, requester_telegram_id, day_of_week, shift_name, created_at, status')
+      .select('requested_by, requester_telegram_id, matched_shift_id, shift_description, created_at, status, shifts:matched_shift_id(name, day_of_week)')
       .eq('group_id', groupId)
       .gte('created_at', cutoff)
     if (error) throw error
-    coverageRows = data || []
+    coverageRows = (data || []).map(r => ({
+      requested_by: r.requested_by,
+      requester_telegram_id: r.requester_telegram_id,
+      day_of_week: r.shifts?.day_of_week ?? null,
+      shift_name: r.shifts?.name ?? r.shift_description ?? null,
+      created_at: r.created_at,
+      status: r.status,
+    }))
   }
 
   // Get schedule history (how many times each person was scheduled per day/shift)
@@ -30,18 +39,23 @@ export async function analyzeCoveragePatterns(groupId, weeksBack = 6, db = null)
     scheduleRows = await db.getScheduleHistory(groupId, weeksBack)
   } else {
     const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
+    // schedule_assignments only stores foreign keys; pull staff name + shift
+    // metadata via join.
     const { data, error } = await supabase
       .from('schedule_assignments')
-      .select('staff_id, staff_name, day_of_week, shift_name')
+      .select('staff_id, shift_id, staff:staff_id(name), shifts:shift_id(name, day_of_week)')
       .eq('group_id', groupId)
       .gte('created_at', cutoff)
     if (error) throw error
     // Group and count
     const counts = {}
     for (const row of (data || [])) {
-      const key = `${row.staff_id}|${row.day_of_week}|${row.shift_name}`
+      const day = row.shifts?.day_of_week
+      const shiftName = row.shifts?.name
+      const staffName = row.staff?.name
+      const key = `${row.staff_id}|${day}|${shiftName}`
       if (!counts[key]) {
-        counts[key] = { staff_id: row.staff_id, staff_name: row.staff_name, day_of_week: row.day_of_week, shift_name: row.shift_name, count: 0 }
+        counts[key] = { staff_id: row.staff_id, staff_name: staffName, day_of_week: day, shift_name: shiftName, count: 0 }
       }
       counts[key].count++
     }

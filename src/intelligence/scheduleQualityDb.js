@@ -9,10 +9,17 @@ function supabase() {
 
 /**
  * Upserts weekly quality score on (group_id, week_start).
+ * Accepts a Supabase-shaped client OR a SimulationDb-style object that exposes
+ * a `saveQualityScore(groupId, weekStart, scoreData)` named method.
  */
 export async function saveWeeklyQualityScore(groupId, weekStart, scoreData, db = null) {
   const _db = db ?? supabase()
   try {
+    if (typeof _db?.saveQualityScore === 'function') {
+      return await _db.saveQualityScore(String(groupId), weekStart, scoreData)
+    }
+    if (typeof _db?.from !== 'function') return null
+
     const row = {
       group_id: String(groupId),
       week_start: weekStart,
@@ -42,10 +49,16 @@ export async function saveWeeklyQualityScore(groupId, weekStart, scoreData, db =
 
 /**
  * Returns quality history ordered ASC by weekStart (chronological for trend).
+ * Tolerates SimulationDb-style stubs that expose `getQualityHistory`.
  */
 export async function getQualityHistory(groupId, weeksBack = 12, db = null) {
   const _db = db ?? supabase()
   try {
+    if (typeof _db?.getQualityHistory === 'function') {
+      return await _db.getQualityHistory(String(groupId), weeksBack)
+    }
+    if (typeof _db?.from !== 'function') return []
+
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - weeksBack * 7)
     const cutoffStr = cutoff.toISOString().slice(0, 10)

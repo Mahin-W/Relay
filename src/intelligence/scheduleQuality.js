@@ -9,6 +9,9 @@ function supabase() {
 }
 
 // ── collectWeekMetrics ───────────────────────────────────────────────────────
+// Accepts either a Supabase-shaped client (with `.from(...)`) or a named-method
+// db (with `getEditHistory`, `getCoverageRequestsForGroup`, etc.) so this can
+// be exercised in unit tests without a live DB connection.
 
 export async function collectWeekMetrics(groupId, weekStart, db = null) {
   const _db = db ?? supabase()
@@ -17,43 +20,79 @@ export async function collectWeekMetrics(groupId, weekStart, db = null) {
   // Calculate week boundaries
   const weekEnd = new Date(weekStart)
   weekEnd.setDate(weekEnd.getDate() + 7)
-  const weekEndStr = weekEnd.toISOString().slice(0, 10)
   const weekStartDate = new Date(weekStart)
   const weekStartISO = weekStartDate.toISOString()
   const weekEndISO = weekEnd.toISOString()
 
-  // 1. Draft edits
-  const { data: edits } = await _db
-    .from('schedule_edit_events')
-    .select('*')
-    .eq('group_id', gid)
-    .eq('week_start', weekStart)
+  // Prefer named methods (SimulationDb / production helpers) when present;
+  // only fall back to PostgREST-style `.from(...).select(...)` chain when there
+  // is no specific helper. SimulationDb's Proxy returns a generic async stub
+  // for `.from`, which masquerades as Supabase-shaped — so we can't trust the
+  // existence of `.from` alone.
+  async function fetchTable(tableName, namedMethod, supabaseQuery) {
+    if (namedMethod && typeof _db?.[namedMethod] === 'function') {
+      try { return (await _db[namedMethod]()) ?? [] }
+      catch { return [] }
+    }
+    if (typeof _db?.from !== 'function') return []
+    try {
+      const builder = _db.from(tableName)
+      if (!builder || typeof builder.select !== 'function') return []
+      const r = await supabaseQuery(builder)
+      return r?.data ?? []
+    } catch { return [] }
+  }
 
-  const draftEdits = edits?.length ?? 0
+  // 1. Draft edits
+  const edits = await fetchTable(
+    'schedule_edit_events',
+    null,
+    (b) => b.select('*').eq('group_id', gid).eq('week_start', weekStart),
+  )
+  // SimulationDb-friendly shortcut for edit history
+  let editsList = edits
+  if (editsList.length === 0 && typeof _db?.getEditHistory === 'function') {
+    const all = await _db.getEditHistory(gid, 52)
+    editsList = (all || []).filter(e => e.week_start === weekStart)
+  }
+  const draftEdits = editsList.length
 
   // 2. Coverage requests (created_at within the week)
-  const { data: covReqs } = await _db
-    .from('coverage_requests')
-    .select('*')
-    .eq('group_id', gid)
-    .gte('created_at', weekStartISO)
-    .lt('created_at', weekEndISO)
-
-  const coverageRequests = covReqs?.length ?? 0
+  let covReqs = []
+  if (typeof _db?.getCoverageRequestsForGroup === 'function') {
+    const all = await _db.getCoverageRequestsForGroup(gid, 8)
+    covReqs = (all || []).filter(c => {
+      const t = new Date(c.created_at).getTime()
+      return t >= weekStartDate.getTime() && t < weekEnd.getTime()
+    })
+  } else {
+    covReqs = await fetchTable(
+      'coverage_requests',
+      null,
+      (b) => b.select('*').eq('group_id', gid).gte('created_at', weekStartISO).lt('created_at', weekEndISO),
+    )
+  }
+  const coverageRequests = covReqs.length
 
   // 3. No-shows
-  const { data: noShowEvents } = await _db
-    .from('staff_reliability_events')
-    .select('*')
-    .eq('group_id', gid)
-    .eq('event_type', 'no_call_no_show')
-    .gte('recorded_at', weekStartISO)
-    .lt('recorded_at', weekEndISO)
-
-  const noShows = noShowEvents?.length ?? 0
+  let noShowEvents = []
+  if (typeof _db?.getReliabilityEventsForGroup === 'function') {
+    const all = await _db.getReliabilityEventsForGroup(gid, 8)
+    noShowEvents = (all || []).filter(e => {
+      const t = new Date(e.recorded_at ?? e.created_at).getTime()
+      return e.event_type === 'no_call_no_show' && t >= weekStartDate.getTime() && t < weekEnd.getTime()
+    })
+  } else {
+    noShowEvents = await fetchTable(
+      'staff_reliability_events',
+      null,
+      (b) => b.select('*').eq('group_id', gid).eq('event_type', 'no_call_no_show').gte('recorded_at', weekStartISO).lt('recorded_at', weekEndISO),
+    )
+  }
+  const noShows = noShowEvents.length
 
   // 4. Avg fill minutes (covered requests only)
-  const coveredReqs = (covReqs || []).filter(r => r.covered_at)
+  const coveredReqs = covReqs.filter(r => r.covered_at)
   let avgFillMinutes = null
   if (coveredReqs.length > 0) {
     const totalMinutes = coveredReqs.reduce((sum, r) => {
@@ -65,22 +104,29 @@ export async function collectWeekMetrics(groupId, weekStart, db = null) {
   }
 
   // 5. Unconfirmed receipts
-  const { data: unconfirmed } = await _db
-    .from('schedule_receipts')
-    .select('*')
-    .eq('group_id', gid)
-    .eq('week_start', weekStart)
-    .eq('status', 'sent')
-
-  const unconfirmedCount = unconfirmed?.length ?? 0
+  let unconfirmed = []
+  if (typeof _db?.getUnconfirmedSchedule === 'function') {
+    unconfirmed = await _db.getUnconfirmedSchedule(gid, weekStart)
+  } else {
+    unconfirmed = await fetchTable(
+      'schedule_receipts',
+      null,
+      (b) => b.select('*').eq('group_id', gid).eq('week_start', weekStart).eq('status', 'sent'),
+    )
+  }
+  const unconfirmedCount = (unconfirmed || []).length
 
   // 6. Staff scheduled (distinct staff_id)
-  const { data: assignments } = await _db
-    .from('schedule_assignments')
-    .select('*')
-    .eq('group_id', gid)
-    .eq('week_start', weekStart)
-
+  let assignments = []
+  if (typeof _db?.getScheduleAssignments === 'function') {
+    assignments = await _db.getScheduleAssignments(gid, weekStart)
+  } else {
+    assignments = await fetchTable(
+      'schedule_assignments',
+      null,
+      (b) => b.select('*').eq('group_id', gid).eq('week_start', weekStart),
+    )
+  }
   const staffIds = new Set((assignments || []).map(a => a.staff_id))
   const staffScheduled = staffIds.size
 
