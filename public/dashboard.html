@@ -1262,6 +1262,106 @@
       color: var(--text);
     }
 
+    /* Schedule status banner */
+    .schedule-status {
+      display: inline-flex; align-items: center;
+      gap: 8px; padding: 6px 14px;
+      border-radius: var(--radius-full);
+      font-size: 13px; font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .schedule-status.published { background: var(--color-success-dim); color: var(--color-success-text); }
+    .schedule-status.draft     { background: var(--color-warning-dim); color: var(--color-warning-text); }
+    .schedule-status.empty     { background: var(--color-surface-alt); color: var(--color-text-muted); }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+    .status-time { font-weight: 400; opacity: 0.75; font-size: 12px; }
+
+    /* OT badge */
+    .ot-badge {
+      display: inline-block; padding: 1px 5px;
+      background: var(--color-danger-dim); color: var(--color-danger);
+      font-size: 10px; font-weight: 700;
+      border-radius: 3px; margin-left: 4px;
+      vertical-align: middle;
+    }
+
+    /* Drag/drop */
+    .draggable-pill { cursor: grab; position: relative; }
+    .draggable-pill:active { cursor: grabbing; }
+    .draggable-pill.dragging { opacity: 0.4; cursor: grabbing; }
+    .pill-remove {
+      display: none; position: absolute;
+      top: -6px; right: -6px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--color-danger); color: #fff;
+      font-size: 11px; line-height: 16px;
+      text-align: center; cursor: pointer;
+      font-weight: 700; user-select: none;
+    }
+    .draggable-pill:hover .pill-remove { display: block; }
+    .schedule-cell { transition: background var(--transition-fast); }
+    .schedule-cell.droppable { cursor: copy; }
+    .drop-target-valid {
+      background: var(--color-success-dim) !important;
+      outline: 2px dashed var(--color-success);
+      outline-offset: -2px;
+    }
+    .drop-target-invalid {
+      background: var(--color-danger-dim) !important;
+      outline: 2px dashed var(--color-danger);
+      outline-offset: -2px;
+    }
+
+    /* Undo toast */
+    .undo-toast {
+      position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--color-text-primary); color: #fff;
+      padding: 12px 20px; border-radius: 8px;
+      display: flex; align-items: center;
+      gap: 16px; font-size: 14px;
+      z-index: 999; min-width: 260px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      overflow: hidden;
+    }
+    .undo-toast button {
+      background: none; border: 1px solid rgba(255,255,255,0.4);
+      color: #fff; padding: 4px 12px; border-radius: 4px;
+      cursor: pointer; font-size: 13px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .undo-toast button:hover { background: rgba(255,255,255,0.15); }
+    .undo-timer {
+      position: absolute; bottom: 0; left: 0;
+      height: 3px; width: 100%;
+      background: var(--color-accent);
+      border-radius: 0 0 8px 8px;
+    }
+
+    /* Confirm-modal backdrop (class form so we can have multiple modals) */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(28,20,16,.5);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+
+    /* Warning button (used for Regenerate when published) */
+    .btn-warning {
+      background: var(--color-warning-dim);
+      color: var(--color-warning-text);
+      border: 1px solid var(--color-warning);
+      padding: 10px 20px; border-radius: 8px;
+      font-weight: 600; cursor: pointer; font-size: 14px;
+      font-family: inherit;
+      transition: background var(--transition-fast);
+    }
+    .btn-warning:hover { background: var(--color-warning); color: #fff; }
+
     .settings-section-title {
       font-size: 13px; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.07em;
@@ -1363,7 +1463,7 @@
           <span class="nav-item-label">Staff</span>
         </a>
         <a class="nav-item" data-page="payroll" onclick="navigateTo('payroll')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16l4-2 4 2 4-2 4 2V4a2 2 0 0 0-2-2z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
           <span class="nav-item-label">Payroll</span>
         </a>
         <a class="nav-item" data-page="income" onclick="navigateTo('income')">
@@ -1412,6 +1512,9 @@
     // ── State ──
     let currentPage = 'overview';
     let currentScheduleWeek = getCurrentWeekStart();
+    let scheduleStatus = null;
+    let _dragState = null;
+    let _lastAction = null;
     let dashboardData = {};
     let refreshInterval = null;
 
@@ -1545,6 +1648,51 @@
       t.textContent = msg;
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 3500);
+    }
+
+    function formatRelativeTime(isoStr) {
+      if (!isoStr) return '';
+      const then = new Date(isoStr).getTime();
+      if (!Number.isFinite(then)) return '';
+      const diffSec = Math.floor((Date.now() - then) / 1000);
+      if (diffSec < 60) return 'just now';
+      if (diffSec < 3600) {
+        const m = Math.floor(diffSec / 60);
+        return `${m} minute${m === 1 ? '' : 's'} ago`;
+      }
+      if (diffSec < 86400) {
+        const h = Math.floor(diffSec / 3600);
+        return `${h} hour${h === 1 ? '' : 's'} ago`;
+      }
+      if (diffSec < 86400 * 7) {
+        const d = Math.floor(diffSec / 86400);
+        return `${d} day${d === 1 ? '' : 's'} ago`;
+      }
+      const dt = new Date(isoStr);
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${months[dt.getMonth()]} ${dt.getDate()}`;
+    }
+
+    function showConfirmModal(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+      return new Promise(resolve => {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop';
+        backdrop.innerHTML = `
+          <div class="modal-card">
+            <div class="modal-title">${title}</div>
+            <div class="modal-body"><p style="color:var(--color-text-secondary);font-size:14px;line-height:1.6;margin:0">${message}</p></div>
+            <div class="modal-actions">
+              <button class="btn-secondary" data-act="cancel">${cancelText}</button>
+              <button class="btn-small btn-danger" data-act="confirm" style="padding:10px 20px;font-size:14px;border-radius:8px">${confirmText}</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(backdrop);
+        const cleanup = (val) => { backdrop.remove(); resolve(val); };
+        backdrop.querySelector('[data-act="confirm"]').onclick = () => cleanup(true);
+        backdrop.querySelector('[data-act="cancel"]').onclick  = () => cleanup(false);
+        backdrop.addEventListener('click', e => { if (e.target === backdrop) cleanup(false); });
+      });
     }
 
     // ── Modal ──
@@ -1738,20 +1886,47 @@
       `;
     }
 
-    function renderScheduleTable(schedule, compact) {
+    function buildShiftMap(shifts) {
+      // (day_of_week + '|' + shiftName) → shift_id
+      const map = {};
+      (shifts || []).forEach(s => {
+        if (s && s.day_of_week && s.name && s.id != null) {
+          map[`${s.day_of_week}|${s.name}`] = s.id;
+        }
+      });
+      return map;
+    }
+
+    function shiftHoursOf(s) {
+      if (!s || !s.start_time || !s.end_time) return 0;
+      const [sh, sm] = String(s.start_time).split(':').map(Number);
+      const [eh, em] = String(s.end_time).split(':').map(Number);
+      let h = (eh * 60 + em - sh * 60 - sm) / 60;
+      if (h < 0) h += 24;
+      return h;
+    }
+
+    function renderScheduleTable(schedule, compact, shifts = [], settings = {}, isCurrentWeek = false) {
       const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
       const DAY_FULL = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
       const staff = schedule?.staff || [];
       const showHours = !compact;
+      const editable = !compact && isCurrentWeek;
+
+      const shiftMap = buildShiftMap(shifts);
+      const shiftHoursById = {};
+      (shifts || []).forEach(s => { shiftHoursById[s.id] = shiftHoursOf(s); });
+      const otThreshold = Number(settings?.overtimeThreshold) || 40;
 
       let html = `<div class="card schedule-wrapper${compact ? ' compact' : ''}">`;
 
       if (!compact) {
+        const atCurrent = currentScheduleWeek === getCurrentWeekStart();
         html += `
           <div class="schedule-nav">
             <button class="schedule-nav-btn" onclick="changeScheduleWeek(-7)">&larr; Prev</button>
             <span class="schedule-nav-label">Week of ${formatWeekRange(currentScheduleWeek)}</span>
-            <button class="schedule-nav-btn" onclick="changeScheduleWeek(7)">Next &rarr;</button>
+            <button class="schedule-nav-btn" onclick="changeScheduleWeek(7)" ${atCurrent ? 'disabled style="opacity:.35;cursor:not-allowed"' : ''}>Next &rarr;</button>
           </div>
         `;
       } else {
@@ -1761,7 +1936,7 @@
       html += `<div class="schedule-scroll"><table class="schedule-table"><thead><tr>
         <th>Staff</th>`;
       days.forEach(d => { html += `<th>${d}</th>`; });
-      if (showHours) html += `<th>Total</th>`;
+      if (showHours) html += `<th style="text-align:right">Total</th>`;
       html += `</tr></thead><tbody>`;
 
       if (staff.length === 0) {
@@ -1769,26 +1944,60 @@
       }
 
       staff.forEach(member => {
-        html += `<tr><td><div class="staff-name">${escapeHtml(member.staffName || member.name || '')}</div>`;
-        if (member.roleName || member.role) html += `<div class="staff-role">${escapeHtml(member.roleName || member.role)}</div>`;
-        html += `</td>`;
+        const staffId = member.staffId ?? member.id ?? '';
+        let totalHours = 0;
+        let rowHtml = `<tr><td><div class="staff-name">${escapeHtml(member.staffName || member.name || '')}</div>`;
+        if (member.roleName || member.role) rowHtml += `<div class="staff-role">${escapeHtml(member.roleName || member.role)}</div>`;
+        rowHtml += `</td>`;
 
         days.forEach(day => {
-          const shifts = member.shifts?.[DAY_FULL[day]] || member.shifts?.[day.toLowerCase()] || member.shifts?.[day] || [];
-          html += `<td>`;
-          if (Array.isArray(shifts)) {
-            shifts.forEach(s => {
-              const label = typeof s === 'string' ? s : s.shiftName || s.name || '';
-              html += `<div class="shift-pill ${shiftPillClass(label)}">${escapeHtml(label)}</div>`;
+          const dayKey = DAY_FULL[day];
+          const shiftsList = member.shifts?.[dayKey] || member.shifts?.[day.toLowerCase()] || member.shifts?.[day] || [];
+          let cellHtml = '';
+          if (Array.isArray(shiftsList)) {
+            shiftsList.forEach(s => {
+              const label = typeof s === 'string' ? s : (s.shiftName || s.name || '');
+              const sid = shiftMap[`${dayKey}|${label}`] ?? null;
+              if (sid != null) totalHours += (shiftHoursById[sid] || 0);
+              const dragAttrs = (editable && sid != null) ? `
+                draggable="true"
+                data-staff-id="${staffId}"
+                data-shift-id="${sid}"
+                data-day="${dayKey}"
+                data-shift-name="${escapeHtml(label)}"
+                data-week-start="${currentScheduleWeek}"
+                ondragstart="onPillDragStart(event)"
+                ondragend="onPillDragEnd(event)"
+              ` : '';
+              const removeBtn = (editable && sid != null) ? `<span class="pill-remove" onclick="removeAssignment(event, '${staffId}', '${sid}')">×</span>` : '';
+              cellHtml += `<div class="shift-pill ${shiftPillClass(label)} ${editable && sid != null ? 'draggable-pill' : ''}" ${dragAttrs}>${escapeHtml(label)}${removeBtn}</div>`;
             });
           }
-          html += `</td>`;
+          const cellAttrs = editable ? `
+            class="schedule-cell droppable"
+            data-staff-id="${staffId}"
+            data-day="${dayKey}"
+            ondragover="onCellDragOver(event)"
+            ondragleave="onCellDragLeave(event)"
+            ondrop="onCellDrop(event)"
+          ` : 'class="schedule-cell"';
+          rowHtml += `<td ${cellAttrs}>${cellHtml}</td>`;
         });
 
         if (showHours) {
-          html += `<td><span class="hours-total">${member.totalHours != null ? member.totalHours + 'h' : '—'}</span></td>`;
+          // Prefer computed totalHours (from shiftMap lookup); fall back to member.totalHours from API
+          const hrs = totalHours > 0 ? totalHours : Number(member.totalHours || 0);
+          const hoursColor = hrs >= otThreshold
+            ? 'var(--color-danger)'
+            : hrs >= otThreshold * 0.9
+              ? 'var(--color-warning)' : 'var(--text-muted)';
+          rowHtml += `<td style="text-align:right">
+            <span style="font-weight:600;color:${hoursColor}">${hrs.toFixed(1)}h</span>
+            ${hrs >= otThreshold ? '<span class="ot-badge">OT</span>' : ''}
+          </td>`;
         }
-        html += `</tr>`;
+        rowHtml += `</tr>`;
+        html += rowHtml;
       });
 
       html += `</tbody></table></div></div>`;
@@ -1850,28 +2059,224 @@
       return html;
     }
 
-    function renderSchedulePage(schedule) {
+    function renderSchedulePage(schedule, status, shifts, settings, isCurrentWeek) {
       const weekStart = (schedule && schedule.weekStart) || currentScheduleWeek;
-      const actionBar = `
-        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
-          <button class="btn-primary" style="display:inline-flex;align-items:center;gap:6px" onclick="generateSchedule(this,'${weekStart}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Schedule</button>
-          <button id="approve-btn" class="btn-primary" style="background:var(--color-success);display:inline-flex;align-items:center;gap:6px" onclick="approveSchedule('${weekStart}')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Approve &amp; Publish
-          </button>
-        </div>`;
-      return actionBar + renderScheduleTable(schedule, false);
+      const s = status || { hasAssignments: false, isPublished: false, publishedAt: null };
+
+      let banner = '';
+      if (!s.hasAssignments && isCurrentWeek) {
+        banner = `<div class="schedule-status empty"><span class="status-dot"></span>No schedule this week — generate one to start</div>`;
+      } else if (s.isPublished) {
+        banner = `<div class="schedule-status published"><span class="status-dot"></span>Published${s.publishedAt ? `<span class="status-time">${formatRelativeTime(s.publishedAt)}</span>` : ''}</div>`;
+      } else if (s.hasAssignments) {
+        banner = `<div class="schedule-status draft"><span class="status-dot"></span>Draft — not published yet</div>`;
+      }
+
+      const generateBtn = isCurrentWeek ? `
+        <button class="${s.isPublished ? 'btn-warning' : 'btn-primary'}" style="display:inline-flex;align-items:center;gap:6px"
+          onclick="generateSchedule(this,'${weekStart}')"
+          ${s.isPublished ? 'title="Schedule is published. Regenerating will overwrite it."' : ''}>
+          ${s.isPublished
+            ? '⚠️ Regenerate'
+            : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate Schedule'}
+        </button>` : '';
+
+      const approveBtn = isCurrentWeek ? `
+        <button id="approve-btn" class="btn-primary" style="background:var(--color-success);display:inline-flex;align-items:center;gap:6px"
+          onclick="approveSchedule('${weekStart}')" ${!s.hasAssignments ? 'disabled style="opacity:.5;cursor:not-allowed;background:var(--color-success)"' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          ${s.isPublished ? 'Republish' : 'Approve &amp; Publish'}
+        </button>` : '';
+
+      const copyBtn = (isCurrentWeek && !s.hasAssignments) ? `
+        <button class="btn-secondary" onclick="copyLastWeek()" title="Copy last week's schedule as a draft">↩ Copy Last Week</button>` : '';
+
+      const actionBar = isCurrentWeek
+        ? `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">${generateBtn}${approveBtn}${copyBtn}</div>`
+        : '';
+
+      return banner + actionBar + renderScheduleTable(schedule, false, shifts || [], settings || {}, !!isCurrentWeek);
+    }
+
+    async function loadSchedulePage() {
+      const content = document.getElementById('page-content');
+      content.innerHTML = renderScheduleSkeleton();
+      try {
+        const [schedule, status, shifts, settings] = await Promise.all([
+          apiFetch('/api/dashboard/schedule?week=' + currentScheduleWeek),
+          api(`/api/schedule/status?week=${currentScheduleWeek}`),
+          api('/api/shifts'),
+          api('/api/settings'),
+        ]);
+        dashboardData.schedule = schedule;
+        scheduleStatus = status;
+        const isCurrentWeek = currentScheduleWeek === getCurrentWeekStart();
+        content.innerHTML = renderSchedulePage(schedule, status, shifts || [], settings || {}, isCurrentWeek);
+      } catch (e) {
+        content.innerHTML = renderError("loadSchedulePage()");
+      }
+    }
+
+    // ── Drag/drop handlers ──
+    function onPillDragStart(e) {
+      const pill = e.currentTarget;
+      _dragState = {
+        staffId: pill.dataset.staffId,
+        shiftId: pill.dataset.shiftId,
+        shiftName: pill.dataset.shiftName,
+        day: pill.dataset.day,
+        weekStart: pill.dataset.weekStart,
+      };
+      pill.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', pill.dataset.staffId);
+    }
+    function onPillDragEnd(e) {
+      e.currentTarget.classList.remove('dragging');
+      document.querySelectorAll('.drop-target-valid, .drop-target-invalid')
+        .forEach(el => el.classList.remove('drop-target-valid', 'drop-target-invalid'));
+    }
+    function onCellDragOver(e) {
+      e.preventDefault();
+      if (!_dragState) return;
+      const cell = e.currentTarget;
+      const targetStaffId = cell.dataset.staffId;
+      const targetDay     = cell.dataset.day;
+      const sameStaff = String(targetStaffId) === String(_dragState.staffId);
+      const sameDay   = targetDay === _dragState.day;
+      const cellHasPills = !!cell.querySelector('.shift-pill');
+
+      if (sameStaff || !sameDay || cellHasPills) {
+        cell.classList.add('drop-target-invalid');
+        cell.classList.remove('drop-target-valid');
+        e.dataTransfer.dropEffect = 'none';
+      } else {
+        cell.classList.add('drop-target-valid');
+        cell.classList.remove('drop-target-invalid');
+        e.dataTransfer.dropEffect = 'move';
+      }
+    }
+    function onCellDragLeave(e) {
+      e.currentTarget.classList.remove('drop-target-valid', 'drop-target-invalid');
+    }
+    async function onCellDrop(e) {
+      e.preventDefault();
+      const cell = e.currentTarget;
+      cell.classList.remove('drop-target-valid', 'drop-target-invalid');
+      if (!_dragState) return;
+
+      const targetStaffId = cell.dataset.staffId;
+      const targetDay     = cell.dataset.day;
+      const sameStaff = String(targetStaffId) === String(_dragState.staffId);
+      const sameDay   = targetDay === _dragState.day;
+      const cellHasPills = !!cell.querySelector('.shift-pill');
+
+      if (sameStaff && sameDay) { _dragState = null; return; }
+      if (!sameDay) { showToast('Drag within the same day to swap staff', 'error'); _dragState = null; return; }
+      if (cellHasPills) { showToast('That cell is already filled', 'error'); _dragState = null; return; }
+
+      const fromStaffId = _dragState.staffId;
+      const shiftId     = _dragState.shiftId;
+      const weekStart   = _dragState.weekStart;
+      _dragState = null;
+
+      try {
+        await api('/api/schedule/swap', 'POST', {
+          fromStaffId, toStaffId: targetStaffId, shiftId, weekStart,
+        });
+        _lastAction = { type: 'swap', fromStaffId, toStaffId: targetStaffId, shiftId, weekStart };
+        await loadSchedulePage();
+        showUndoToast('Shift swapped');
+      } catch (err) {
+        showToast(err.message || 'Failed to swap', 'error');
+      }
+    }
+
+    async function removeAssignment(e, staffId, shiftId) {
+      e.stopPropagation();
+      const weekStart = currentScheduleWeek;
+      if (weekStart !== getCurrentWeekStart()) return;
+      _lastAction = { type: 'remove', staffId, shiftId, weekStart };
+      try {
+        await api('/api/schedule/assign', 'DELETE', { staffId, shiftId, weekStart });
+        await loadSchedulePage();
+        showUndoToast('Shift removed');
+      } catch (err) {
+        showToast('Failed to remove', 'error');
+      }
+    }
+
+    function showUndoToast(message) {
+      const existing = document.getElementById('undo-toast');
+      if (existing) {
+        if (existing._timeout) clearTimeout(existing._timeout);
+        existing.remove();
+      }
+      const toast = document.createElement('div');
+      toast.id = 'undo-toast';
+      toast.className = 'undo-toast';
+      toast.innerHTML = `<span>${message}</span><button onclick="undoLastAction()">Undo</button><div class="undo-timer"></div>`;
+      document.body.appendChild(toast);
+      const timerBar = toast.querySelector('.undo-timer');
+      timerBar.style.transition = 'width 5s linear';
+      requestAnimationFrame(() => { timerBar.style.width = '0%'; });
+      toast._timeout = setTimeout(() => { toast.remove(); _lastAction = null; }, 5000);
+    }
+
+    async function undoLastAction() {
+      if (!_lastAction) return;
+      const action = _lastAction; _lastAction = null;
+      const toast = document.getElementById('undo-toast');
+      if (toast) { if (toast._timeout) clearTimeout(toast._timeout); toast.remove(); }
+      try {
+        if (action.type === 'swap') {
+          await api('/api/schedule/swap', 'POST', {
+            fromStaffId: action.toStaffId, toStaffId: action.fromStaffId,
+            shiftId: action.shiftId, weekStart: action.weekStart,
+          });
+        } else if (action.type === 'remove') {
+          await api('/api/schedule/assign', 'POST', {
+            staffId: action.staffId, shiftId: action.shiftId, weekStart: action.weekStart,
+          });
+        }
+        await loadSchedulePage();
+        showToast('Undone');
+      } catch (err) {
+        showToast('Could not undo', 'error');
+      }
+    }
+
+    async function copyLastWeek() {
+      const d = parseDate(currentScheduleWeek);
+      d.setDate(d.getDate() - 7);
+      const lastWeekStr = formatDate(d);
+      try {
+        await api('/api/schedule/generate', 'POST', { weekStart: currentScheduleWeek, copyFromWeek: lastWeekStr });
+        await loadSchedulePage();
+        showToast("Last week's schedule copied as draft");
+      } catch (err) {
+        showToast(err.message || 'Failed to copy', 'error');
+      }
     }
 
     async function generateSchedule(btn, weekStart) {
-      btn.disabled = true;
+      // Guard: confirm if schedule is already published
+      if (scheduleStatus?.isPublished) {
+        const ok = await showConfirmModal(
+          '⚠️ Schedule is published',
+          "This week's schedule has already been sent to your team. Regenerating will overwrite all current assignments. Are you sure?",
+          'Yes, regenerate',
+          'Cancel'
+        );
+        if (!ok) return;
+      }
       const originalLabel = btn.innerHTML;
+      btn.disabled = true;
       btn.textContent = 'Generating...';
       try {
         const result = await api('/api/schedule/generate', 'POST', { weekStart });
         const warnings = (result && result.warnings) || [];
-        // Reload the schedule view first so banners have a container to prepend into
-        const schedule = await loadScheduleData(currentScheduleWeek);
-        setContent(renderSchedulePage(schedule));
+        await loadSchedulePage();
         if (warnings.length > 0) {
           const container = document.getElementById('page-content');
           container.querySelectorAll('.warning-banner').forEach(b => b.remove());
@@ -1894,17 +2299,17 @@
 
     async function approveSchedule(weekStart) {
       const btn = document.getElementById('approve-btn');
-      btn.disabled = true;
-      btn.textContent = 'Publishing...';
+      if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
       try {
         const r = await api('/api/schedule/approve', 'POST', { weekStart });
-        showToast(`Schedule published to Telegram! ${r && r.staffNotified != null ? r.staffNotified : 0} staff notified.`);
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Published';
-        btn.style.background = 'var(--color-success-text)';
+        showToast(`Schedule published! ${r && r.staffNotified != null ? r.staffNotified : 0} staff notified.`);
+        await loadSchedulePage();
       } catch (e) {
         showToast(e.message, 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Approve &amp; Publish';
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Approve &amp; Publish';
+        }
       }
     }
 
@@ -1960,13 +2365,7 @@
           break;
 
         case 'schedule':
-          content.innerHTML = renderScheduleSkeleton();
-          try {
-            const schedule = await loadScheduleData(currentScheduleWeek);
-            content.innerHTML = renderSchedulePage(schedule);
-          } catch {
-            content.innerHTML = renderError("loadPage('schedule')");
-          }
+          loadSchedulePage();
           break;
 
         case 'staff':
@@ -2004,16 +2403,11 @@
     async function changeScheduleWeek(delta) {
       const d = parseDate(currentScheduleWeek);
       d.setDate(d.getDate() + delta);
-      currentScheduleWeek = formatDate(d);
-
-      const content = document.getElementById('page-content');
-      content.innerHTML = renderScheduleSkeleton();
-      try {
-        const schedule = await loadScheduleData(currentScheduleWeek);
-        content.innerHTML = renderSchedulePage(schedule);
-      } catch {
-        content.innerHTML = renderError(`changeScheduleWeek(0)`);
-      }
+      const next = formatDate(d);
+      const currentWeek = getCurrentWeekStart();
+      // Clamp: don't allow navigating into future weeks
+      currentScheduleWeek = (delta > 0 && next > currentWeek) ? currentWeek : next;
+      await loadSchedulePage();
     }
 
     function handleRefresh() {
@@ -2161,22 +2555,25 @@
 
     async function loadPayrollPage() {
       try {
-        const [payroll, settings] = await Promise.all([
+        const [payroll, settings, planned] = await Promise.all([
           api(`/api/payroll?week=${currentPayrollWeek}`),
           api('/api/settings'),
+          api(`/api/payroll/planned?week=${currentPayrollWeek}`),
         ]);
-        renderPayrollPage(payroll || [], settings || {});
+        renderPayrollPage(payroll || [], settings || {}, planned || { rows: [], totalPlannedHours: 0, totalPlannedCost: 0 });
       } catch (e) {
         showToast(e.message, 'error');
         renderErrorInline("loadPage('payroll')");
       }
     }
 
-    function renderPayrollPage(payroll, settings) {
+    function renderPayrollPage(payroll, settings, planned) {
       const totalPay = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
       const totalHrs = payroll.reduce((s, r) => s + (r.total_hours || 0), 0);
-      const avgRate  = totalHrs > 0 ? totalPay / totalHrs : 0;
       const staffPaid = payroll.filter(r => (r.total_hours || 0) > 0).length;
+      const plannedRows = planned?.rows || [];
+      const plannedCost = Number(planned?.totalPlannedCost || 0);
+      const plannedHours = Number(planned?.totalPlannedHours || 0);
 
       const rateOf = r => (r.total_hours || 0) > 0
         ? (r.total_gross_pay || 0) / (r.total_hours || 0) : 0;
@@ -2189,6 +2586,23 @@
           <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(rateOf(r))}/h</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">${formatCurrency(r.total_gross_pay || 0)}</td>
         </tr>`).join('');
+
+      const pvaRows = plannedRows.map(p => {
+        const actual = payroll.find(a => String(a.staff_id) === String(p.staffId)) || {};
+        const actualHrs = actual.total_hours || 0;
+        const actualPay = actual.total_gross_pay || 0;
+        const variance = actualPay - p.plannedCost;
+        const vColor = variance > 0 ? 'var(--color-danger)' : 'var(--color-success)';
+        return `<tr>
+          <td>${escapeHtml(p.staffName || '')}</td>
+          <td><span class="role-badge">${escapeHtml(p.role || '')}</span></td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${p.plannedHours.toFixed(1)}h</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(p.plannedCost)}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${actualHrs.toFixed(1)}h</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(actualPay)}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums;color:${vColor}">${variance > 0 ? '+' : ''}${formatCurrency(variance)}</td>
+        </tr>`;
+      }).join('');
 
       const thisWeek = getCurrentWeekStart();
       const atCurrent = currentPayrollWeek >= thisWeek;
@@ -2208,7 +2622,11 @@
         <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(4,1fr)">
           <div class="stat-card"><div class="stat-label">Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
           <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
-          <div class="stat-card"><div class="stat-label">Avg Hourly Rate</div><div class="stat-value">${totalHrs > 0 ? formatCurrency(avgRate) : '—'}</div></div>
+          <div class="stat-card">
+            <div class="stat-label">Planned Labor</div>
+            <div class="stat-value">${plannedRows.length ? formatCurrency(plannedCost) : '—'}</div>
+            <div class="stat-sub">${plannedRows.length ? 'from published schedule' : 'No schedule this week'}</div>
+          </div>
           <div class="stat-card"><div class="stat-label">Staff Paid</div><div class="stat-value">${staffPaid}</div></div>
         </div>
 
@@ -2229,6 +2647,33 @@
             </tr></tfoot>` : ''}
           </table>
         </div>
+
+        ${plannedRows.length ? `
+        <div class="card" style="margin-top:16px">
+          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Planned vs Actual Labor</span>
+            <span style="font-size:12px;font-weight:400;color:var(--text-muted)">based on published schedule × hourly rates</span>
+          </div>
+          <table class="data-table">
+            <thead><tr>
+              <th>Staff</th><th>Role</th>
+              <th style="text-align:right">Planned Hrs</th>
+              <th style="text-align:right">Planned Cost</th>
+              <th style="text-align:right">Actual Hrs</th>
+              <th style="text-align:right">Actual Pay</th>
+              <th style="text-align:right">Variance</th>
+            </tr></thead>
+            <tbody>${pvaRows}</tbody>
+            <tfoot><tr style="border-top:2px solid var(--surface-border);font-weight:700;color:var(--text)">
+              <td colspan="2">Total</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${plannedHours.toFixed(1)}h</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(plannedCost)}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${totalHrs.toFixed(1)}h</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(totalPay)}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums">${(totalPay - plannedCost) > 0 ? '+' : ''}${formatCurrency(totalPay - plannedCost)}</td>
+            </tr></tfoot>
+          </table>
+        </div>` : ''}
 
         ${incomeHidden ? `<div style="margin-top:16px;text-align:center">
           <a onclick="navigateTo('income')" style="font-size:13px;color:var(--accent);cursor:pointer;text-decoration:none">Track revenue and tips →</a>

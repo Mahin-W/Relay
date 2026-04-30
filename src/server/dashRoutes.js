@@ -794,15 +794,55 @@ router.delete('/schedule/assign', async (req, res) => {
 router.post('/schedule/generate', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const { weekStart } = req.body
+    const { weekStart, copyFromWeek } = req.body || {}
     if (!weekStart) return res.status(400).json({ error: 'weekStart is required' })
+
+    // Guard: only the current week is generatable/copyable from the dashboard
+    const currentWeek = getCurrentWeekStart()
+    if (weekStart !== currentWeek) {
+      return res.status(400).json({ error: 'Schedule generation is only available for the current week' })
+    }
+
+    const db = supabase()
+
+    // Copy-last-week branch
+    if (copyFromWeek) {
+      if (!safeWeekParam(copyFromWeek)) {
+        return res.status(400).json({ error: 'copyFromWeek must be YYYY-MM-DD' })
+      }
+      const { data: srcRows, error: srcErr } = await db
+        .from('schedule_assignments')
+        .select('staff_id, shift_id')
+        .eq('group_id', groupId)
+        .eq('week_start', copyFromWeek)
+      if (srcErr) throw srcErr
+      if (!srcRows || srcRows.length === 0) {
+        return res.status(404).json({ error: 'No schedule found for the source week' })
+      }
+      await db.from('schedule_assignments').delete()
+        .eq('group_id', groupId).eq('week_start', weekStart)
+      const inserts = srcRows.map(a => ({
+        group_id: groupId,
+        staff_id: a.staff_id,
+        shift_id: a.shift_id,
+        week_start: weekStart,
+        status: 'scheduled',
+      }))
+      const { error: insErr } = await db.from('schedule_assignments').insert(inserts)
+      if (insErr) throw insErr
+      return res.json({
+        success: true,
+        copied: inserts.length,
+        warnings: [{ type: 'copied_from_last_week', message: `Copied ${inserts.length} assignments from ${copyFromWeek}. Review before publishing.` }],
+      })
+    }
+
     const result = await generateWeeklySchedule(groupId, weekStart)
 
     // The generator writes a JSONB draft to generated_schedules, but the
     // dashboard /schedule view + the /schedule/approve route both read from
     // the schedule_assignments TABLE. Sync the generated assignments into
     // that table so everything downstream can see them.
-    const db = supabase()
     await db.from('schedule_assignments').delete().eq('group_id', groupId).eq('week_start', weekStart)
     if (result.assignments?.length > 0) {
       const rows = result.assignments.map(a => ({
@@ -868,10 +908,184 @@ router.post('/schedule/approve', async (req, res) => {
     const { groupChat } = await getSessionChats(db, groupId)
     await safeSend(bot, groupChat, scheduleText)
 
+    // Persist publish state (always-missing write)
+    try {
+      const nowIso = new Date().toISOString()
+      const { data: existingGs } = await db
+        .from('generated_schedules')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('week_start', weekStart)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const publishUpdates = {
+        status: 'published',
+        published_at: nowIso,
+        approved_at: nowIso,
+      }
+      if (existingGs) {
+        await db.from('generated_schedules')
+          .update(publishUpdates)
+          .eq('id', existingGs.id)
+      } else {
+        await db.from('generated_schedules')
+          .insert({
+            group_id: groupId,
+            week_start: weekStart,
+            assignments: [],
+            gaps: [],
+            ...publishUpdates,
+          })
+      }
+    } catch (pubErr) {
+      console.error('[/schedule/approve publish-state]', pubErr.message)
+      // non-fatal: schedule was sent, status write best-effort
+    }
+
     res.json({ success: true, staffNotified: Object.keys(byStaff).length })
   } catch (err) {
     console.error('POST /schedule/approve error:', err.message)
     res.status(500).json({ error: 'Failed to approve schedule' })
+  }
+})
+
+// GET /api/schedule/status?week=YYYY-MM-DD
+router.get('/schedule/status', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const week = safeWeekParam(req.query.week) || getCurrentWeekStart()
+    const db = supabase()
+
+    const [gsResult, countResult] = await Promise.all([
+      db.from('generated_schedules')
+        .select('status, published_at, approved_at')
+        .eq('group_id', groupId)
+        .eq('week_start', week)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db.from('schedule_assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('group_id', groupId)
+        .eq('week_start', week),
+    ])
+
+    const gs = gsResult.data
+    const count = countResult.count || 0
+
+    return res.json({
+      weekStart: week,
+      isPublished: gs?.status === 'published',
+      publishedAt: gs?.published_at || null,
+      assignmentCount: count,
+      hasAssignments: count > 0,
+      status: gs?.status || (count > 0 ? 'draft' : 'empty'),
+    })
+  } catch (err) {
+    console.error('[GET /schedule/status]', err.message)
+    return res.status(500).json({ error: err.message || 'Failed to load schedule status' })
+  }
+})
+
+// POST /api/schedule/move
+// Body: { staffId, fromShiftId, toShiftId, weekStart }
+router.post('/schedule/move', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { staffId, fromShiftId, toShiftId, weekStart } = req.body || {}
+    if (!staffId || !fromShiftId || !toShiftId || !weekStart) {
+      return res.status(400).json({ error: 'staffId, fromShiftId, toShiftId, and weekStart are required' })
+    }
+    if (weekStart !== getCurrentWeekStart()) {
+      return res.status(400).json({ error: 'Can only edit the current week' })
+    }
+    const db = supabase()
+
+    const { data: conflict } = await db
+      .from('schedule_assignments')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('staff_id', staffId)
+      .eq('shift_id', toShiftId)
+      .eq('week_start', weekStart)
+      .maybeSingle()
+    if (conflict) {
+      return res.status(409).json({ error: 'Staff already assigned to that shift' })
+    }
+
+    const { error: delErr } = await db
+      .from('schedule_assignments')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('staff_id', staffId)
+      .eq('shift_id', fromShiftId)
+      .eq('week_start', weekStart)
+    if (delErr) throw delErr
+
+    const { data: newAssignment, error: insErr } = await db
+      .from('schedule_assignments')
+      .insert({ group_id: groupId, staff_id: staffId, shift_id: toShiftId, week_start: weekStart, status: 'assigned' })
+      .select()
+      .single()
+    if (insErr) throw insErr
+
+    return res.json({ success: true, removed: { staffId, shiftId: fromShiftId }, added: newAssignment })
+  } catch (err) {
+    console.error('[POST /schedule/move]', err.message)
+    return res.status(500).json({ error: err.message || 'Failed to move shift' })
+  }
+})
+
+// POST /api/schedule/swap
+// Body: { fromStaffId, toStaffId, shiftId, weekStart }
+router.post('/schedule/swap', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { fromStaffId, toStaffId, shiftId, weekStart } = req.body || {}
+    if (!fromStaffId || !toStaffId || !shiftId || !weekStart) {
+      return res.status(400).json({ error: 'fromStaffId, toStaffId, shiftId, and weekStart are required' })
+    }
+    if (weekStart !== getCurrentWeekStart()) {
+      return res.status(400).json({ error: 'Can only edit the current week' })
+    }
+    if (fromStaffId === toStaffId) {
+      return res.status(400).json({ error: 'Same staff — nothing to swap' })
+    }
+    const db = supabase()
+
+    const { data: conflict } = await db
+      .from('schedule_assignments')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('staff_id', toStaffId)
+      .eq('shift_id', shiftId)
+      .eq('week_start', weekStart)
+      .maybeSingle()
+    if (conflict) {
+      return res.status(409).json({ error: 'That employee is already on this shift' })
+    }
+
+    const { error: delErr } = await db
+      .from('schedule_assignments')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('staff_id', fromStaffId)
+      .eq('shift_id', shiftId)
+      .eq('week_start', weekStart)
+    if (delErr) throw delErr
+
+    const { data: newAssignment, error: insErr } = await db
+      .from('schedule_assignments')
+      .insert({ group_id: groupId, staff_id: toStaffId, shift_id: shiftId, week_start: weekStart, status: 'assigned' })
+      .select()
+      .single()
+    if (insErr) throw insErr
+
+    return res.json({ success: true, removed: { staffId: fromStaffId, shiftId }, added: newAssignment })
+  } catch (err) {
+    console.error('[POST /schedule/swap]', err.message)
+    return res.status(500).json({ error: err.message || 'Failed to swap assignments' })
   }
 })
 
@@ -908,6 +1122,73 @@ router.get('/payroll', async (req, res) => {
   } catch (err) {
     console.error('GET /payroll error:', err.message)
     res.status(500).json({ error: 'Failed to load payroll' })
+  }
+})
+
+// GET /api/payroll/planned?week=YYYY-MM-DD
+// Returns planned hours+cost per staff based on schedule_assignments × role_rates.
+router.get('/payroll/planned', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const week = safeWeekParam(req.query.week) || getCurrentWeekStart()
+    const db = supabase()
+
+    const [assignRes, ratesRes] = await Promise.all([
+      db.from('schedule_assignments')
+        .select('id, staff_id, shift_id, staff:staff_id(name, role), shift:shift_id(name, start_time, end_time, day_of_week)')
+        .eq('group_id', groupId)
+        .eq('week_start', week),
+      db.from('role_rates')
+        .select('role_name, hourly_rate')
+        .eq('group_id', groupId),
+    ])
+    if (assignRes.error) throw assignRes.error
+
+    const rateMap = {}
+    for (const r of ratesRes.data || []) {
+      rateMap[r.role_name] = parseFloat(r.hourly_rate) || 0
+    }
+
+    const byStaff = {}
+    for (const a of assignRes.data || []) {
+      const staffId = a.staff_id
+      if (!byStaff[staffId]) {
+        byStaff[staffId] = {
+          staffId,
+          staffName: a.staff?.name || 'Unknown',
+          role: a.staff?.role || '',
+          shifts: [],
+          plannedHours: 0,
+          plannedCost: 0,
+        }
+      }
+      const start = a.shift?.start_time
+      const end = a.shift?.end_time
+      let hours = 0
+      if (start && end) {
+        const [sh, sm] = start.split(':').map(Number)
+        const [eh, em] = end.split(':').map(Number)
+        hours = (eh * 60 + em - sh * 60 - sm) / 60
+        if (hours < 0) hours += 24
+      }
+      const rate = rateMap[a.staff?.role] || 0
+      byStaff[staffId].plannedHours = Math.round((byStaff[staffId].plannedHours + hours) * 100) / 100
+      byStaff[staffId].plannedCost = Math.round((byStaff[staffId].plannedCost + hours * rate) * 100) / 100
+      byStaff[staffId].shifts.push({
+        shiftName: a.shift?.name,
+        day: a.shift?.day_of_week,
+        hours,
+      })
+    }
+
+    const rows = Object.values(byStaff)
+    const totalPlannedHours = Math.round(rows.reduce((s, r) => s + r.plannedHours, 0) * 100) / 100
+    const totalPlannedCost = Math.round(rows.reduce((s, r) => s + r.plannedCost, 0) * 100) / 100
+
+    return res.json({ weekStart: week, rows, totalPlannedHours, totalPlannedCost })
+  } catch (err) {
+    console.error('[GET /payroll/planned]', err.message)
+    return res.status(500).json({ error: err.message || 'Failed to load planned labor' })
   }
 })
 
