@@ -2567,25 +2567,92 @@
       }
     }
 
+    function buildUnifiedPayroll(payroll, planned, timeclockEnabled) {
+      const recById = Object.fromEntries((payroll || []).map(r => [String(r.staff_id), r]));
+      const result = [];
+      const seen = new Set();
+
+      // Seed from planned (people scheduled this week)
+      (planned?.rows || []).forEach(p => {
+        const k = String(p.staffId);
+        seen.add(k);
+        const rec = recById[k];
+        if (rec) {
+          // Has payroll_records — actual or manual override
+          result.push({
+            staff_id: rec.staff_id,
+            name: rec.name || p.staffName,
+            role: rec.role || p.role,
+            total_hours: Number(rec.total_hours || 0),
+            total_gross_pay: Number(rec.total_gross_pay || 0),
+            _plannedHours: p.plannedHours,
+            _plannedCost: p.plannedCost,
+            _hasRecord: true,
+          });
+        } else {
+          // No payroll_records — default depends on timeclock mode
+          result.push({
+            staff_id: p.staffId,
+            name: p.staffName,
+            role: p.role,
+            total_hours: timeclockEnabled ? 0 : p.plannedHours,
+            total_gross_pay: timeclockEnabled ? 0 : p.plannedCost,
+            _plannedHours: p.plannedHours,
+            _plannedCost: p.plannedCost,
+            _hasRecord: false,
+          });
+        }
+      });
+
+      // Anyone with payroll_records but NOT scheduled (e.g., past-week manual entries)
+      (payroll || []).forEach(r => {
+        const k = String(r.staff_id);
+        if (!seen.has(k)) {
+          result.push({
+            staff_id: r.staff_id,
+            name: r.name,
+            role: r.role,
+            total_hours: Number(r.total_hours || 0),
+            total_gross_pay: Number(r.total_gross_pay || 0),
+            _plannedHours: 0,
+            _plannedCost: 0,
+            _hasRecord: true,
+          });
+        }
+      });
+
+      return result;
+    }
+
     function renderPayrollPage(payroll, settings, planned) {
-      const totalPay = payroll.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
-      const totalHrs = payroll.reduce((s, r) => s + (r.total_hours || 0), 0);
-      const staffPaid = payroll.filter(r => (r.total_hours || 0) > 0).length;
+      const timeclockEnabled = settings.timeclockEnabled !== false;
+      const unifiedRows = buildUnifiedPayroll(payroll, planned, timeclockEnabled);
+
+      const totalPay = unifiedRows.reduce((s, r) => s + (r.total_gross_pay || 0), 0);
+      const totalHrs = unifiedRows.reduce((s, r) => s + (r.total_hours || 0), 0);
+      const staffPaid = unifiedRows.filter(r => (r.total_hours || 0) > 0).length;
       const plannedRows = planned?.rows || [];
       const plannedCost = Number(planned?.totalPlannedCost || 0);
       const plannedHours = Number(planned?.totalPlannedHours || 0);
+      const showPlanned = timeclockEnabled && plannedRows.length > 0;
 
       const rateOf = r => (r.total_hours || 0) > 0
         ? (r.total_gross_pay || 0) / (r.total_hours || 0) : 0;
 
-      const rows = payroll.map(r => `
+      const rows = unifiedRows.map(r => {
+        const safeName = String(r.name || '').replace(/"/g, '&quot;');
+        return `
         <tr>
           <td>${escapeHtml(r.name || '')}</td>
           <td><span class="role-badge">${escapeHtml(r.role || '')}</span></td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${(r.total_hours || 0).toFixed(1)}h</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(rateOf(r))}/h</td>
           <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600">${formatCurrency(r.total_gross_pay || 0)}</td>
-        </tr>`).join('');
+          <td style="text-align:right">
+            <button class="btn-small" data-staff-id="${r.staff_id}" data-name="${safeName}" data-hours="${(r.total_hours || 0).toFixed(2)}" data-pay="${(r.total_gross_pay || 0).toFixed(2)}" onclick="editPayrollRowFromBtn(this)" title="Edit hours and pay">✏ Edit</button>
+          </td>
+        </tr>`;
+      }).join('');
 
       const pvaRows = plannedRows.map(p => {
         const actual = payroll.find(a => String(a.staff_id) === String(p.staffId)) || {};
@@ -2608,6 +2675,24 @@
       const atCurrent = currentPayrollWeek >= thisWeek;
       const incomeHidden = (settings.hiddenPages || []).includes('income');
 
+      // 4-card grid; Planned Labor only shown when timeclock is on
+      const statCards = `
+        <div class="stat-card"><div class="stat-label">Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
+        <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
+        ${timeclockEnabled ? `
+          <div class="stat-card">
+            <div class="stat-label">Planned Labor</div>
+            <div class="stat-value">${plannedRows.length ? formatCurrency(plannedCost) : '—'}</div>
+            <div class="stat-sub">${plannedRows.length ? 'from published schedule' : 'No schedule this week'}</div>
+          </div>` : `
+          <div class="stat-card">
+            <div class="stat-label">Avg Hourly Rate</div>
+            <div class="stat-value">${totalHrs > 0 ? formatCurrency(totalPay / totalHrs) : '—'}</div>
+            <div class="stat-sub">paid as scheduled</div>
+          </div>`}
+        <div class="stat-card"><div class="stat-label">Staff Paid</div><div class="stat-value">${staffPaid}</div></div>
+      `;
+
       setContent(`
         <div class="page-header">
           <h2 class="page-title">Payroll</h2>
@@ -2619,15 +2704,10 @@
           </div>
         </div>
 
+        ${!timeclockEnabled ? `<div class="schedule-status empty" style="margin-bottom:16px"><span class="status-dot"></span>Time Clock is off — showing scheduled hours and pay</div>` : ''}
+
         <div class="stat-grid" style="margin-bottom:20px;grid-template-columns:repeat(4,1fr)">
-          <div class="stat-card"><div class="stat-label">Labor Cost</div><div class="stat-value">${formatCurrency(totalPay)}</div></div>
-          <div class="stat-card"><div class="stat-label">Total Hours</div><div class="stat-value">${totalHrs.toFixed(1)}h</div></div>
-          <div class="stat-card">
-            <div class="stat-label">Planned Labor</div>
-            <div class="stat-value">${plannedRows.length ? formatCurrency(plannedCost) : '—'}</div>
-            <div class="stat-sub">${plannedRows.length ? 'from published schedule' : 'No schedule this week'}</div>
-          </div>
-          <div class="stat-card"><div class="stat-label">Staff Paid</div><div class="stat-value">${staffPaid}</div></div>
+          ${statCards}
         </div>
 
         <div class="card">
@@ -2637,18 +2717,20 @@
               <th style="text-align:right">Hours</th>
               <th style="text-align:right">Rate</th>
               <th style="text-align:right">Gross Pay</th>
+              <th style="text-align:right">Actions</th>
             </tr></thead>
-            <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">No payroll data for this week. Generate and approve a schedule to calculate payroll.</td></tr>'}</tbody>
-            ${payroll.length ? `<tfoot><tr style="border-top:2px solid var(--surface-border);font-weight:700;color:var(--text)">
+            <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No payroll data for this week. Generate and approve a schedule to calculate payroll.</td></tr>'}</tbody>
+            ${unifiedRows.length ? `<tfoot><tr style="border-top:2px solid var(--surface-border);font-weight:700;color:var(--text)">
               <td>TOTAL</td><td>—</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums">${totalHrs.toFixed(1)}h</td>
               <td style="text-align:right">—</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(totalPay)}</td>
+              <td></td>
             </tr></tfoot>` : ''}
           </table>
         </div>
 
-        ${plannedRows.length ? `
+        ${showPlanned ? `
         <div class="card" style="margin-top:16px">
           <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
             <span>Planned vs Actual Labor</span>
@@ -3127,6 +3209,46 @@
       }, 'Delete');
     }
 
+    function editPayrollRowFromBtn(btn) {
+      const staffId = Number(btn.dataset.staffId);
+      const name = btn.dataset.name || '';
+      const hours = Number(btn.dataset.hours) || 0;
+      const pay = Number(btn.dataset.pay) || 0;
+      editPayrollRow(staffId, name, hours, pay);
+    }
+
+    function editPayrollRow(staffId, name, hours, pay) {
+      const weekStart = currentPayrollWeek;
+      showModal(`Edit payroll — ${name}`, `
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Week of ${formatWeekRange(weekStart)}</div>
+        <label>Hours</label>
+        <input type="number" id="ed-hours" min="0" step="0.1" value="${hours.toFixed(2)}" />
+        <label>Gross Pay ($)</label>
+        <input type="number" id="ed-pay" min="0" step="0.01" value="${pay.toFixed(2)}" />
+      `, async () => {
+        const newHours = parseFloat(document.getElementById('ed-hours').value);
+        const newPay = parseFloat(document.getElementById('ed-pay').value);
+        if (!Number.isFinite(newHours) || newHours < 0) {
+          showToast('Hours must be a non-negative number', 'error');
+          return;
+        }
+        if (!Number.isFinite(newPay) || newPay < 0) {
+          showToast('Gross pay must be a non-negative number', 'error');
+          return;
+        }
+        try {
+          await api('/api/payroll/override', 'PATCH', {
+            staffId, weekStart,
+            totalHours: newHours, totalGrossPay: newPay,
+          });
+          await loadPayrollPage();
+          showToast(`${name}: payroll updated`);
+        } catch (e) {
+          showToast(e.message || 'Failed to save', 'error');
+        }
+      }, 'Save');
+    }
+
     function changePayrollWeek(days) {
       const d = parseDate(currentPayrollWeek);
       d.setDate(d.getDate() + days);
@@ -3454,6 +3576,19 @@
       } catch (err) { showToast('Failed to remove', 'error'); }
     }
 
+    async function toggleTimeclockEnabled() {
+      const toggle = document.getElementById('timeclock-toggle');
+      if (!toggle) return;
+      const isCurrentlyOn = toggle.classList.contains('on');
+      try {
+        await api('/api/settings', 'PATCH', { timeclockEnabled: !isCurrentlyOn });
+        toggle.classList.toggle('on');
+        showToast(isCurrentlyOn ? 'Time clock disabled' : 'Time clock enabled');
+      } catch (e) {
+        showToast(e.message || 'Failed to update', 'error');
+      }
+    }
+
     async function toggleNavPage(pageId) {
       const toggle = document.getElementById(`nav-toggle-${pageId}`);
       if (!toggle) return;
@@ -3518,6 +3653,17 @@
               <div class="toggle ${isOn ? 'on' : ''}" id="nav-toggle-${p.id}" onclick="toggleNavPage('${p.id}')"></div>
             </div>`;
           }).join('')}
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Operations</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Time Clock</div>
+              <div class="setting-desc">When on, staff clock in/out and payroll uses actual hours. When off, payroll uses scheduled hours and pay (assumes everyone worked their shifts as planned).</div>
+            </div>
+            <div class="toggle ${config.timeclockEnabled !== false ? 'on' : ''}" id="timeclock-toggle" onclick="toggleTimeclockEnabled()"></div>
+          </div>
         </div>
 
         <div class="settings-section">

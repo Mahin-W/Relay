@@ -1192,6 +1192,64 @@ router.get('/payroll/planned', async (req, res) => {
   }
 })
 
+// PATCH /api/payroll/override
+// Body: { staffId, weekStart, totalHours, totalGrossPay }
+// Manager-set override of a staff member's hours/pay for a given week.
+// Upserts payroll_records on (staff_id, week_start, group_id).
+router.patch('/payroll/override', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { staffId, weekStart, totalHours, totalGrossPay } = req.body || {}
+    if (!staffId || !weekStart) {
+      return res.status(400).json({ error: 'staffId and weekStart are required' })
+    }
+    if (!safeWeekParam(weekStart)) {
+      return res.status(400).json({ error: 'weekStart must be YYYY-MM-DD' })
+    }
+    const hrs = Number(totalHours)
+    const pay = Number(totalGrossPay)
+    if (!Number.isFinite(hrs) || hrs < 0) {
+      return res.status(400).json({ error: 'totalHours must be a non-negative number' })
+    }
+    if (!Number.isFinite(pay) || pay < 0) {
+      return res.status(400).json({ error: 'totalGrossPay must be a non-negative number' })
+    }
+    const db = supabase()
+
+    const { data: staffRow } = await db.from('staff')
+      .select('id, name')
+      .eq('id', staffId)
+      .eq('group_id', groupId)
+      .maybeSingle()
+    if (!staffRow) return res.status(404).json({ error: 'Staff not found' })
+
+    const { data, error } = await db.from('payroll_records')
+      .upsert(
+        {
+          group_id: groupId,
+          staff_id: staffId,
+          week_start: weekStart,
+          total_hours: Math.round(hrs * 100) / 100,
+          total_gross_pay: Math.round(pay * 100) / 100,
+        },
+        { onConflict: 'staff_id,week_start,group_id' }
+      )
+      .select()
+      .single()
+    if (error) throw error
+
+    res.json({ success: true, record: data })
+    // fire-and-forget notification
+    const bot = req.app.locals.bot
+    getSessionChats(db, groupId).then(({ managerDm }) =>
+      safeSend(bot, managerDm, `📝 Payroll override: ${staffRow.name} — ${hrs.toFixed(1)}h / ${formatMoney(pay)} for week of ${weekStart}.`)
+    ).catch(() => {})
+  } catch (err) {
+    console.error('[PATCH /payroll/override]', err.message)
+    return res.status(500).json({ error: err.message || 'Failed to update payroll' })
+  }
+})
+
 // POST /api/payroll/revenue
 router.post('/payroll/revenue', async (req, res) => {
   try {
@@ -1636,6 +1694,7 @@ router.get('/settings', async (req, res) => {
       overtimeMultiplier: session?.setup_data?.overtimeMultiplier || overtime?.weekly_multiplier,
       weeklyBudget: budget?.weekly_budget,
       hiddenPages: Array.isArray(session?.setup_data?.hiddenPages) ? session.setup_data.hiddenPages : [],
+      timeclockEnabled: session?.setup_data?.timeclockEnabled !== false,
     })
   } catch (err) {
     console.error('GET /settings error:', err.message)
@@ -1647,8 +1706,8 @@ router.get('/settings', async (req, res) => {
 router.patch('/settings', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const { tipMode, overtimeThreshold, overtimeMultiplier, weeklyBudget, restaurantName, hiddenPages } = req.body
-    if (!tipMode && overtimeThreshold === undefined && overtimeMultiplier === undefined && weeklyBudget === undefined && !restaurantName && hiddenPages === undefined) {
+    const { tipMode, overtimeThreshold, overtimeMultiplier, weeklyBudget, restaurantName, hiddenPages, timeclockEnabled } = req.body
+    if (!tipMode && overtimeThreshold === undefined && overtimeMultiplier === undefined && weeklyBudget === undefined && !restaurantName && hiddenPages === undefined && timeclockEnabled === undefined) {
       return res.status(400).json({ error: 'At least one setting field is required' })
     }
     const db = supabase()
@@ -1657,11 +1716,12 @@ router.patch('/settings', async (req, res) => {
     if (restaurantName) {
       updates.push(db.from('setup_sessions').update({ group_name: restaurantName }).eq('group_id', groupId))
     }
-    if (tipMode !== undefined || overtimeMultiplier !== undefined || hiddenPages !== undefined) {
+    if (tipMode !== undefined || overtimeMultiplier !== undefined || hiddenPages !== undefined || timeclockEnabled !== undefined) {
       const patch = {}
       if (tipMode !== undefined) patch.tipMode = tipMode
       if (overtimeMultiplier !== undefined) patch.overtimeMultiplier = overtimeMultiplier
       if (hiddenPages !== undefined) patch.hiddenPages = Array.isArray(hiddenPages) ? hiddenPages : []
+      if (timeclockEnabled !== undefined) patch.timeclockEnabled = !!timeclockEnabled
       updates.push(
         db.rpc('jsonb_merge_setup_data', { p_group_id: groupId, p_patch: patch })
           .then(() => {})
@@ -2229,6 +2289,7 @@ router.get('/settings/full', async (req, res) => {
       },
       rules: rulesRes.data ?? [],
       hiddenPages: Array.isArray(setupData.hiddenPages) ? setupData.hiddenPages : [],
+      timeclockEnabled: setupData.timeclockEnabled !== false,
     })
   } catch (err) {
     console.error('GET /settings/full error:', err.message)
