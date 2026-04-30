@@ -50,7 +50,9 @@ router.get('/overview', async (req, res) => {
     const weekStart = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
-    const [staffRes, assignRes, coverageRes, payrollRes, revenueRes, qualityRes, receiptsRes] = await Promise.all([
+    const prevWeek = addDays(weekStart, -7)
+
+    const [staffRes, assignRes, coverageRes, payrollRes, revenueRes, qualityRes, receiptsRes, lastWeekAssignRes] = await Promise.all([
       // 1. Staff count
       db.from('staff').select('id', { count: 'exact', head: true }).eq('group_id', groupId),
       // 2. Shifts this week
@@ -65,6 +67,8 @@ router.get('/overview', async (req, res) => {
       db.from('weekly_quality_scores').select('score, grade, week_start').eq('group_id', groupId).order('week_start', { ascending: false }).limit(1),
       // 7. Unconfirmed receipts
       db.from('schedule_receipts').select('id', { count: 'exact', head: true }).eq('group_id', groupId).eq('week_start', weekStart).is('confirmed_at', null),
+      // 8. Last week's shifts count (for delta)
+      db.from('schedule_assignments').select('id', { count: 'exact', head: true }).eq('group_id', groupId).eq('week_start', prevWeek),
     ])
 
     const staffCount = staffRes.count || 0
@@ -100,6 +104,7 @@ router.get('/overview', async (req, res) => {
       laborCost: Math.round(laborCost * 100) / 100,
       qualityScore: qualityRow?.score ?? null,
       qualityGrade: qualityRow?.grade ?? null,
+      lastWeek: { shiftsCount: lastWeekAssignRes?.count || 0 },
     })
   } catch (err) {
     console.error('overview error:', err.message)

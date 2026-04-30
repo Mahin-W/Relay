@@ -1262,6 +1262,406 @@
       color: var(--text);
     }
 
+    /* ── Staff avatars ── */
+    .staff-avatar {
+      border-radius: 50%;
+      display: inline-flex; align-items: center;
+      justify-content: center;
+      font-weight: 700; letter-spacing: -0.02em;
+      flex-shrink: 0; user-select: none;
+    }
+
+    /* ── Keyboard kbd ── */
+    .kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      font-size: 12px; font-weight: 600;
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+      color: var(--color-text-secondary);
+      line-height: 1.2;
+    }
+    .shortcuts-grid {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .shortcut-row {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--color-border-light);
+    }
+    .shortcut-row:last-child { border-bottom: none; }
+    .shortcut-keys { display: flex; align-items: center; }
+    .shortcut-then {
+      margin: 0 4px;
+      color: var(--color-text-muted);
+      font-size: 12px;
+    }
+    .shortcut-desc {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+    }
+
+    /* ── Global search overlay ── */
+    .search-overlay {
+      position: fixed; inset: 0;
+      z-index: 500;
+      display: flex; align-items: flex-start;
+      justify-content: center;
+      padding-top: 15vh;
+    }
+    .search-overlay.hidden { display: none; }
+    .search-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(28,20,16,0.5);
+      backdrop-filter: blur(4px);
+    }
+    .search-box {
+      position: relative; z-index: 1;
+      width: 560px; max-width: 90vw;
+      background: var(--color-surface);
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(28,20,16,0.2);
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+    }
+    .search-input-wrap {
+      display: flex; align-items: center;
+      gap: 12px; padding: 14px 18px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .search-icon {
+      width: 18px; height: 18px;
+      color: var(--color-text-muted);
+      flex-shrink: 0;
+    }
+    #search-input {
+      flex: 1; border: none; outline: none;
+      font-size: 16px; background: none;
+      color: var(--color-text-primary);
+      font-family: inherit;
+    }
+    #search-input::placeholder {
+      color: var(--color-text-muted);
+    }
+    .search-esc {
+      font-size: 11px; padding: 2px 6px;
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      color: var(--color-text-muted);
+    }
+    .search-results {
+      max-height: 360px; overflow-y: auto;
+      padding: 8px 0;
+    }
+    .search-results-header {
+      padding: 8px 18px 4px;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--color-text-muted);
+    }
+    .search-result-item {
+      display: flex; align-items: center;
+      gap: 12px; padding: 8px 18px;
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .search-result-item:hover,
+    .search-result-item.focused {
+      background: var(--color-surface-alt);
+    }
+    .search-result-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: var(--color-accent-dim);
+      display: flex; align-items: center;
+      justify-content: center;
+      flex-shrink: 0; font-size: 14px;
+    }
+    .search-result-title {
+      font-size: 14px; font-weight: 500;
+      color: var(--color-text-primary);
+    }
+    .search-result-sub {
+      font-size: 12px;
+      color: var(--color-text-muted);
+    }
+    .search-empty {
+      padding: 24px; text-align: center;
+      color: var(--color-text-muted);
+      font-size: 14px;
+    }
+    .search-trigger {
+      background: none; border: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+      cursor: pointer; padding: 6px 8px;
+      border-radius: 6px;
+      display: inline-flex; align-items: center;
+      gap: 6px; font-size: 12px; font-weight: 500;
+      transition: all 120ms;
+      font-family: inherit;
+    }
+    .search-trigger:hover {
+      color: var(--color-accent);
+      border-color: var(--color-accent);
+    }
+    .search-trigger svg { width: 14px; height: 14px; }
+
+    /* ── Empty state extensions ── */
+    .empty-icon {
+      font-size: 36px; margin-bottom: 12px;
+      opacity: 0.6;
+    }
+    .empty-title {
+      font-size: 16px; font-weight: 600;
+      color: var(--color-text-secondary);
+      margin-bottom: 6px;
+    }
+    .empty-desc {
+      font-size: 13px; color: var(--color-text-muted);
+      max-width: 320px; margin: 0 auto 20px;
+      line-height: 1.5;
+    }
+    .empty-state-cta {
+      padding: 40px 20px;
+    }
+
+    /* ── Last updated text ── */
+    .last-updated {
+      display: inline-flex; align-items: center;
+      font-size: 12px;
+      color: var(--color-text-muted);
+      margin-left: 4px; margin-right: 4px;
+    }
+
+    /* ── Section loader ── */
+    .section-loader {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.7);
+      display: flex; align-items: center;
+      justify-content: center;
+      border-radius: inherit;
+      z-index: 5;
+      backdrop-filter: blur(2px);
+    }
+    :root.dark .section-loader {
+      background: rgba(20,18,16,0.7);
+    }
+    .section-spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* ── Stat delta ── */
+    .stat-delta {
+      display: block; font-size: 11px;
+      margin-top: 4px; font-weight: 500;
+    }
+    .stat-delta.positive { color: var(--color-success); }
+    .stat-delta.negative { color: var(--color-danger); }
+    .stat-delta.neutral { color: var(--color-text-muted); }
+
+    /* ── Inline edit ── */
+    .inline-edit-input {
+      border: none; outline: none;
+      border-bottom: 2px solid var(--color-accent);
+      background: transparent;
+      font-size: inherit; font-family: inherit;
+      font-weight: inherit; color: inherit;
+      padding: 0;
+    }
+    .staff-name[data-editable] { cursor: text; }
+    .staff-name[data-editable]:hover {
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-decoration-color: var(--color-text-muted);
+    }
+
+    /* ── Onboarding checklist ── */
+    .onboarding-card {
+      background: linear-gradient(135deg,
+        var(--color-accent-dim),
+        var(--color-surface));
+      border: 1px solid var(--color-accent);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .onboarding-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .onboarding-title {
+      font-size: 16px; font-weight: 700;
+      color: var(--color-text-primary);
+    }
+    .onboarding-sub {
+      font-size: 13px; color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+    .onboarding-dismiss {
+      background: none; border: none;
+      color: var(--color-text-muted);
+      cursor: pointer; font-size: 18px;
+      padding: 0 4px;
+    }
+    .onboarding-dismiss:hover { color: var(--color-text-primary); }
+    .onboarding-progress {
+      height: 4px; background: var(--color-border);
+      border-radius: 2px; overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .onboarding-bar {
+      height: 100%; background: var(--color-accent);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+    .onboarding-steps {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .onboarding-step {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 8px;
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      transition: background 120ms;
+    }
+    .onboarding-step:not(.done) { cursor: pointer; }
+    .onboarding-step:not(.done):hover {
+      background: rgba(217,95,43,0.08);
+    }
+    .onboarding-step.done {
+      color: var(--color-text-muted);
+      text-decoration: line-through;
+    }
+    .step-check {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0;
+      font-size: 11px; font-weight: 700;
+      border: 1.5px solid var(--color-border);
+    }
+    .onboarding-step.done .step-check {
+      background: var(--color-success);
+      border-color: var(--color-success);
+      color: white;
+    }
+    .step-arrow {
+      margin-left: auto;
+      color: var(--color-accent);
+      font-size: 12px;
+    }
+
+    /* ── Quick actions ── */
+    .quick-actions {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .quick-action-btn {
+      display: inline-flex; align-items: center;
+      gap: 6px; padding: 8px 14px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-surface);
+      font-size: 13px; font-weight: 500;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      transition: all 120ms;
+      font-family: inherit;
+    }
+    .quick-action-btn:hover {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+      background: var(--color-accent-dim);
+    }
+    .quick-action-btn.urgent {
+      border-color: var(--color-danger);
+      color: var(--color-danger);
+      background: var(--color-danger-dim);
+      animation: pulse-urgent 2s ease infinite;
+    }
+    @keyframes pulse-urgent {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* ── Settings subnav ── */
+    .settings-subnav {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      margin-bottom: 20px; padding: 4px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .settings-subnav button {
+      padding: 6px 14px; border: none;
+      border-radius: 7px; background: none;
+      font-size: 13px; cursor: pointer;
+      color: var(--color-text-muted);
+      font-family: inherit; font-weight: 500;
+      transition: all 120ms;
+    }
+    .settings-subnav button:hover {
+      background: var(--color-surface-alt);
+      color: var(--color-text-primary);
+    }
+    .settings-subnav button.active {
+      background: var(--color-accent);
+      color: white;
+    }
+
+    /* ── Sticky table headers (schedule + data tables in scroll containers) ── */
+    .schedule-table thead th,
+    .data-table thead th {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--color-surface-alt);
+    }
+    .schedule-scroll {
+      max-height: calc(100vh - 320px);
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+
+    /* ── Page slide animations (mobile swipe) ── */
+    @keyframes slide-in-right {
+      from { transform: translateX(20px); opacity: 0; }
+      to   { transform: translateX(0);   opacity: 1; }
+    }
+    @keyframes slide-in-left {
+      from { transform: translateX(-20px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .page-slide-right { animation: slide-in-right 200ms ease forwards; }
+    .page-slide-left  { animation: slide-in-left  200ms ease forwards; }
+
+    /* Sidebar shortcuts hint button */
+    .shortcuts-btn {
+      background: none; border: none;
+      color: var(--color-sidebar-text);
+      cursor: pointer; padding: 6px 12px;
+      font-size: 12px;
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; font-family: inherit;
+      transition: color 0.15s;
+    }
+    .shortcuts-btn:hover { color: #fff; }
+    .shortcuts-btn .kbd {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.15);
+      color: var(--color-sidebar-text);
+    }
+
     /* Schedule status banner */
     .schedule-status {
       display: inline-flex; align-items: center;
@@ -1432,6 +1832,19 @@
 </head>
 <body>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- Global search overlay (press / to open) -->
+  <div id="search-overlay" class="search-overlay hidden">
+    <div class="search-backdrop" onclick="closeSearch()"></div>
+    <div class="search-box">
+      <div class="search-input-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-input" placeholder="Search staff, pages, settings..." autocomplete="off" spellcheck="false">
+        <kbd class="search-esc">Esc</kbd>
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
+  </div>
   <div class="app-layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
@@ -1481,6 +1894,10 @@
       </nav>
 
       <div class="sidebar-bottom">
+        <button class="shortcuts-btn" onclick="showShortcutsModal()" title="Keyboard shortcuts">
+          <span class="kbd">?</span>
+          <span>Shortcuts</span>
+        </button>
         <button class="logout-btn" onclick="handleLogout()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span>Log out</span>
@@ -1498,6 +1915,11 @@
         </div>
         <div class="top-bar-right">
           <span class="week-label" id="week-label"></span>
+          <span class="last-updated" id="last-updated-text" title="Last data refresh"></span>
+          <button class="search-trigger" onclick="openSearch()" title="Search (press /)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <kbd class="kbd" style="padding:0 4px;font-size:11px">/</kbd>
+          </button>
           <button class="refresh-btn" id="refresh-btn" onclick="handleRefresh()" title="Refresh data">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
           </button>
@@ -1746,10 +2168,177 @@
       try {
         const data = await apiFetch('/api/auth/me');
         document.getElementById('restaurant-name').textContent = data.restaurantName || 'My Business';
+        window._groupId = data.groupId || null;
       } catch {
         // redirect handled in apiFetch
       }
     }
+
+    // ── Avatars ──
+    const AVATAR_COLORS = [
+      ['#FDF0E8', '#B84D20'],
+      ['#E6F4ED', '#1A5C3E'],
+      ['#EDE9FE', '#5B21B6'],
+      ['#E0F2FE', '#075985'],
+      ['#FEF3C7', '#92400E'],
+      ['#FCE7F3', '#9D174D'],
+    ];
+    function getAvatarColor(name) {
+      const s = String(name || '');
+      let hash = 0;
+      for (let i = 0; i < s.length; i++) {
+        hash = s.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+    function renderAvatar(name, size = 32) {
+      const initials = String(name || '').trim().split(/\s+/)
+        .map(n => n[0] || '').join('').substring(0, 2).toUpperCase() || '?';
+      const [bg, text] = getAvatarColor(name);
+      return `<div class="staff-avatar" style="width:${size}px;height:${size}px;background:${bg};color:${text};font-size:${Math.floor(size * 0.38)}px">${initials}</div>`;
+    }
+
+    // ── Save success animation ──
+    function showSaveSuccess(buttonEl) {
+      if (!buttonEl) return;
+      const original = buttonEl.innerHTML;
+      const originalBg = buttonEl.style.background;
+      buttonEl.innerHTML = '✓ Saved';
+      buttonEl.style.background = 'var(--color-success)';
+      buttonEl.style.color = '#fff';
+      buttonEl.disabled = true;
+      setTimeout(() => {
+        buttonEl.innerHTML = original;
+        buttonEl.style.background = originalBg;
+        buttonEl.style.color = '';
+        buttonEl.disabled = false;
+      }, 1800);
+    }
+
+    // ── Section loader ──
+    function showSectionLoader(containerId) {
+      const el = document.getElementById(containerId);
+      if (!el || document.getElementById(`${containerId}-loader`)) return;
+      if (getComputedStyle(el).position === 'static') {
+        el.style.position = 'relative';
+      }
+      const overlay = document.createElement('div');
+      overlay.className = 'section-loader';
+      overlay.id = `${containerId}-loader`;
+      overlay.innerHTML = '<div class="section-spinner"></div>';
+      el.appendChild(overlay);
+    }
+    function hideSectionLoader(containerId) {
+      document.getElementById(`${containerId}-loader`)?.remove();
+    }
+
+    // ── Empty state with CTA ──
+    // ctaFn is a string (e.g., "navigateTo('staff')") — NOT serialized closure.
+    function renderEmptyState(icon, title, desc, ctaLabel, ctaFn) {
+      return `
+        <div class="empty-state empty-state-cta">
+          <div class="empty-icon">${icon}</div>
+          <div class="empty-title">${escapeHtml(title)}</div>
+          <div class="empty-desc">${escapeHtml(desc)}</div>
+          ${ctaLabel ? `<button class="btn-primary" onclick="${ctaFn}">${escapeHtml(ctaLabel)}</button>` : ''}
+        </div>`;
+    }
+    function renderEmptyRow(colspan, icon, title, desc, ctaLabel, ctaFn) {
+      return `<tr><td colspan="${colspan}" style="padding:0">${renderEmptyState(icon, title, desc, ctaLabel, ctaFn)}</td></tr>`;
+    }
+
+    // ── Inline staff name editing ──
+    document.addEventListener('click', e => {
+      const el = e.target.closest('.staff-name[data-editable]');
+      if (!el || el.querySelector('input')) return;
+      const staffId = el.dataset.staffId;
+      const field = el.dataset.field || 'name';
+      const original = el.textContent.trim();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'inline-edit-input';
+      input.value = original;
+      input.style.width = Math.max(original.length * 9, 80) + 'px';
+      el.textContent = '';
+      el.appendChild(input);
+      input.focus(); input.select();
+
+      let cancelled = false;
+      async function save() {
+        if (cancelled) return;
+        const val = input.value.trim();
+        if (!val || val === original) { el.textContent = original; return; }
+        try {
+          await api(`/api/staff/${staffId}`, 'PATCH', { [field]: val });
+          el.textContent = val;
+          invalidateStaffSearchCache();
+          showToast(`Updated ${original} → ${val}`);
+        } catch (err) {
+          el.textContent = original;
+          showToast('Failed to save', 'error');
+        }
+      }
+      input.addEventListener('blur', save, { once: true });
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') input.blur();
+        if (ev.key === 'Escape') {
+          cancelled = true;
+          input.removeEventListener('blur', save);
+          el.textContent = original;
+        }
+      });
+    });
+
+    // ── Mobile swipe navigation ──
+    const PAGE_ORDER_FOR_SWIPE = ['overview', 'schedule', 'staff', 'payroll', 'income', 'eventlog', 'settings'];
+    let _touchStartX = 0;
+    let _touchStartY = 0;
+    let _touchStartScrollable = false;
+
+    function isInsideScrollable(el) {
+      // Walk up; if any ancestor has overflow-x scroll/auto AND content overflows, treat as scrollable
+      let n = el;
+      while (n && n !== document.body) {
+        const cs = getComputedStyle(n);
+        const ovX = cs.overflowX;
+        if ((ovX === 'auto' || ovX === 'scroll') && n.scrollWidth > n.clientWidth) return true;
+        if (n.classList && (n.classList.contains('schedule-scroll') || n.classList.contains('search-overlay'))) return true;
+        n = n.parentElement;
+      }
+      return false;
+    }
+    document.addEventListener('touchstart', e => {
+      _touchStartX = e.touches[0].clientX;
+      _touchStartY = e.touches[0].clientY;
+      _touchStartScrollable = isInsideScrollable(e.target);
+    }, { passive: true });
+    document.addEventListener('touchend', e => {
+      if (_touchStartScrollable) return;
+      const dx = e.changedTouches[0].clientX - _touchStartX;
+      const dy = e.changedTouches[0].clientY - _touchStartY;
+      if (Math.abs(dx) < 70) return;
+      if (Math.abs(dy) > Math.abs(dx) * 0.7) return;
+      const idx = PAGE_ORDER_FOR_SWIPE.indexOf(currentPage);
+      if (idx === -1) return;
+      if (dx < 0 && idx < PAGE_ORDER_FOR_SWIPE.length - 1) navigateTo(PAGE_ORDER_FOR_SWIPE[idx + 1]);
+      else if (dx > 0 && idx > 0) navigateTo(PAGE_ORDER_FOR_SWIPE[idx - 1]);
+    }, { passive: true });
+
+    // ── Last-updated relative time ──
+    let _lastUpdated = new Date();
+    function markUpdated() {
+      _lastUpdated = new Date();
+      updateLastUpdatedText();
+    }
+    function updateLastUpdatedText() {
+      const el = document.getElementById('last-updated-text');
+      if (!el) return;
+      const diff = Math.floor((Date.now() - _lastUpdated.getTime()) / 1000);
+      if (diff < 60) el.textContent = 'Just updated';
+      else if (diff < 3600) el.textContent = `${Math.floor(diff / 60)}m ago`;
+      else el.textContent = `${Math.floor(diff / 3600)}h ago`;
+    }
+    setInterval(updateLastUpdatedText, 60000);
 
     async function applyNavPreferences() {
       try {
@@ -1773,13 +2362,22 @@
 
     // ── Data Loading ──
     async function loadOverviewData() {
-      const [overview, activity, insights, schedule] = await Promise.all([
+      const [overview, activity, insights, schedule, staffList, shiftsList, rolesList] = await Promise.all([
         apiFetch('/api/dashboard/overview'),
         apiFetch('/api/dashboard/activity'),
         apiFetch('/api/dashboard/intelligence'),
-        apiFetch('/api/dashboard/schedule?week=' + currentScheduleWeek)
+        apiFetch('/api/dashboard/schedule?week=' + currentScheduleWeek),
+        api('/api/staff').catch(() => []),
+        api('/api/shifts').catch(() => []),
+        api('/api/roles').catch(() => []),
       ]);
-      dashboardData = { overview, activity, insights, schedule };
+      const onboarding = {
+        staffCount:  (staffList || []).length,
+        shiftsCount: (shiftsList || []).length,
+        hasRates:    (rolesList || []).some(r => r.rate != null && r.rate > 0),
+        shiftsThisWeek: overview?.shiftsThisWeek || 0,
+      };
+      dashboardData = { overview, activity, insights, schedule, onboarding };
       return dashboardData;
     }
 
@@ -1853,6 +2451,15 @@
     }
 
     // ── Page Renderers ──
+    function renderDelta(current, previous, suffix = '') {
+      if (previous == null) return '';
+      const diff = current - previous;
+      if (diff === 0) return `<span class="stat-delta neutral">— same as last week</span>`;
+      const arrow = diff > 0 ? '↑' : '↓';
+      const cls   = diff > 0 ? 'positive' : 'negative';
+      return `<span class="stat-delta ${cls}">${arrow} ${Math.abs(diff)}${suffix} vs last week</span>`;
+    }
+
     function renderStatCards(data) {
       const d = data || {};
       const coverageSub = d.coverageRequests > 0
@@ -1861,6 +2468,7 @@
       const laborSub = d.revenuePercent
         ? `<span class="stat-sub ${d.revenuePercent > 30 ? 'orange' : 'green'}">${d.revenuePercent}% of revenue</span>`
         : `<span class="stat-sub orange">Enter revenue for %</span>`;
+      const shiftsDelta = renderDelta(d.shiftsThisWeek ?? 0, d.lastWeek?.shiftsCount);
 
       return `
         <div class="stat-grid">
@@ -1871,6 +2479,7 @@
           <div class="stat-card">
             <div class="stat-label">Shifts This Week</div>
             <div class="stat-value">${d.shiftsThisWeek ?? '—'}</div>
+            ${shiftsDelta}
           </div>
           <div class="stat-card">
             <div class="stat-label">Coverage Requests</div>
@@ -1946,9 +2555,16 @@
       staff.forEach(member => {
         const staffId = member.staffId ?? member.id ?? '';
         let totalHours = 0;
-        let rowHtml = `<tr><td><div class="staff-name">${escapeHtml(member.staffName || member.name || '')}</div>`;
-        if (member.roleName || member.role) rowHtml += `<div class="staff-role">${escapeHtml(member.roleName || member.role)}</div>`;
-        rowHtml += `</td>`;
+        const memberName = member.staffName || member.name || '';
+        let rowHtml = `<tr data-staff-id="${staffId}"><td>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${compact ? '' : renderAvatar(memberName, 26)}
+            <div>
+              <div class="staff-name">${escapeHtml(memberName)}</div>
+              ${(member.roleName || member.role) ? `<div class="staff-role">${escapeHtml(member.roleName || member.role)}</div>` : ''}
+            </div>
+          </div>
+        </td>`;
 
         days.forEach(day => {
           const dayKey = DAY_FULL[day];
@@ -2041,8 +2657,12 @@
     }
 
     function renderOverview(data) {
-      const { overview, activity, insights, schedule } = data;
-      let html = renderStatCards(overview);
+      const { overview, activity, insights, schedule, onboarding } = data;
+      const onboardingHtml = renderOnboardingChecklist(onboarding);
+      const quickActionsHtml = renderQuickActions(overview, schedule);
+      let html = onboardingHtml;
+      html += renderStatCards(overview);
+      html += quickActionsHtml;
       html += renderScheduleTable(schedule, true);
       html += `
         <div class="panels-grid">
@@ -2057,6 +2677,78 @@
         </div>
       `;
       return html;
+    }
+
+    function renderOnboardingChecklist(onboarding) {
+      if (!onboarding) return '';
+      const groupId = window._groupId || 'default';
+      const dismissedKey = `relay_onboarding_${groupId}`;
+      if (localStorage.getItem(dismissedKey)) return '';
+
+      const checks = [
+        { id: 'business', label: 'Business set up',          done: true,                  page: null },
+        { id: 'staff',    label: 'Add your team',            done: onboarding.staffCount > 1,  page: 'staff' },
+        { id: 'shifts',   label: 'Configure shifts',         done: onboarding.shiftsCount > 0, page: 'settings' },
+        { id: 'rates',    label: 'Set pay rates',            done: onboarding.hasRates,        page: 'settings' },
+        { id: 'schedule', label: 'Generate first schedule',  done: onboarding.shiftsThisWeek > 0, page: 'schedule' },
+      ];
+
+      const allDone = checks.every(c => c.done);
+      if (allDone) {
+        localStorage.setItem(dismissedKey, '1');
+        return '';
+      }
+      const doneCount = checks.filter(c => c.done).length;
+      const pct = Math.round(doneCount / checks.length * 100);
+
+      return `
+        <div class="onboarding-card">
+          <div class="onboarding-header">
+            <div>
+              <div class="onboarding-title">Getting started</div>
+              <div class="onboarding-sub">Complete these steps to get Relay running for your team.</div>
+            </div>
+            <button class="onboarding-dismiss" onclick="dismissOnboarding()" title="Dismiss">✕</button>
+          </div>
+          <div class="onboarding-progress">
+            <div class="onboarding-bar" style="width:${pct}%"></div>
+          </div>
+          <div class="onboarding-steps">
+            ${checks.map(c => `
+              <div class="onboarding-step ${c.done ? 'done' : ''}" ${(!c.done && c.page) ? `onclick="navigateTo('${c.page}')"` : ''}>
+                <div class="step-check">${c.done ? '✓' : ''}</div>
+                <span>${c.label}</span>
+                ${(!c.done && c.page) ? '<span class="step-arrow">→</span>' : ''}
+              </div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    function dismissOnboarding() {
+      const groupId = window._groupId || 'default';
+      localStorage.setItem(`relay_onboarding_${groupId}`, '1');
+      document.querySelector('.onboarding-card')?.remove();
+    }
+
+    function renderQuickActions(overview, schedule) {
+      const o = overview || {};
+      const hasShifts = (schedule?.staff?.length || 0) > 0;
+      const actions = [];
+      actions.push({ label: 'View Schedule', icon: '📅', fn: "navigateTo('schedule')" });
+      if (!hasShifts) {
+        actions.push({ label: 'Generate Schedule', icon: '✨', fn: "navigateTo('schedule')" });
+      }
+      if (o.coverageRequests > 0) {
+        actions.push({ label: `${o.coverageRequests} Open Coverage`, icon: '🚨', fn: "navigateTo('eventlog')", urgent: true });
+      }
+      actions.push({ label: 'Log Revenue', icon: '💰', fn: "navigateTo('income')" });
+      return `
+        <div class="quick-actions">
+          ${actions.slice(0, 4).map(a => `
+            <button class="quick-action-btn ${a.urgent ? 'urgent' : ''}" onclick="${a.fn}">
+              <span>${a.icon}</span><span>${a.label}</span>
+            </button>`).join('')}
+        </div>`;
     }
 
     function renderSchedulePage(schedule, status, shifts, settings, isCurrentWeek) {
@@ -2415,6 +3107,7 @@
       btn.classList.add('spinning');
       loadPage(currentPage).finally(() => {
         btn.classList.remove('spinning');
+        markUpdated();
       });
     }
 
@@ -2439,8 +3132,13 @@
 
     function renderStaffPage(staff) {
       const rows = staff.map(s => `
-        <tr>
-          <td><span class="clickable-name" onclick="openEditStaff(${s.id},'${escapeJs(s.name)}','${escapeJs(s.role)}')">${escapeHtml(s.name)}</span></td>
+        <tr data-staff-id="${s.id}">
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${renderAvatar(s.name, 32)}
+              <span class="staff-name" data-editable data-staff-id="${s.id}" data-field="name" title="Click to edit">${escapeHtml(s.name)}</span>
+            </div>
+          </td>
           <td><span class="role-badge">${escapeHtml(s.role)}</span></td>
           <td><span class="status-badge ${s.active !== false ? 'active' : 'inactive'}">${s.active !== false ? 'Active' : 'Removed'}</span></td>
           <td>${s.registered ? '✅' : '⏳'}</td>
@@ -2458,7 +3156,7 @@
         <div class="card">
           <table class="data-table">
             <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:var(--color-text-muted)">No staff yet</td></tr>'}</tbody>
+            <tbody>${rows || renderEmptyRow(5, '👥', 'No staff yet', 'Add your team members so you can build a schedule.', '+ Add Staff', "openAddStaff()")}</tbody>
           </table>
         </div>`);
     }
@@ -2719,7 +3417,7 @@
               <th style="text-align:right">Gross Pay</th>
               <th style="text-align:right">Actions</th>
             </tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No payroll data for this week. Generate and approve a schedule to calculate payroll.</td></tr>'}</tbody>
+            <tbody>${rows || renderEmptyRow(6, '🧾', 'No payroll yet for this week', 'Generate and approve a schedule. Once published, payroll calculations appear here.', 'Open Schedule', "navigateTo('schedule')")}</tbody>
             ${unifiedRows.length ? `<tfoot><tr style="border-top:2px solid var(--surface-border);font-weight:700;color:var(--text)">
               <td>TOTAL</td><td>—</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums">${totalHrs.toFixed(1)}h</td>
@@ -2972,7 +3670,7 @@
           </div>
           <table class="data-table">
             <thead><tr><th>Date</th><th style="text-align:right">Amount</th><th>Notes</th></tr></thead>
-            <tbody>${tipsRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px">No tips recorded yet.</td></tr>'}</tbody>
+            <tbody>${tipsRows || renderEmptyRow(3, '💸', 'No tips logged yet', 'Add tips above as your team earns them — history will appear here.')}</tbody>
           </table>
         </div>
 
@@ -3624,7 +4322,20 @@
       setContent(`
         <div class="page-header"><h2 class="page-title">Settings</h2></div>
 
-        <div class="settings-section">
+        <div class="settings-subnav" id="settings-subnav">
+          <button data-target="appearance"  onclick="scrollToSection(this)">Appearance</button>
+          <button data-target="navigation"  onclick="scrollToSection(this)">Navigation</button>
+          <button data-target="operations"  onclick="scrollToSection(this)">Operations</button>
+          <button data-target="business"    onclick="scrollToSection(this)">Business</button>
+          <button data-target="pay-rates"   onclick="scrollToSection(this)">Pay Rates</button>
+          <button data-target="overtime"    onclick="scrollToSection(this)">Overtime</button>
+          <button data-target="tips"        onclick="scrollToSection(this)">Tips</button>
+          <button data-target="budget"      onclick="scrollToSection(this)">Budget</button>
+          <button data-target="shifts"      onclick="scrollToSection(this)">Shifts</button>
+          <button data-target="rules"       onclick="scrollToSection(this)">Rules</button>
+        </div>
+
+        <div class="settings-section" id="appearance">
           <div class="settings-section-title">Appearance</div>
           <div class="setting-row">
             <div>
@@ -3635,7 +4346,7 @@
           </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="navigation">
           <div class="settings-section-title">Dashboard Navigation</div>
           <div class="setting-desc" style="margin-bottom:12px">Show or hide sections you don't need.</div>
           ${[
@@ -3655,7 +4366,7 @@
           }).join('')}
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="operations">
           <div class="settings-section-title">Operations</div>
           <div class="setting-row">
             <div>
@@ -3666,7 +4377,7 @@
           </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="business">
           <div class="settings-section-title">Your Business</div>
           <div class="setting-row">
             <div class="setting-label">Name</div>
@@ -3679,10 +4390,10 @@
             </div>
             <input class="setting-input" id="rest-phone" placeholder="+1 555 123 4567" value="${escapeHtml(r.phone || '')}">
           </div>
-          <button class="setting-save-btn" onclick="saveRestaurant()">Save</button>
+          <button class="setting-save-btn" onclick="saveRestaurant(event)">Save</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="pay-rates">
           <div class="settings-section-title">Pay Rates</div>
           ${rates.length === 0 ? '<div class="setting-desc">No rates configured yet.</div>' : rates.map(rt => `
             <div class="setting-row">
@@ -3690,14 +4401,14 @@
               <div style="display:flex;gap:8px;align-items:center">
                 <input class="setting-input" type="number" step="0.01" min="0" max="500"
                   value="${rt.hourlyRate}" id="rate-${escapeJs(rt.roleName)}" style="width:100px">
-                <button class="setting-save-btn" style="margin-top:0;padding:6px 14px" onclick="saveRate('${escapeJs(rt.roleName)}')">Save</button>
+                <button class="setting-save-btn" style="margin-top:0;padding:6px 14px" onclick="saveRate('${escapeJs(rt.roleName)}', event)">Save</button>
               </div>
             </div>
           `).join('')}
           <button class="setting-save-btn ghost" onclick="addRate()">+ Add Rate</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="overtime">
           <div class="settings-section-title">Overtime</div>
           <div class="setting-row">
             <div class="setting-label">Weekly overtime enabled</div>
@@ -3723,10 +4434,10 @@
             <div class="setting-label">Daily multiplier</div>
             <input class="setting-input" type="number" min="1" max="3" step="0.05" id="ot-daily-mult" value="${overtime.daily_multiplier ?? 1.5}">
           </div>
-          <button class="setting-save-btn" onclick="saveOvertime()">Save Overtime</button>
+          <button class="setting-save-btn" onclick="saveOvertime(event)">Save Overtime</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="tips">
           <div class="settings-section-title">Tips</div>
           <div class="setting-row">
             <div class="setting-label">Mode</div>
@@ -3763,19 +4474,19 @@
             </div>
             <div class="toggle ${tips.bohIncluded ? 'on' : ''}" id="tip-boh-toggle" onclick="this.classList.toggle('on')"></div>
           </div>
-          <button class="setting-save-btn" onclick="saveTips()">Save Tips</button>
+          <button class="setting-save-btn" onclick="saveTips(event)">Save Tips</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="budget">
           <div class="settings-section-title">Weekly Budget</div>
           <div class="setting-row">
             <div class="setting-label">Target labor budget ($/week)</div>
             <input class="setting-input" type="number" min="0" step="10" id="budget-amount" value="${budget.weeklyBudget ?? ''}">
           </div>
-          <button class="setting-save-btn" onclick="saveBudget()">Save Budget</button>
+          <button class="setting-save-btn" onclick="saveBudget(event)">Save Budget</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="shifts">
           <div class="settings-section-title">Shifts</div>
           ${shifts.length === 0 ? '<div class="setting-desc">No shifts configured.</div>' : shifts.map(s => {
             const reqsLabel = (s.requirements && s.requirements.length > 0)
@@ -3803,7 +4514,7 @@
 
         <div class="settings-section" id="revenue-types-section"></div>
 
-        <div class="settings-section" id="business-rules-section">
+        <div class="settings-section" id="rules">
           <div class="settings-section-title">Business Rules</div>
           ${rules.length === 0 ? '<div class="setting-desc">No rules configured.</div>' : rules.map(rule => `
             <div class="setting-row">
@@ -3819,24 +4530,36 @@
       `);
     }
 
-    async function saveRestaurant() {
+    function scrollToSection(btn) {
+      const id = btn?.dataset?.target;
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.querySelectorAll('.settings-subnav button')
+        .forEach(b => b.classList.toggle('active', b === btn));
+    }
+
+    async function saveRestaurant(ev) {
+      const btn = ev?.currentTarget || null;
       const name = document.getElementById('rest-name')?.value.trim();
       const phone = document.getElementById('rest-phone')?.value.trim() || '';
       if (!name) { showToast('Name cannot be empty', 'error'); return; }
       try {
         await api('/api/settings/full', 'PATCH', { restaurant: { name, phone } });
-        showToast('Saved');
+        showSaveSuccess(btn);
         const rn = document.getElementById('restaurant-name');
         if (rn) rn.textContent = name;
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function saveRate(roleName) {
+    async function saveRate(roleName, ev) {
+      const btn = ev?.currentTarget || null;
       const rate = parseFloat(document.getElementById(`rate-${roleName}`)?.value);
       if (!Number.isFinite(rate) || rate < 0) { showToast('Invalid rate', 'error'); return; }
       try {
         await api('/api/rates', 'POST', { roleName, hourlyRate: rate });
-        showToast(`${roleName} saved`);
+        showSaveSuccess(btn);
       } catch (e) { showToast(e.message, 'error'); }
     }
 
@@ -3856,7 +4579,8 @@
         }, 'Add');
     }
 
-    async function saveOvertime() {
+    async function saveOvertime(ev) {
+      const btn = ev?.currentTarget || null;
       const body = { overtime: {
         overtime_enabled: document.getElementById('ot-weekly-toggle').classList.contains('on'),
         weekly_threshold: Number(document.getElementById('ot-weekly-threshold').value),
@@ -3865,26 +4589,28 @@
         daily_threshold: Number(document.getElementById('ot-daily-threshold').value),
         daily_multiplier: Number(document.getElementById('ot-daily-mult').value),
       }};
-      try { await api('/api/settings/full', 'PATCH', body); showToast('Overtime saved'); }
+      try { await api('/api/settings/full', 'PATCH', body); showSaveSuccess(btn); }
       catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function saveTips() {
+    async function saveTips(ev) {
+      const btn = ev?.currentTarget || null;
       const mode = document.querySelector('input[name="tip-mode"]:checked')?.value || 'pool';
       const splitMethod = document.querySelector('input[name="tip-split"]:checked')?.value || 'hours';
       const bohIncluded = document.getElementById('tip-boh-toggle').classList.contains('on');
       try {
         await api('/api/settings/full', 'PATCH', { tips: { mode, splitMethod, bohIncluded } });
-        showToast('Tips saved');
+        showSaveSuccess(btn);
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function saveBudget() {
+    async function saveBudget(ev) {
+      const btn = ev?.currentTarget || null;
       const v = parseFloat(document.getElementById('budget-amount')?.value);
       if (!Number.isFinite(v) || v < 0) { showToast('Enter a valid amount', 'error'); return; }
       try {
         await api('/api/settings/full', 'PATCH', { budget: { weeklyBudget: v } });
-        showToast('Budget saved');
+        showSaveSuccess(btn);
       } catch (e) { showToast(e.message, 'error'); }
     }
 
@@ -4055,6 +4781,205 @@
         }, 'Add Shift');
     }
 
+    // ── Global search ──
+    const SEARCH_INDEX = [
+      { type: 'page', title: 'Overview',  icon: '📊', page: 'overview',  keywords: ['overview','home','dashboard'] },
+      { type: 'page', title: 'Schedule',  icon: '📅', page: 'schedule',  keywords: ['schedule','shifts','week'] },
+      { type: 'page', title: 'Staff',     icon: '👥', page: 'staff',     keywords: ['staff','team','employees','people'] },
+      { type: 'page', title: 'Payroll',   icon: '🧾', page: 'payroll',   keywords: ['payroll','pay','wages','salary'] },
+      { type: 'page', title: 'Income',    icon: '💰', page: 'income',    keywords: ['income','revenue','tips','money'] },
+      { type: 'page', title: 'Event Log', icon: '📋', page: 'eventlog',  keywords: ['events','coverage','trades','log','history'] },
+      { type: 'page', title: 'Settings',  icon: '⚙️', page: 'settings',  keywords: ['settings','config','setup','preferences'] },
+      { type: 'settings', title: 'Pay Rates', icon: '💵', page: 'settings', anchor: 'pay-rates', keywords: ['rates','pay','hourly','wages'] },
+      { type: 'settings', title: 'Overtime',  icon: '⏰', page: 'settings', anchor: 'overtime',  keywords: ['overtime','ot','threshold'] },
+      { type: 'settings', title: 'Tips',      icon: '💸', page: 'settings', anchor: 'tips',      keywords: ['tips','tip pool','split'] },
+      { type: 'settings', title: 'Shifts',    icon: '🕐', page: 'settings', anchor: 'shifts',    keywords: ['shifts','hours','schedule'] },
+      { type: 'settings', title: 'Time Clock',icon: '⏱', page: 'settings', anchor: 'operations', keywords: ['timeclock','clock','time'] },
+      { type: 'settings', title: 'Business',  icon: '🏢', page: 'settings', anchor: 'business',  keywords: ['business','restaurant','phone','name'] },
+      { type: 'settings', title: 'Budget',    icon: '💼', page: 'settings', anchor: 'budget',    keywords: ['budget','weekly'] },
+    ];
+
+    let _staffSearchCache = null;
+    let _searchResults = [];
+
+    async function openSearch() {
+      const overlay = document.getElementById('search-overlay');
+      overlay.classList.remove('hidden');
+      const input = document.getElementById('search-input');
+      input.value = '';
+      input.focus();
+      renderSearchResults('');
+      if (!_staffSearchCache) {
+        try { _staffSearchCache = await api('/api/staff') || []; }
+        catch (e) { _staffSearchCache = []; }
+      }
+    }
+    function closeSearch() {
+      document.getElementById('search-overlay')?.classList.add('hidden');
+    }
+    function invalidateStaffSearchCache() { _staffSearchCache = null; }
+
+    function renderSearchResults(query) {
+      const q = query.toLowerCase().trim();
+      const container = document.getElementById('search-results');
+      if (!container) return;
+
+      if (!q) {
+        const items = SEARCH_INDEX.filter(i => i.type === 'page').slice(0, 5);
+        _searchResults = items;
+        container.innerHTML = `
+          <div class="search-results-header">Quick access</div>
+          ${items.map((it, i) => renderSearchItem(it, i)).join('')}`;
+        return;
+      }
+
+      const staticResults = SEARCH_INDEX.filter(item =>
+        item.title.toLowerCase().includes(q) ||
+        item.keywords.some(k => k.toLowerCase().includes(q))
+      );
+
+      const staffResults = (_staffSearchCache || [])
+        .filter(s => (s.name || '').toLowerCase().includes(q) || (s.role || '').toLowerCase().includes(q))
+        .slice(0, 4)
+        .map(s => ({
+          type: 'staff', title: s.name, sub: s.role || 'Staff',
+          icon: '👤', staffId: s.id, page: 'staff',
+        }));
+
+      const all = [...staffResults, ...staticResults].slice(0, 10);
+      _searchResults = all;
+
+      if (!all.length) {
+        container.innerHTML = `<div class="search-empty">No results for &ldquo;${escapeHtml(query)}&rdquo;</div>`;
+        return;
+      }
+      container.innerHTML = all.map((it, i) => renderSearchItem(it, i)).join('');
+    }
+
+    function renderSearchItem(item, idx) {
+      const sub = item.sub || (item.type === 'page' ? 'Page' : item.type === 'settings' ? 'Settings section' : '');
+      return `
+        <div class="search-result-item" onclick="executeSearchByIdx(${idx})">
+          <div class="search-result-icon">${item.icon || '•'}</div>
+          <div>
+            <div class="search-result-title">${escapeHtml(item.title)}</div>
+            ${sub ? `<div class="search-result-sub">${escapeHtml(sub)}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    function executeSearchByIdx(idx) {
+      const item = _searchResults[idx];
+      if (!item) return;
+      closeSearch();
+      navigateTo(item.page);
+      if (item.anchor) {
+        setTimeout(() => {
+          document.getElementById(item.anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 350);
+      }
+      if (item.staffId) {
+        setTimeout(() => {
+          const row = document.querySelector(`[data-staff-id="${item.staffId}"]`);
+          if (row) {
+            row.style.background = 'var(--color-accent-dim)';
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => row.style.background = '', 2000);
+          }
+        }, 500);
+      }
+    }
+
+    document.addEventListener('input', e => {
+      if (e.target?.id === 'search-input') renderSearchResults(e.target.value);
+    });
+
+    // ── Keyboard shortcuts ──
+    const KEY_MAP = {
+      'g+o': () => navigateTo('overview'),
+      'g+s': () => navigateTo('schedule'),
+      'g+t': () => navigateTo('staff'),
+      'g+p': () => navigateTo('payroll'),
+      'g+i': () => navigateTo('income'),
+      'g+e': () => navigateTo('eventlog'),
+      'g+c': () => navigateTo('settings'),
+    };
+    let _keyBuffer = '';
+    let _keyTimer = null;
+
+    document.addEventListener('keydown', e => {
+      // Always allow Escape to close search/modal
+      if (e.key === 'Escape') {
+        closeSearch();
+        return;
+      }
+      // Skip when user is typing
+      const tag = e.target?.tagName;
+      const inField = ['INPUT','TEXTAREA','SELECT'].includes(tag) || e.target?.isContentEditable;
+      if (inField) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === '/') { e.preventDefault(); openSearch(); return; }
+      if (e.key === '?') { e.preventDefault(); showShortcutsModal(); return; }
+
+      // g+letter combos
+      const lower = e.key.toLowerCase();
+      if (lower.length !== 1) return;
+      _keyBuffer = (_keyBuffer + lower).slice(-3);
+      clearTimeout(_keyTimer);
+      _keyTimer = setTimeout(() => { _keyBuffer = ''; }, 600);
+
+      const combo = _keyBuffer.length >= 2
+        ? `${_keyBuffer[_keyBuffer.length - 2]}+${_keyBuffer[_keyBuffer.length - 1]}`
+        : null;
+      if (combo && KEY_MAP[combo]) {
+        KEY_MAP[combo]();
+        _keyBuffer = '';
+      }
+    });
+
+    function showShortcutsModal() {
+      const shortcuts = [
+        ['/',         'Open search'],
+        ['G then O',  'Overview'],
+        ['G then S',  'Schedule'],
+        ['G then T',  'Staff (Team)'],
+        ['G then P',  'Payroll'],
+        ['G then I',  'Income'],
+        ['G then E',  'Event Log'],
+        ['G then C',  'Settings (Config)'],
+        ['?',         'Show this help'],
+        ['Esc',       'Close modal / search'],
+      ];
+      // Build modal manually so it has no Confirm button
+      const existing = document.getElementById('modal-backdrop');
+      if (existing) existing.remove();
+      const m = document.createElement('div');
+      m.id = 'modal-backdrop';
+      m.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-title">Keyboard Shortcuts</div>
+          <div class="modal-body">
+            <div class="shortcuts-grid">
+              ${shortcuts.map(([key, desc]) => `
+                <div class="shortcut-row">
+                  <div class="shortcut-keys">
+                    ${key.split(' then ').map(k => `<kbd class="kbd">${k}</kbd>`).join('<span class="shortcut-then">then</span>')}
+                  </div>
+                  <div class="shortcut-desc">${desc}</div>
+                </div>`).join('')}
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-primary" onclick="document.getElementById('modal-backdrop').remove()">Got it</button>
+          </div>
+        </div>`;
+      document.body.appendChild(m);
+      document.addEventListener('keydown', function esc(e) {
+        if (e.key === 'Escape') { m.remove(); document.removeEventListener('keydown', esc); }
+      });
+    }
+
     // ── Init ──
     (async function init() {
       // Restore dark-mode preference from localStorage
@@ -4084,6 +5009,7 @@
       } else {
         navigateTo('overview');
       }
+      markUpdated();
 
       // Auto-refresh every 5 minutes
       refreshInterval = setInterval(() => {
