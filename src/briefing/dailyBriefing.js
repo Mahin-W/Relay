@@ -174,9 +174,13 @@ export async function buildBriefing(groupId, date, db = null) {
     moraleAlerts: null,
   }
 
-  // Clock compliance — non-fatal, never blocks the briefing
+  // Clock compliance — non-fatal, never blocks the briefing.
+  // Skip entirely if the group has disabled the time clock.
   try {
-    result.clockCompliance = await getClockComplianceReport(groupId, date, db)
+    const { data: ses } = await db.from('setup_sessions').select('setup_data').eq('group_id', groupId).maybeSingle()
+    if (ses?.setup_data?.timeclockEnabled !== false) {
+      result.clockCompliance = await getClockComplianceReport(groupId, date, db)
+    }
   } catch (err) {
     logger.error(`Clock compliance check failed (non-fatal): ${err.message}`)
   }

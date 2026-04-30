@@ -1706,7 +1706,7 @@ router.get('/settings', async (req, res) => {
 router.patch('/settings', async (req, res) => {
   try {
     const groupId = req.manager.groupId
-    const { tipMode, overtimeThreshold, overtimeMultiplier, weeklyBudget, restaurantName, hiddenPages, timeclockEnabled } = req.body
+    const { tipMode, overtimeThreshold, overtimeMultiplier, weeklyBudget, restaurantName, hiddenPages, timeclockEnabled } = req.body || {}
     if (!tipMode && overtimeThreshold === undefined && overtimeMultiplier === undefined && weeklyBudget === undefined && !restaurantName && hiddenPages === undefined && timeclockEnabled === undefined) {
       return res.status(400).json({ error: 'At least one setting field is required' })
     }

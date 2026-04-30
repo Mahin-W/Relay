@@ -657,8 +657,10 @@ cron.schedule('*/15 * * * *', async () => {
   try {
     const { createClient } = await import('@supabase/supabase-js')
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-    const { data: groups } = await supabase.from('setup_sessions').select('group_id').eq('setup_complete', true)
+    const { data: groups } = await supabase.from('setup_sessions').select('group_id, setup_data').eq('setup_complete', true)
     for (const g of groups || []) {
+      // Skip groups that have disabled the time clock
+      if (g.setup_data?.timeclockEnabled === false) continue
       await handleMissedClockOutCheck(bot, g.group_id)
     }
   } catch (err) {
