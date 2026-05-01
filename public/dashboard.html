@@ -3634,32 +3634,79 @@
       return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     }
 
-    function openAddStaff() {
+    // ── Role picker (dropdown + "Add new role…" escape hatch) ──
+    let _rolesCache = null;
+    async function getKnownRoles(forceReload = false) {
+      if (_rolesCache && !forceReload) return _rolesCache;
+      try { _rolesCache = await api('/api/roles') || []; }
+      catch (e) { _rolesCache = []; }
+      return _rolesCache;
+    }
+    function invalidateRolesCache() { _rolesCache = null; }
+    function buildRoleSelectHtml(elementId, currentValue, roles) {
+      const list = (roles || []).slice();
+      // Ensure the current value (for edit) appears as an option even if it
+      // isn't in the known-roles list.
+      if (currentValue && !list.some(r => r.role === currentValue)) {
+        list.unshift({ role: currentValue });
+      }
+      const opts = list.map(r =>
+        `<option value="${escapeHtml(r.role)}"${r.role === currentValue ? ' selected' : ''}>${escapeHtml(r.role)}</option>`
+      ).join('');
+      const placeholder = currentValue ? '' : '<option value="" disabled selected>Choose a role</option>';
+      return `
+        <select id="${elementId}" onchange="_onRoleSelectChange(this, '${elementId}-new')">
+          ${placeholder}${opts}
+          <option value="__new__">+ Add new role…</option>
+        </select>
+        <input id="${elementId}-new" type="text" placeholder="Enter new role name" maxlength="40" style="display:none;margin-top:6px" />
+      `;
+    }
+    function _onRoleSelectChange(sel, newInputId) {
+      const inp = document.getElementById(newInputId);
+      if (!inp) return;
+      if (sel.value === '__new__') { inp.style.display = 'block'; inp.focus(); }
+      else { inp.style.display = 'none'; inp.value = ''; }
+    }
+    function getRoleFromSelect(elementId) {
+      const sel = document.getElementById(elementId);
+      if (!sel) return '';
+      if (sel.value === '__new__') {
+        return (document.getElementById(`${elementId}-new`)?.value || '').trim();
+      }
+      return (sel.value || '').trim();
+    }
+
+    async function openAddStaff() {
+      const roles = await getKnownRoles();
       showModal('Add Staff Member',
         `<label>Name</label><input id="m-name" placeholder="Full name" />
-         <label>Role</label><input id="m-role" placeholder="e.g. Server, Cook" />`,
+         <label>Role</label>${buildRoleSelectHtml('m-role', '', roles)}`,
         async () => {
           const name = document.getElementById('m-name').value.trim();
-          const role = document.getElementById('m-role').value.trim();
+          const role = getRoleFromSelect('m-role');
           if (!name || !role) { showToast('Name and role required', 'error'); return; }
           try {
             await api('/api/staff', 'POST', { name, role });
+            invalidateRolesCache();
             showToast(`${name} added`);
             loadStaffPage();
           } catch (e) { showToast(e.message, 'error'); }
         }, 'Add Staff');
     }
 
-    function openEditStaff(id, name, role) {
+    async function openEditStaff(id, name, role) {
+      const roles = await getKnownRoles();
       showModal(`Edit ${name}`,
         `<label>Name</label><input id="m-name" value="${escapeHtml(name)}" />
-         <label>Role</label><input id="m-role" value="${escapeHtml(role)}" />`,
+         <label>Role</label>${buildRoleSelectHtml('m-role', role, roles)}`,
         async () => {
           const newName = document.getElementById('m-name').value.trim();
-          const newRole = document.getElementById('m-role').value.trim();
+          const newRole = getRoleFromSelect('m-role');
           if (!newName || !newRole) { showToast('Name and role required', 'error'); return; }
           try {
             await api(`/api/staff/${id}`, 'PATCH', { name: newName, role: newRole });
+            invalidateRolesCache();
             showToast('Staff updated');
             loadStaffPage();
           } catch (e) { showToast(e.message, 'error'); }
@@ -5032,16 +5079,26 @@
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    function addRate() {
+    async function addRate() {
+      const roles = await getKnownRoles(true);
+      // Prefer roles that don't have a rate yet, but include all so a manager
+      // can re-add if a rate was somehow lost.
+      const unrated = roles.filter(r => r.rate == null);
+      const list = unrated.length > 0 ? unrated : roles;
+      const helpText = unrated.length === 0 && roles.length > 0
+        ? '<div class="setting-desc" style="margin-top:4px">All known roles already have a rate. Add a new role below if needed.</div>'
+        : '';
       showModal('Add a role rate',
-        `<label>Role name</label><input id="new-role" placeholder="Server" maxlength="40" />
+        `<label>Role</label>${buildRoleSelectHtml('new-role', '', list)}${helpText}
          <label>Hourly rate</label><input id="new-rate" type="number" min="0" max="500" step="0.01" placeholder="15.50" />`,
         async () => {
-          const roleName = document.getElementById('new-role').value.trim();
+          const roleName = getRoleFromSelect('new-role');
           const rate = parseFloat(document.getElementById('new-rate').value);
-          if (!roleName || !Number.isFinite(rate) || rate < 0) { showToast('Invalid input', 'error'); return; }
+          if (!roleName) { showToast('Choose a role', 'error'); return; }
+          if (!Number.isFinite(rate) || rate < 0) { showToast('Enter a valid hourly rate', 'error'); return; }
           try {
             await api('/api/rates', 'POST', { roleName, hourlyRate: rate });
+            invalidateRolesCache();
             await loadSettingsPage();
             showToast('Rate added');
           } catch (e) { showToast(e.message, 'error'); }
