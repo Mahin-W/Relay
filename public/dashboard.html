@@ -1830,29 +1830,48 @@
     }
 
     /* Undo toast */
+    @keyframes undoSlideUp {
+      from { transform: translate(-50%, 16px); opacity: 0; }
+      to   { transform: translate(-50%, 0);    opacity: 1; }
+    }
     .undo-toast {
-      position: fixed; bottom: 80px; left: 50%;
+      position: fixed; bottom: 28px; left: 50%;
       transform: translateX(-50%);
-      background: var(--color-text-primary); color: #fff;
-      padding: 12px 20px; border-radius: 8px;
-      display: flex; align-items: center;
-      gap: 16px; font-size: 14px;
-      z-index: 999; min-width: 260px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      background: var(--color-surface);
+      color: var(--color-text-primary);
+      border: 1px solid var(--color-border);
+      padding: 10px 12px 10px 18px;
+      border-radius: 999px;
+      display: inline-flex; align-items: center;
+      gap: 14px; font-size: 13px; font-weight: 500;
+      z-index: 9999;
+      box-shadow: 0 10px 32px rgba(28,20,16,0.14), 0 2px 6px rgba(28,20,16,0.06);
+      max-width: 90vw;
+      animation: undoSlideUp 0.18s ease;
       overflow: hidden;
     }
+    .undo-toast .undo-check {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--color-success); color: #fff;
+      font-size: 11px; font-weight: 700;
+      flex-shrink: 0;
+    }
     .undo-toast button {
-      background: none; border: 1px solid rgba(255,255,255,0.4);
-      color: #fff; padding: 4px 12px; border-radius: 4px;
-      cursor: pointer; font-size: 13px; font-weight: 600;
+      background: var(--color-accent); color: #fff;
+      border: none; padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer; font-size: 12px; font-weight: 600;
+      font-family: inherit;
+      transition: background 120ms;
       white-space: nowrap;
     }
-    .undo-toast button:hover { background: rgba(255,255,255,0.15); }
+    .undo-toast button:hover { background: var(--color-accent-hover); }
     .undo-timer {
       position: absolute; bottom: 0; left: 0;
-      height: 3px; width: 100%;
+      height: 2px; width: 100%;
       background: var(--color-accent);
-      border-radius: 0 0 8px 8px;
+      opacity: 0.4;
     }
 
     /* Confirm-modal backdrop (class form so we can have multiple modals) */
@@ -2653,8 +2672,13 @@
         };
         Object.entries(member.shifts || {}).forEach(([day, list]) => {
           (list || []).forEach(s => {
-            const name = typeof s === 'string' ? s : (s.shiftName || s.name || '');
-            const sid = keyToId[`${day}|${name}`];
+            // Prefer the shift_id sent directly by the backend; fall back to
+            // the (day + '|' + name) lookup for older clients/responses.
+            let sid = (typeof s === 'object' && s != null) ? (s.shiftId ?? null) : null;
+            if (sid == null) {
+              const name = typeof s === 'string' ? s : (s.shiftName || s.name || '');
+              sid = keyToId[`${day}|${name}`];
+            }
             if (sid != null && byShiftId.has(sid)) {
               byShiftId.get(sid).staff.push(staffEntry);
             }
@@ -3214,29 +3238,93 @@
       catch (e) { showToast('Could not load staff', 'error'); return; }
       const candidates = allStaff.filter(s => !assigned.has(String(s.id)));
 
-      const body = candidates.length === 0
-        ? '<div class="pick-staff-empty">All staff are already on this shift.</div>'
-        : `<div class="pick-staff-list">
-            ${candidates.map(s => `
-              <div class="pick-staff-row" onclick="confirmAddStaffToShift(${s.id}, ${shiftId}, ${jsonAttr(s.name || '')})">
-                ${renderAvatar(s.name || '', 28)}
-                <div>
-                  <div style="font-weight:500">${escapeHtml(s.name || '')}</div>
-                  <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(s.role || '')}</div>
-                </div>
-              </div>`).join('')}
-          </div>`;
+      // Capture week at modal-open time (in case the user changes weeks)
+      const weekStart = currentScheduleWeek;
 
-      showModal(`Add staff to ${shiftName}`, body, null, 'Cancel');
+      // Build the modal manually (don't go through showModal — we need full
+      // control over click handlers and we don't want a stray Confirm button).
+      const existing = document.getElementById('modal-backdrop');
+      if (existing) existing.remove();
+      const m = document.createElement('div');
+      m.id = 'modal-backdrop';
+
+      const rowsHtml = candidates.length === 0
+        ? '<div class="pick-staff-empty">All staff are already on this shift.</div>'
+        : candidates.map(s => `
+            <div class="pick-staff-row" data-staff-id="${s.id}" data-staff-name="${escapeHtml(s.name || '')}">
+              ${renderAvatar(s.name || '', 28)}
+              <div>
+                <div style="font-weight:500">${escapeHtml(s.name || '')}</div>
+                <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(s.role || '')}</div>
+              </div>
+            </div>`).join('');
+
+      m.innerHTML = `
+        <div class="modal-card">
+          <h3 class="modal-title">Add staff to ${escapeHtml(shiftName)}</h3>
+          <div class="modal-body">
+            <div id="add-staff-error" style="display:none;background:var(--color-danger-dim);color:var(--color-danger-text);padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px"></div>
+            <div class="pick-staff-list">${rowsHtml}</div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn-secondary" id="add-staff-close">Close</button>
+          </div>
+        </div>`;
+      document.body.appendChild(m);
+
+      // Esc / backdrop / Close to dismiss
+      const dismiss = () => { m.remove(); document.removeEventListener('keydown', escHandler); };
+      const escHandler = (e) => { if (e.key === 'Escape') dismiss(); };
+      document.addEventListener('keydown', escHandler);
+      m.querySelector('#add-staff-close').onclick = dismiss;
+      m.addEventListener('click', e => { if (e.target === m) dismiss(); });
+
+      // Wire up row clicks (delegated; never closes modal until success)
+      m.querySelectorAll('.pick-staff-row').forEach(row => {
+        row.addEventListener('click', async () => {
+          if (row.classList.contains('disabled')) return;
+          const staffId = Number(row.dataset.staffId);
+          const staffName = row.dataset.staffName;
+          // Disable all rows; visually emphasize the clicked one
+          m.querySelectorAll('.pick-staff-row').forEach(r => {
+            r.classList.add('disabled');
+            r.style.opacity = '0.45';
+            r.style.pointerEvents = 'none';
+          });
+          row.style.opacity = '1';
+          row.style.background = 'var(--color-accent-dim)';
+
+          const errEl = m.querySelector('#add-staff-error');
+          errEl.style.display = 'none';
+
+          try {
+            const r = await api('/api/schedule/assign', 'POST', { staffId, shiftId, weekStart });
+            _lastAction = { type: 'add', staffId, shiftId, weekStart };
+            dismiss();
+            await loadSchedulePage();
+            showUndoToast(`${staffName} added to ${shiftName}`);
+          } catch (err) {
+            errEl.textContent = err.message || 'Failed to assign';
+            errEl.style.display = 'block';
+            // Re-enable rows so user can try a different staff
+            m.querySelectorAll('.pick-staff-row').forEach(r => {
+              r.classList.remove('disabled');
+              r.style.opacity = '';
+              r.style.pointerEvents = '';
+              r.style.background = '';
+            });
+          }
+        });
+      });
     }
 
+    // Kept for backward compat in case anything still references this name
     async function confirmAddStaffToShift(staffId, shiftId, staffName) {
-      // Close the modal
-      document.getElementById('modal-backdrop')?.remove();
       const weekStart = currentScheduleWeek;
       try {
         await api('/api/schedule/assign', 'POST', { staffId, shiftId, weekStart });
         _lastAction = { type: 'add', staffId, shiftId, weekStart };
+        document.getElementById('modal-backdrop')?.remove();
         await loadSchedulePage();
         showUndoToast(`${staffName} added`);
       } catch (err) {
@@ -3253,7 +3341,11 @@
       const toast = document.createElement('div');
       toast.id = 'undo-toast';
       toast.className = 'undo-toast';
-      toast.innerHTML = `<span>${message}</span><button onclick="undoLastAction()">Undo</button><div class="undo-timer"></div>`;
+      toast.innerHTML = `
+        <span class="undo-check">✓</span>
+        <span>${escapeHtml(message)}</span>
+        <button onclick="undoLastAction()">Undo</button>
+        <div class="undo-timer"></div>`;
       document.body.appendChild(toast);
       const timerBar = toast.querySelector('.undo-timer');
       timerBar.style.transition = 'width 5s linear';

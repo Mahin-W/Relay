@@ -158,6 +158,7 @@ router.get('/schedule', async (req, res) => {
         byStaff[a.staff_id].shifts[day] = []
       }
       byStaff[a.staff_id].shifts[day].push({
+        shiftId: shift.id,
         shiftName: shift.name,
         startTime: shift.start_time,
         endTime: shift.end_time,
@@ -666,6 +667,7 @@ router.get('/schedule-list', async (req, res) => {
       const hours = parseShiftHours(shift.start_time, shift.end_time)
       if (!byStaff[a.staff_id].shifts[day]) byStaff[a.staff_id].shifts[day] = []
       byStaff[a.staff_id].shifts[day].push({
+        shiftId: shift.id,
         shiftName: shift.name,
         startTime: shift.start_time,
         endTime: shift.end_time,
