@@ -743,7 +743,7 @@ router.post('/schedule/assign', async (req, res) => {
 
     const { error } = await db
       .from('schedule_assignments')
-      .insert({ group_id: groupId, staff_id: staffId, shift_id: shiftId, week_start: weekStart, status: 'assigned' })
+      .insert({ group_id: groupId, staff_id: staffId, shift_id: shiftId, week_start: weekStart, status: 'scheduled' })
     if (error) throw error
 
     res.json({ success: true })
@@ -1030,7 +1030,7 @@ router.post('/schedule/move', async (req, res) => {
 
     const { data: newAssignment, error: insErr } = await db
       .from('schedule_assignments')
-      .insert({ group_id: groupId, staff_id: staffId, shift_id: toShiftId, week_start: weekStart, status: 'assigned' })
+      .insert({ group_id: groupId, staff_id: staffId, shift_id: toShiftId, week_start: weekStart, status: 'scheduled' })
       .select()
       .single()
     if (insErr) throw insErr
@@ -1082,7 +1082,7 @@ router.post('/schedule/swap', async (req, res) => {
 
     const { data: newAssignment, error: insErr } = await db
       .from('schedule_assignments')
-      .insert({ group_id: groupId, staff_id: toStaffId, shift_id: shiftId, week_start: weekStart, status: 'assigned' })
+      .insert({ group_id: groupId, staff_id: toStaffId, shift_id: shiftId, week_start: weekStart, status: 'scheduled' })
       .select()
       .single()
     if (insErr) throw insErr

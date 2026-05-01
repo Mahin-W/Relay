@@ -2490,7 +2490,7 @@
         hasRates:    (rolesList || []).some(r => r.rate != null && r.rate > 0),
         shiftsThisWeek: overview?.shiftsThisWeek || 0,
       };
-      dashboardData = { overview, activity, insights, schedule, onboarding };
+      dashboardData = { overview, activity, insights, schedule, onboarding, shifts: shiftsList || [] };
       return dashboardData;
     }
 
@@ -2614,7 +2614,11 @@
 
     function formatShiftTime(t) {
       if (!t) return '';
-      const [h, m] = String(t).split(':').map(Number);
+      // Tolerant: "8", "8:30", "08:30:00", "08:30:00.000+00" all parse cleanly.
+      // Missing minutes default to 0 instead of producing "NaN".
+      const parts = String(t).split(':');
+      const h = Number(parts[0]);
+      const m = Number(parts[1]) || 0;
       if (!Number.isFinite(h)) return String(t);
       const ampm = h >= 12 ? 'pm' : 'am';
       const h12 = h % 12 || 12;
@@ -2667,6 +2671,43 @@
       return rows;
     }
 
+    // Compact shift-centric table for the Overview page (read-only).
+    // Rows = shifts, columns = Shift name | Time | Staff pills.
+    function renderShiftCentricCompactTable(schedule, shifts) {
+      const rows = buildShiftCentricRows(schedule, shifts);
+      let body;
+      if (rows.length === 0) {
+        body = `<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:24px">No shifts configured</td></tr>`;
+      } else {
+        body = rows.map(r => {
+          const s = r.shift;
+          const time = `${formatShiftTime(s.start_time)} – ${formatShiftTime(s.end_time)}`;
+          const staffCell = r.staff.length === 0
+            ? '<span style="color:var(--text-muted);font-size:12px;font-style:italic">— empty —</span>'
+            : r.staff.map(st => `
+                <span class="staff-pill" style="cursor:default">
+                  ${renderAvatar(st.staffName || '', 22)}
+                  <span>${escapeHtml(st.staffName || '')}</span>
+                </span>`).join(' ');
+          return `<tr>
+            <td><strong>${escapeHtml(s.name || 'Shift')}</strong></td>
+            <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${time}</td>
+            <td><div style="display:flex;flex-wrap:wrap;gap:4px">${staffCell}</div></td>
+          </tr>`;
+        }).join('');
+      }
+      return `
+        <div class="card schedule-wrapper compact" style="margin-bottom:24px">
+          <div class="card-header">This Week's Schedule</div>
+          <div class="schedule-scroll">
+            <table class="schedule-table">
+              <thead><tr><th>Shift</th><th>Time</th><th>Staff</th></tr></thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
     function renderShiftCentricSchedule(schedule, shifts, settings, isCurrentWeek) {
       const rows = buildShiftCentricRows(schedule, shifts);
       if (rows.length === 0) {
@@ -2699,13 +2740,23 @@
       return groupsHtml;
     }
 
+    // Safe inline-attribute serializer: returns a JSON expression with double
+    // quotes encoded as &quot; so it can be embedded inside a double-quoted
+    // HTML attribute (onclick=" ... ") without breaking the parser.
+    function jsonAttr(v) {
+      return JSON.stringify(v == null ? null : v)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+
     function renderShiftRow(row, weekStart, editable) {
       const s = row.shift;
       const time = `${formatShiftTime(s.start_time)} – ${formatShiftTime(s.end_time)}`;
       const assignedIds = row.staff.map(st => st.staffId);
       const pillsHtml = row.staff.map(st => renderStaffPill(st, s.id, weekStart, editable)).join('');
       const addBtn = editable
-        ? `<button class="add-staff-btn" onclick="openAddStaffToShift(${s.id}, ${JSON.stringify(s.name)}, ${JSON.stringify(assignedIds)})">+ Add</button>`
+        ? `<button class="add-staff-btn" onclick="openAddStaffToShift(${s.id}, ${jsonAttr(s.name)}, ${jsonAttr(assignedIds)})">+ Add</button>`
         : '';
       const dropAttrs = editable ? `
         ondragover="onShiftRowDragOver(event)"
@@ -2912,13 +2963,13 @@
     }
 
     function renderOverview(data) {
-      const { overview, activity, insights, schedule, onboarding } = data;
+      const { overview, activity, insights, schedule, onboarding, shifts } = data;
       const onboardingHtml = renderOnboardingChecklist(onboarding);
       const quickActionsHtml = renderQuickActions(overview, schedule);
       let html = onboardingHtml;
       html += renderStatCards(overview);
       html += quickActionsHtml;
-      html += renderScheduleTable(schedule, true);
+      html += renderShiftCentricCompactTable(schedule, shifts || []);
       html += `
         <div class="panels-grid">
           <div class="card">
@@ -3167,7 +3218,7 @@
         ? '<div class="pick-staff-empty">All staff are already on this shift.</div>'
         : `<div class="pick-staff-list">
             ${candidates.map(s => `
-              <div class="pick-staff-row" onclick="confirmAddStaffToShift(${s.id}, ${shiftId}, ${JSON.stringify(s.name || '')})">
+              <div class="pick-staff-row" onclick="confirmAddStaffToShift(${s.id}, ${shiftId}, ${jsonAttr(s.name || '')})">
                 ${renderAvatar(s.name || '', 28)}
                 <div>
                   <div style="font-weight:500">${escapeHtml(s.name || '')}</div>
