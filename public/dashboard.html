@@ -1645,6 +1645,119 @@
     .page-slide-right { animation: slide-in-right 200ms ease forwards; }
     .page-slide-left  { animation: slide-in-left  200ms ease forwards; }
 
+    /* ── Shift-centric schedule layout ── */
+    .shifts-day-group { margin-bottom: 24px; }
+    .day-header {
+      font-family: 'DM Serif Display', Georgia, serif;
+      font-size: 18px; font-weight: 400;
+      color: var(--color-text-primary);
+      margin: 16px 0 8px;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .day-header-date {
+      font-size: 13px; font-weight: 400;
+      color: var(--color-text-muted);
+      font-family: 'DM Sans', sans-serif;
+    }
+    .shift-row {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 16px;
+      transition: border-color 120ms;
+    }
+    .shift-row:hover { border-color: var(--color-border-light); }
+    .shift-row-header {
+      min-width: 160px; flex-shrink: 0;
+    }
+    .shift-row-name {
+      font-weight: 600; font-size: 14px;
+      color: var(--color-text-primary);
+    }
+    .shift-row-time {
+      font-size: 12px; color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+    .shift-row-staff {
+      flex: 1; display: flex; flex-wrap: wrap;
+      gap: 6px; align-items: center;
+      min-height: 38px; padding: 4px;
+      border-radius: 6px;
+      transition: background 120ms, outline-color 120ms;
+    }
+    .shift-row-staff.drop-target-valid {
+      background: var(--color-success-dim);
+      outline: 2px dashed var(--color-success);
+      outline-offset: -2px;
+    }
+    .shift-row-staff.drop-target-invalid {
+      background: var(--color-danger-dim);
+      outline: 2px dashed var(--color-danger);
+      outline-offset: -2px;
+    }
+    .shift-row-empty {
+      font-size: 12px; color: var(--color-text-muted);
+      font-style: italic; padding: 0 4px;
+    }
+    .staff-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px 3px 4px;
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-border);
+      border-radius: 18px;
+      font-size: 13px; font-weight: 500;
+      color: var(--color-text-primary);
+      position: relative;
+      user-select: none;
+      transition: border-color 120ms, transform 120ms;
+    }
+    .staff-pill[draggable="true"] { cursor: grab; }
+    .staff-pill[draggable="true"]:active { cursor: grabbing; }
+    .staff-pill[draggable="true"]:hover { border-color: var(--color-accent); }
+    .staff-pill.dragging { opacity: 0.4; }
+    .staff-pill .pill-remove {
+      display: none;
+      width: 16px; height: 16px; line-height: 16px;
+      text-align: center; border-radius: 50%;
+      background: var(--color-danger); color: #fff;
+      font-size: 11px; font-weight: 700;
+      cursor: pointer; margin-left: 2px;
+    }
+    .staff-pill:hover .pill-remove { display: inline-block; }
+    .add-staff-btn {
+      background: none;
+      border: 1px dashed var(--color-border);
+      color: var(--color-text-muted);
+      cursor: pointer; padding: 4px 12px;
+      border-radius: 14px; font-size: 12px;
+      font-family: inherit; font-weight: 500;
+      transition: all 120ms;
+    }
+    .add-staff-btn:hover {
+      border-color: var(--color-accent);
+      border-style: solid;
+      color: var(--color-accent);
+      background: var(--color-accent-dim);
+    }
+    .pick-staff-list {
+      display: flex; flex-direction: column; gap: 4px;
+      max-height: 320px; overflow-y: auto;
+    }
+    .pick-staff-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 8px;
+      cursor: pointer;
+      transition: background 120ms;
+    }
+    .pick-staff-row:hover { background: var(--color-surface-alt); }
+    .pick-staff-empty {
+      padding: 16px; text-align: center;
+      color: var(--color-text-muted);
+      font-size: 13px;
+    }
+
     /* Sidebar shortcuts hint button */
     .shortcuts-btn {
       background: none; border: none;
@@ -2495,6 +2608,148 @@
       `;
     }
 
+    // ── Shift-centric schedule layout ──
+    const _DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const _DAY_INDEX = Object.fromEntries(_DAY_ORDER.map((d, i) => [d, i]));
+
+    function formatShiftTime(t) {
+      if (!t) return '';
+      const [h, m] = String(t).split(':').map(Number);
+      if (!Number.isFinite(h)) return String(t);
+      const ampm = h >= 12 ? 'pm' : 'am';
+      const h12 = h % 12 || 12;
+      return m === 0 ? `${h12}${ampm}` : `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+    }
+
+    function dateForDay(weekStart, dayName) {
+      const idx = _DAY_INDEX[dayName];
+      if (idx == null) return '';
+      const d = parseDate(weekStart);
+      d.setDate(d.getDate() + idx);
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${months[d.getMonth()]} ${d.getDate()}`;
+    }
+
+    // Returns: [{ shift: {id,name,day_of_week,start_time,end_time}, staff: [{staffId,staffName,roleName}], hours }]
+    // Sorted by Mon-Sun then start_time. Shifts with no assignments are still included.
+    function buildShiftCentricRows(schedule, shifts) {
+      const byShiftId = new Map();
+      (shifts || []).forEach(s => {
+        byShiftId.set(s.id, { shift: s, staff: [], hours: shiftHoursOf(s) });
+      });
+      const keyToId = {};
+      (shifts || []).forEach(s => {
+        if (s && s.day_of_week && s.name && s.id != null) keyToId[`${s.day_of_week}|${s.name}`] = s.id;
+      });
+      (schedule?.staff || []).forEach(member => {
+        const staffEntry = {
+          staffId: member.staffId ?? member.id,
+          staffName: member.staffName || member.name || '',
+          roleName: member.roleName || member.role || '',
+        };
+        Object.entries(member.shifts || {}).forEach(([day, list]) => {
+          (list || []).forEach(s => {
+            const name = typeof s === 'string' ? s : (s.shiftName || s.name || '');
+            const sid = keyToId[`${day}|${name}`];
+            if (sid != null && byShiftId.has(sid)) {
+              byShiftId.get(sid).staff.push(staffEntry);
+            }
+          });
+        });
+      });
+      const rows = Array.from(byShiftId.values());
+      rows.sort((a, b) => {
+        const da = _DAY_INDEX[a.shift.day_of_week] ?? 99;
+        const db = _DAY_INDEX[b.shift.day_of_week] ?? 99;
+        if (da !== db) return da - db;
+        return String(a.shift.start_time || '').localeCompare(String(b.shift.start_time || ''));
+      });
+      return rows;
+    }
+
+    function renderShiftCentricSchedule(schedule, shifts, settings, isCurrentWeek) {
+      const rows = buildShiftCentricRows(schedule, shifts);
+      if (rows.length === 0) {
+        return `<div class="card" style="padding:0">${renderEmptyState('📅', 'No shifts configured', 'Add some shifts in Settings → Shifts, then assign staff.', 'Open Settings', "navigateTo('settings')")}</div>`;
+      }
+      const weekStart = (schedule && schedule.weekStart) || currentScheduleWeek;
+      const editable = !!isCurrentWeek;
+
+      // Group by day
+      const byDay = new Map();
+      _DAY_ORDER.forEach(d => byDay.set(d, []));
+      rows.forEach(r => {
+        const d = r.shift.day_of_week || 'Other';
+        if (!byDay.has(d)) byDay.set(d, []);
+        byDay.get(d).push(r);
+      });
+
+      const groupsHtml = _DAY_ORDER
+        .filter(day => (byDay.get(day) || []).length > 0)
+        .map(day => {
+          const date = dateForDay(weekStart, day);
+          const shiftHtml = byDay.get(day).map(row => renderShiftRow(row, weekStart, editable)).join('');
+          return `
+            <div class="shifts-day-group">
+              <div class="day-header">${day}<span class="day-header-date">${date}</span></div>
+              ${shiftHtml}
+            </div>`;
+        }).join('');
+
+      return groupsHtml;
+    }
+
+    function renderShiftRow(row, weekStart, editable) {
+      const s = row.shift;
+      const time = `${formatShiftTime(s.start_time)} – ${formatShiftTime(s.end_time)}`;
+      const assignedIds = row.staff.map(st => st.staffId);
+      const pillsHtml = row.staff.map(st => renderStaffPill(st, s.id, weekStart, editable)).join('');
+      const addBtn = editable
+        ? `<button class="add-staff-btn" onclick="openAddStaffToShift(${s.id}, ${JSON.stringify(s.name)}, ${JSON.stringify(assignedIds)})">+ Add</button>`
+        : '';
+      const dropAttrs = editable ? `
+        ondragover="onShiftRowDragOver(event)"
+        ondragleave="onShiftRowDragLeave(event)"
+        ondrop="onShiftRowDrop(event)"
+      ` : '';
+      const empty = (!row.staff.length && !editable)
+        ? '<span class="shift-row-empty">No one assigned</span>'
+        : '';
+      return `
+        <div class="shift-row" data-shift-id="${s.id}">
+          <div class="shift-row-header">
+            <div class="shift-row-name">${escapeHtml(s.name || 'Shift')}</div>
+            <div class="shift-row-time">${time}</div>
+          </div>
+          <div class="shift-row-staff" data-shift-id="${s.id}" ${dropAttrs}>
+            ${pillsHtml}
+            ${empty}
+            ${addBtn}
+          </div>
+        </div>`;
+    }
+
+    function renderStaffPill(staffEntry, shiftId, weekStart, editable) {
+      const name = staffEntry.staffName || '';
+      const dragAttrs = editable ? `
+        draggable="true"
+        data-staff-id="${staffEntry.staffId}"
+        data-from-shift-id="${shiftId}"
+        data-week-start="${weekStart}"
+        ondragstart="onStaffPillDragStart(event)"
+        ondragend="onStaffPillDragEnd(event)"
+      ` : '';
+      const removeBtn = editable
+        ? `<span class="pill-remove" onclick="removeStaffFromShift(event, ${staffEntry.staffId}, ${shiftId})" title="Remove">×</span>`
+        : '';
+      return `
+        <span class="staff-pill" ${dragAttrs}>
+          ${renderAvatar(name, 22)}
+          <span>${escapeHtml(name)}</span>
+          ${removeBtn}
+        </span>`;
+    }
+
     function buildShiftMap(shifts) {
       // (day_of_week + '|' + shiftName) → shift_id
       const map = {};
@@ -2787,7 +3042,16 @@
         ? `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">${generateBtn}${approveBtn}${copyBtn}</div>`
         : '';
 
-      return banner + actionBar + renderScheduleTable(schedule, false, shifts || [], settings || {}, !!isCurrentWeek);
+      // Week-nav header (lives outside the table now since we no longer use renderScheduleTable for the full view)
+      const atCurrent = currentScheduleWeek === getCurrentWeekStart();
+      const weekNav = `
+        <div class="schedule-nav" style="margin-bottom:12px">
+          <button class="schedule-nav-btn" onclick="changeScheduleWeek(-7)">&larr; Prev</button>
+          <span class="schedule-nav-label">Week of ${formatWeekRange(currentScheduleWeek)}</span>
+          <button class="schedule-nav-btn" onclick="changeScheduleWeek(7)" ${atCurrent ? 'disabled style="opacity:.35;cursor:not-allowed"' : ''}>Next &rarr;</button>
+        </div>`;
+
+      return banner + actionBar + weekNav + renderShiftCentricSchedule(schedule, shifts || [], settings || {}, !!isCurrentWeek);
     }
 
     async function loadSchedulePage() {
@@ -2809,82 +3073,76 @@
       }
     }
 
-    // ── Drag/drop handlers ──
-    function onPillDragStart(e) {
+    // ── Shift-centric drag/drop handlers ──
+    // Drag SOURCE: a staff pill on a shift row.
+    // Drop TARGET: a different shift row's staff container.
+    // Operation: MOVE staff from from-shift to to-shift.
+    function onStaffPillDragStart(e) {
       const pill = e.currentTarget;
       _dragState = {
-        staffId: pill.dataset.staffId,
-        shiftId: pill.dataset.shiftId,
-        shiftName: pill.dataset.shiftName,
-        day: pill.dataset.day,
-        weekStart: pill.dataset.weekStart,
+        staffId:    pill.dataset.staffId,
+        fromShiftId: pill.dataset.fromShiftId,
+        weekStart:  pill.dataset.weekStart,
       };
       pill.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', pill.dataset.staffId);
     }
-    function onPillDragEnd(e) {
+    function onStaffPillDragEnd(e) {
       e.currentTarget.classList.remove('dragging');
       document.querySelectorAll('.drop-target-valid, .drop-target-invalid')
         .forEach(el => el.classList.remove('drop-target-valid', 'drop-target-invalid'));
     }
-    function onCellDragOver(e) {
+    function onShiftRowDragOver(e) {
       e.preventDefault();
       if (!_dragState) return;
-      const cell = e.currentTarget;
-      const targetStaffId = cell.dataset.staffId;
-      const targetDay     = cell.dataset.day;
-      const sameStaff = String(targetStaffId) === String(_dragState.staffId);
-      const sameDay   = targetDay === _dragState.day;
-      const cellHasPills = !!cell.querySelector('.shift-pill');
-
-      if (sameStaff || !sameDay || cellHasPills) {
-        cell.classList.add('drop-target-invalid');
-        cell.classList.remove('drop-target-valid');
+      const target = e.currentTarget;
+      const toShiftId = target.dataset.shiftId;
+      const sameShift = String(toShiftId) === String(_dragState.fromShiftId);
+      // Already-on-this-shift check: does target row contain a pill with the dragged staffId?
+      const alreadyOn = !!target.querySelector(`.staff-pill[data-staff-id="${_dragState.staffId}"]`);
+      if (sameShift || alreadyOn) {
+        target.classList.add('drop-target-invalid');
+        target.classList.remove('drop-target-valid');
         e.dataTransfer.dropEffect = 'none';
       } else {
-        cell.classList.add('drop-target-valid');
-        cell.classList.remove('drop-target-invalid');
+        target.classList.add('drop-target-valid');
+        target.classList.remove('drop-target-invalid');
         e.dataTransfer.dropEffect = 'move';
       }
     }
-    function onCellDragLeave(e) {
+    function onShiftRowDragLeave(e) {
       e.currentTarget.classList.remove('drop-target-valid', 'drop-target-invalid');
     }
-    async function onCellDrop(e) {
+    async function onShiftRowDrop(e) {
       e.preventDefault();
-      const cell = e.currentTarget;
-      cell.classList.remove('drop-target-valid', 'drop-target-invalid');
+      const target = e.currentTarget;
+      target.classList.remove('drop-target-valid', 'drop-target-invalid');
       if (!_dragState) return;
 
-      const targetStaffId = cell.dataset.staffId;
-      const targetDay     = cell.dataset.day;
-      const sameStaff = String(targetStaffId) === String(_dragState.staffId);
-      const sameDay   = targetDay === _dragState.day;
-      const cellHasPills = !!cell.querySelector('.shift-pill');
+      const toShiftId = target.dataset.shiftId;
+      const sameShift = String(toShiftId) === String(_dragState.fromShiftId);
+      const alreadyOn = !!target.querySelector(`.staff-pill[data-staff-id="${_dragState.staffId}"]`);
 
-      if (sameStaff && sameDay) { _dragState = null; return; }
-      if (!sameDay) { showToast('Drag within the same day to swap staff', 'error'); _dragState = null; return; }
-      if (cellHasPills) { showToast('That cell is already filled', 'error'); _dragState = null; return; }
+      if (sameShift) { _dragState = null; return; }
+      if (alreadyOn) { showToast('That employee is already on this shift', 'error'); _dragState = null; return; }
 
-      const fromStaffId = _dragState.staffId;
-      const shiftId     = _dragState.shiftId;
-      const weekStart   = _dragState.weekStart;
+      const { staffId, fromShiftId, weekStart } = _dragState;
       _dragState = null;
 
       try {
-        await api('/api/schedule/swap', 'POST', {
-          fromStaffId, toStaffId: targetStaffId, shiftId, weekStart,
+        await api('/api/schedule/move', 'POST', {
+          staffId, fromShiftId, toShiftId, weekStart,
         });
-        _lastAction = { type: 'swap', fromStaffId, toStaffId: targetStaffId, shiftId, weekStart };
+        _lastAction = { type: 'move', staffId, fromShiftId, toShiftId, weekStart };
         await loadSchedulePage();
-        showUndoToast('Shift swapped');
+        showUndoToast('Shift moved');
       } catch (err) {
-        showToast(err.message || 'Failed to swap', 'error');
+        showToast(err.message || 'Failed to move', 'error');
       }
     }
 
-    async function removeAssignment(e, staffId, shiftId) {
+    async function removeStaffFromShift(e, staffId, shiftId) {
       e.stopPropagation();
       const weekStart = currentScheduleWeek;
       if (weekStart !== getCurrentWeekStart()) return;
@@ -2892,9 +3150,46 @@
       try {
         await api('/api/schedule/assign', 'DELETE', { staffId, shiftId, weekStart });
         await loadSchedulePage();
-        showUndoToast('Shift removed');
+        showUndoToast('Removed from shift');
       } catch (err) {
-        showToast('Failed to remove', 'error');
+        showToast(err.message || 'Failed to remove', 'error');
+      }
+    }
+
+    async function openAddStaffToShift(shiftId, shiftName, alreadyAssignedIds) {
+      const assigned = new Set((alreadyAssignedIds || []).map(String));
+      let allStaff = [];
+      try { allStaff = await api('/api/staff') || []; }
+      catch (e) { showToast('Could not load staff', 'error'); return; }
+      const candidates = allStaff.filter(s => !assigned.has(String(s.id)));
+
+      const body = candidates.length === 0
+        ? '<div class="pick-staff-empty">All staff are already on this shift.</div>'
+        : `<div class="pick-staff-list">
+            ${candidates.map(s => `
+              <div class="pick-staff-row" onclick="confirmAddStaffToShift(${s.id}, ${shiftId}, ${JSON.stringify(s.name || '')})">
+                ${renderAvatar(s.name || '', 28)}
+                <div>
+                  <div style="font-weight:500">${escapeHtml(s.name || '')}</div>
+                  <div style="font-size:12px;color:var(--color-text-muted)">${escapeHtml(s.role || '')}</div>
+                </div>
+              </div>`).join('')}
+          </div>`;
+
+      showModal(`Add staff to ${shiftName}`, body, null, 'Cancel');
+    }
+
+    async function confirmAddStaffToShift(staffId, shiftId, staffName) {
+      // Close the modal
+      document.getElementById('modal-backdrop')?.remove();
+      const weekStart = currentScheduleWeek;
+      try {
+        await api('/api/schedule/assign', 'POST', { staffId, shiftId, weekStart });
+        _lastAction = { type: 'add', staffId, shiftId, weekStart };
+        await loadSchedulePage();
+        showUndoToast(`${staffName} added`);
+      } catch (err) {
+        showToast(err.message || 'Failed to assign', 'error');
       }
     }
 
@@ -2921,14 +3216,25 @@
       const toast = document.getElementById('undo-toast');
       if (toast) { if (toast._timeout) clearTimeout(toast._timeout); toast.remove(); }
       try {
-        if (action.type === 'swap') {
-          await api('/api/schedule/swap', 'POST', {
-            fromStaffId: action.toStaffId, toStaffId: action.fromStaffId,
-            shiftId: action.shiftId, weekStart: action.weekStart,
+        if (action.type === 'move') {
+          await api('/api/schedule/move', 'POST', {
+            staffId: action.staffId,
+            fromShiftId: action.toShiftId,
+            toShiftId: action.fromShiftId,
+            weekStart: action.weekStart,
           });
         } else if (action.type === 'remove') {
           await api('/api/schedule/assign', 'POST', {
             staffId: action.staffId, shiftId: action.shiftId, weekStart: action.weekStart,
+          });
+        } else if (action.type === 'add') {
+          await api('/api/schedule/assign', 'DELETE', {
+            staffId: action.staffId, shiftId: action.shiftId, weekStart: action.weekStart,
+          });
+        } else if (action.type === 'swap') {
+          await api('/api/schedule/swap', 'POST', {
+            fromStaffId: action.toStaffId, toStaffId: action.fromStaffId,
+            shiftId: action.shiftId, weekStart: action.weekStart,
           });
         }
         await loadSchedulePage();
