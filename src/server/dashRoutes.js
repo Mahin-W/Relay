@@ -705,28 +705,38 @@ router.post('/schedule/assign', async (req, res) => {
     }
 
     const db = supabase()
-    const [staffCheck, shiftCheck] = await Promise.all([
-      db.from('staff').select('id, name, role, cross_training').eq('id', staffId).eq('group_id', groupId).single(),
-      db.from('shifts').select('id, name').eq('id', shiftId).eq('group_id', groupId).single(),
-    ])
-    if (!staffCheck.data) return res.status(404).json({ error: 'Staff not found' })
-    if (!shiftCheck.data) return res.status(404).json({ error: 'Shift not found' })
 
-    // B2: role mismatch check
-    const { data: requirements } = await db
-      .from('shift_requirements')
-      .select('role, count')
-      .eq('shift_id', shiftId)
-    if (requirements && requirements.length > 0) {
-      const requiredRoles = [...new Set(requirements.map(r => r.role))]
-      const staffRole = staffCheck.data.role
-      const crossTraining = staffCheck.data.cross_training || []
-      const roleMatch = requiredRoles.includes(staffRole) ||
-        crossTraining.some(ct => requiredRoles.includes(ct))
-      if (!roleMatch) {
-        return res.status(409).json({
-          error: `Role mismatch: ${staffRole} cannot fill ${shiftCheck.data.name} (requires: ${requiredRoles.join(', ')})`,
-        })
+    // Fetch staff + shift defensively. Use maybeSingle() so a missing row
+    // returns null instead of erroring, and DON'T 404 here — drag/drop's
+    // /schedule/move route trusts the IDs and lets the FK constraint catch
+    // truly invalid ones, so we do the same. We only use these rows for the
+    // role-match check and the notification message; both are skipped
+    // gracefully if the lookup couldn't resolve.
+    const [staffCheck, shiftCheck] = await Promise.all([
+      db.from('staff').select('id, name, role, cross_training').eq('id', staffId).eq('group_id', groupId).maybeSingle(),
+      db.from('shifts').select('id, name').eq('id', shiftId).eq('group_id', groupId).maybeSingle(),
+    ])
+    const staffRow = staffCheck.data || null
+    const shiftRow = shiftCheck.data || null
+
+    // B2: role mismatch check (only if both staff + shift were resolved AND
+    // the shift actually has explicit requirements)
+    if (staffRow && shiftRow) {
+      const { data: requirements } = await db
+        .from('shift_requirements')
+        .select('role, count')
+        .eq('shift_id', shiftId)
+      if (requirements && requirements.length > 0) {
+        const requiredRoles = [...new Set(requirements.map(r => r.role))]
+        const staffRole = staffRow.role
+        const crossTraining = staffRow.cross_training || []
+        const roleMatch = requiredRoles.includes(staffRole) ||
+          crossTraining.some(ct => requiredRoles.includes(ct))
+        if (!roleMatch) {
+          return res.status(409).json({
+            error: `Role mismatch: ${staffRole} cannot fill ${shiftRow.name} (requires: ${requiredRoles.join(', ')})`,
+          })
+        }
       }
     }
 
@@ -746,17 +756,25 @@ router.post('/schedule/assign', async (req, res) => {
     const { error } = await db
       .from('schedule_assignments')
       .insert({ group_id: groupId, staff_id: staffId, shift_id: shiftId, week_start: weekStart, status: 'scheduled' })
-    if (error) throw error
+    if (error) {
+      // Surface the underlying DB error message — usually FK violation
+      // ("Key (staff_id)=(...) is not present in table 'staff'") which is
+      // far more diagnostic than a generic 500.
+      console.error('POST /schedule/assign insert error:', error.message)
+      return res.status(400).json({ error: error.message || 'Could not save assignment' })
+    }
 
     res.json({ success: true })
-    // fire-and-forget notification
+    // fire-and-forget notification (best-effort; uses fallback names)
     const bot = req.app.locals.bot
+    const notifyName = staffRow?.name || `Staff #${staffId}`
+    const notifyShift = shiftRow?.name || `Shift #${shiftId}`
     getSessionChats(db, groupId).then(({ managerDm }) =>
-      safeSend(bot, managerDm, `✅ ${staffCheck.data.name} added to ${shiftCheck.data.name} via dashboard.`)
+      safeSend(bot, managerDm, `✅ ${notifyName} added to ${notifyShift} via dashboard.`)
     ).catch(() => {})
   } catch (err) {
     console.error('POST /schedule/assign error:', err.message)
-    res.status(500).json({ error: 'Failed to assign schedule' })
+    res.status(500).json({ error: err.message || 'Failed to assign schedule' })
   }
 })
 

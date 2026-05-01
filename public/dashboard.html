@@ -2644,6 +2644,26 @@
       return m === 0 ? `${h12}${ampm}` : `${h12}:${String(m).padStart(2, '0')}${ampm}`;
     }
 
+    // Format a start–end shift range with smart AM/PM inference for end times
+    // stored as bare hours (e.g. "4" with no AM/PM context). If the end hour
+    // is numerically less than the start AND the start is in the daytime,
+    // assume the end is PM (h+12). Avoids "12pm – 4am" for afternoon shifts.
+    function formatShiftTimeRange(startStr, endStr) {
+      const sh = Number(String(startStr || '').split(':')[0]);
+      let eh   = Number(String(endStr   || '').split(':')[0]);
+      let adjustedEnd = endStr;
+      if (Number.isFinite(sh) && Number.isFinite(eh)
+          && eh < sh && sh >= 7 && sh < 16
+          && eh >= 1 && eh <= 11) {
+        eh += 12;
+        const endParts = String(endStr).split(':');
+        adjustedEnd = endParts.length > 1
+          ? `${eh}:${endParts.slice(1).join(':')}`
+          : String(eh);
+      }
+      return `${formatShiftTime(startStr)} – ${formatShiftTime(adjustedEnd)}`;
+    }
+
     function dateForDay(weekStart, dayName) {
       const idx = _DAY_INDEX[dayName];
       if (idx == null) return '';
@@ -2705,7 +2725,7 @@
       } else {
         body = rows.map(r => {
           const s = r.shift;
-          const time = `${formatShiftTime(s.start_time)} – ${formatShiftTime(s.end_time)}`;
+          const time = formatShiftTimeRange(s.start_time, s.end_time);
           const staffCell = r.staff.length === 0
             ? '<span style="color:var(--text-muted);font-size:12px;font-style:italic">— empty —</span>'
             : r.staff.map(st => `
@@ -2776,7 +2796,7 @@
 
     function renderShiftRow(row, weekStart, editable) {
       const s = row.shift;
-      const time = `${formatShiftTime(s.start_time)} – ${formatShiftTime(s.end_time)}`;
+      const time = formatShiftTimeRange(s.start_time, s.end_time);
       const assignedIds = row.staff.map(st => st.staffId);
       const pillsHtml = row.staff.map(st => renderStaffPill(st, s.id, weekStart, editable)).join('');
       const addBtn = editable
