@@ -937,6 +937,29 @@
     }
     .status-badge.active  { background: var(--color-success-dim);  color: var(--color-success); }
     .status-badge.inactive { background: var(--color-surface-alt); color: var(--color-text-muted); }
+    /* Cross-training picker chips — checkbox styled as a toggle pill */
+    .ct-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-alt);
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    }
+    .ct-chip:hover { border-color: var(--color-text-muted); }
+    .ct-chip input[type="checkbox"] { margin: 0; cursor: pointer; }
+    .ct-chip:has(input:checked) {
+      background: var(--color-accent-dim);
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
     .btn-small {
       padding: 5px 10px;
       border-radius: 6px;
@@ -3600,7 +3623,16 @@
     }
 
     function renderStaffPage(staff) {
-      const rows = staff.map(s => `
+      // Cache full staff objects for the edit modal — JSON-stringifying onto an
+      // onclick handler is fragile when names contain quotes. We just look up
+      // the row by id when the user clicks Edit.
+      _staffById = Object.fromEntries((staff || []).map(s => [String(s.id), s]));
+      const rows = staff.map(s => {
+        const ct = Array.isArray(s.cross_training) ? s.cross_training : [];
+        const ctBadges = ct.length
+          ? ct.map(r => `<span class="role-badge" style="background:var(--color-surface-alt);color:var(--color-text-muted);font-size:11px;margin-left:4px" title="Cross-trained">+${escapeHtml(r)}</span>`).join('')
+          : '';
+        return `
         <tr data-staff-id="${s.id}">
           <td>
             <div style="display:flex;align-items:center;gap:10px">
@@ -3608,14 +3640,15 @@
               <span class="staff-name" data-editable data-staff-id="${s.id}" data-field="name" title="Click to edit">${escapeHtml(s.name)}</span>
             </div>
           </td>
-          <td><span class="role-badge">${escapeHtml(s.role)}</span></td>
+          <td><span class="role-badge">${escapeHtml(s.role)}</span>${ctBadges}</td>
           <td><span class="status-badge ${s.active !== false ? 'active' : 'inactive'}">${s.active !== false ? 'Active' : 'Removed'}</span></td>
           <td>${s.registered ? '✅' : '⏳'}</td>
           <td>
-            <button class="btn-small" onclick="openEditStaff(${s.id},'${escapeJs(s.name)}','${escapeJs(s.role)}')">Edit</button>
+            <button class="btn-small" onclick="openEditStaff(${s.id})">Edit</button>
             <button class="btn-small btn-danger" onclick="confirmRemoveStaff(${s.id},'${escapeJs(s.name)}')">Remove</button>
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
 
       setContent(`
         <div class="page-header">
@@ -3636,6 +3669,7 @@
 
     // ── Role picker (dropdown + "Add new role…" escape hatch) ──
     let _rolesCache = null;
+    let _staffById = {};
     async function getKnownRoles(forceReload = false) {
       if (_rolesCache && !forceReload) return _rolesCache;
       try { _rolesCache = await api('/api/roles') || []; }
@@ -3695,22 +3729,61 @@
         }, 'Add Staff');
     }
 
-    async function openEditStaff(id, name, role) {
+    async function openEditStaff(id) {
+      const staff = _staffById[String(id)];
+      if (!staff) { showToast('Staff record not found — refresh the page', 'error'); return; }
+      const { name, role } = staff;
+      const crossTraining = Array.isArray(staff.cross_training) ? staff.cross_training : [];
       const roles = await getKnownRoles();
       showModal(`Edit ${name}`,
         `<label>Name</label><input id="m-name" value="${escapeHtml(name)}" />
-         <label>Role</label>${buildRoleSelectHtml('m-role', role, roles)}`,
+         <label>Role</label>${buildRoleSelectHtml('m-role', role, roles)}
+         <label style="margin-top:14px">Also trained for <span style="color:var(--color-text-muted);font-weight:400;font-size:12px">— other roles this person can cover</span></label>
+         <div id="m-cross-training">${buildCrossTrainingPickerHtml(role, roles, crossTraining)}</div>`,
         async () => {
           const newName = document.getElementById('m-name').value.trim();
           const newRole = getRoleFromSelect('m-role');
           if (!newName || !newRole) { showToast('Name and role required', 'error'); return; }
+          const newCrossTraining = readCrossTrainingPicker();
           try {
-            await api(`/api/staff/${id}`, 'PATCH', { name: newName, role: newRole });
+            await api(`/api/staff/${id}`, 'PATCH', { name: newName, role: newRole, cross_training: newCrossTraining });
             invalidateRolesCache();
             showToast('Staff updated');
             loadStaffPage();
           } catch (e) { showToast(e.message, 'error'); }
         }, 'Save Changes');
+      // Re-render cross-training options whenever the primary role changes,
+      // so the primary role can't appear in its own cross-training list.
+      const roleSel = document.getElementById('m-role');
+      if (roleSel) {
+        roleSel.addEventListener('change', () => {
+          const currentChecked = readCrossTrainingPicker();
+          const currentPrimary = getRoleFromSelect('m-role');
+          const wrap = document.getElementById('m-cross-training');
+          if (wrap) wrap.innerHTML = buildCrossTrainingPickerHtml(currentPrimary, roles, currentChecked);
+        });
+      }
+    }
+
+    function buildCrossTrainingPickerHtml(primaryRole, roles, currentCrossTraining) {
+      const primaryKey = (primaryRole || '').trim().toLowerCase();
+      const checkedKeys = new Set((currentCrossTraining || []).map(r => String(r).trim().toLowerCase()));
+      const eligible = (roles || [])
+        .map(r => r.role)
+        .filter(r => r && r.trim().toLowerCase() !== primaryKey);
+      if (eligible.length === 0) {
+        return `<div style="color:var(--color-text-muted);font-size:13px;padding:6px 0">No other roles defined yet.</div>`;
+      }
+      const chips = eligible.map(r => {
+        const checked = checkedKeys.has(r.trim().toLowerCase()) ? 'checked' : '';
+        return `<label class="ct-chip"><input type="checkbox" name="ct" value="${escapeHtml(r)}" ${checked} />${escapeHtml(r)}</label>`;
+      }).join('');
+      return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${chips}</div>`;
+    }
+
+    function readCrossTrainingPicker() {
+      const boxes = document.querySelectorAll('#m-cross-training input[name="ct"]:checked');
+      return Array.from(boxes).map(b => b.value);
     }
 
     function confirmRemoveStaff(id, name) {

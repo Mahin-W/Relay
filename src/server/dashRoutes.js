@@ -352,13 +352,17 @@ router.get('/staff', async (req, res) => {
     const db = supabase()
     const { data: staffList, error } = await db
       .from('staff')
-      .select('id, name, role, active, created_at')
+      .select('id, name, role, active, created_at, cross_training')
       .eq('group_id', groupId)
       .or('active.is.null,active.eq.true')
       .order('name', { ascending: true })
     if (error) throw error
     // registered status is complex to derive without user_id on staff; return false for all
-    const result = (staffList || []).map(s => ({ ...s, registered: false }))
+    const result = (staffList || []).map(s => ({
+      ...s,
+      cross_training: Array.isArray(s.cross_training) ? s.cross_training : [],
+      registered: false,
+    }))
     res.json(result)
   } catch (err) {
     console.error('GET /staff error:', err.message)
@@ -400,7 +404,7 @@ router.patch('/staff/:id', async (req, res) => {
     const db = supabase()
     const { data: existing, error: findErr } = await db
       .from('staff')
-      .select('id, name')
+      .select('id, name, role')
       .eq('id', id)
       .eq('group_id', groupId)
       .single()
@@ -408,6 +412,23 @@ router.patch('/staff/:id', async (req, res) => {
     const updates = {}
     if (req.body.name !== undefined) updates.name = req.body.name
     if (req.body.role !== undefined) updates.role = req.body.role
+    if (req.body.cross_training !== undefined) {
+      const incoming = Array.isArray(req.body.cross_training) ? req.body.cross_training : []
+      const primary = (updates.role ?? existing.role ?? '').trim().toLowerCase()
+      const seen = new Set()
+      const cleaned = []
+      for (const raw of incoming) {
+        if (typeof raw !== 'string') continue
+        const trimmed = raw.trim()
+        if (!trimmed) continue
+        const key = trimmed.toLowerCase()
+        if (key === primary) continue       // never cross-train your own primary role
+        if (seen.has(key)) continue          // dedupe case-insensitively
+        seen.add(key)
+        cleaned.push(trimmed)
+      }
+      updates.cross_training = cleaned
+    }
     const { data, error } = await db
       .from('staff')
       .update(updates)
