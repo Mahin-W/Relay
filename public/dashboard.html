@@ -4591,9 +4591,15 @@
 
     function addManualEntry(staffId, staffName) {
       const todayStr = formatDate(new Date());
+      // Pre-fill clock-in to current time (rounded to nearest 15 min)
+      const now = new Date();
+      const rounded = Math.round(now.getMinutes() / 15) * 15;
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(rounded === 60 ? 0 : rounded).padStart(2, '0');
+      const nowStr = `${hh}:${mm}`;
       showModal(`Add clock entry — ${staffName}`, `
         <label>Date</label><input type="date" id="manual-date" value="${todayStr}" />
-        <label>Clock In</label><input type="time" id="manual-in" />
+        <label>Clock In</label><input type="time" id="manual-in" value="${nowStr}" />
         <label>Clock Out (optional)</label><input type="time" id="manual-out" />
       `, async () => {
         const date = document.getElementById('manual-date').value;
@@ -4782,6 +4788,11 @@
     }
 
     async function deleteRevenueType(id) {
+      const ok = await showConfirmModal(
+        'Remove this category?',
+        'New revenue entries will no longer offer this category. Past entries keep their original category.',
+        'Remove', 'Cancel');
+      if (!ok) return;
       try {
         await api(`/api/revenue/types/${id}`, 'DELETE');
         invalidateRevenueTypesCache();
@@ -5217,7 +5228,11 @@
     }
 
     async function deleteRule(id) {
-      if (!confirm('Delete this rule?')) return;
+      const ok = await showConfirmModal(
+        'Delete this rule?',
+        'The rule will stop applying to future schedules. This cannot be undone.',
+        'Delete', 'Cancel');
+      if (!ok) return;
       try {
         await api(`/api/rules/${id}`, 'DELETE');
         showToast('Rule deleted');
@@ -5277,7 +5292,11 @@
     }
 
     async function deleteShift(id, name) {
-      if (!confirm(`Delete shift "${name}"?`)) return;
+      const ok = await showConfirmModal(
+        `Delete shift "${escapeHtml(name)}"?`,
+        'This shift definition will be removed. Past assignments and payroll history are kept.',
+        'Delete', 'Cancel');
+      if (!ok) return;
       try {
         await api(`/api/shifts/${id}`, 'DELETE');
         showToast(`Shift "${name}" deleted`);
