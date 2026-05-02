@@ -668,6 +668,20 @@ cron.schedule('*/15 * * * *', async () => {
   }
 })
 
+// Coverage-fill escalation: 30/60/120-min ladder for unanswered coverage requests.
+cron.schedule('*/10 * * * *', async () => {
+  try {
+    const { runEscalationSweep } = await import('./coverage/escalationCron.js')
+    const result = await runEscalationSweep(bot)
+    if (result.advanced > 0) {
+      logger.info(`Coverage escalation sweep: ${result.advanced} of ${result.processed} requests advanced`)
+    }
+  } catch (err) {
+    logger.error(`Coverage escalation cron error: ${err.message}`)
+  }
+})
+logger.info('Coverage escalation cron started (every 10 minutes)')
+
 process.on('SIGINT', () => {
   logger.bot('Shutting down gracefully...')
   bot.stopPolling()
