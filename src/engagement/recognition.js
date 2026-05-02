@@ -13,8 +13,15 @@ const TRIGGER_PHRASES = [
   'kudos', 'props to',
   'big thanks', 'thank you', 'thanks to',
   'appreciate',
-  'killed it', 'crushed it',
+  'killed it', 'crushed it', 'killing it', 'crushing it',
   'mvp', 'stepped up', 'came through', 'clutch',
+  // Common manager/staff praise patterns
+  'was amazing', 'is amazing', 'were amazing',
+  'love what', 'loved what', 'love how',
+  'awesome', 'phenomenal', 'rockstar', 'rock star',
+  'on fire', 'absolute legend',
+  'such a',  // "such a help/lifesaver/star"
+  'made my night', 'saved my night', 'saved tonight',
 ]
 
 // Single-word triggers that need staff/team context to fire

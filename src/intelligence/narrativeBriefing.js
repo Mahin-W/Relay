@@ -1,4 +1,4 @@
-import { groq, groqWithRetry } from '../parsers/groq.js'
+import { llmCreate, llmWithRetry } from '../parsers/llm.js'
 import { logger } from '../logger.js'
 import { generateTurnoverRiskReport, formatTurnoverRiskAlert } from './turnoverRisk.js'
 
@@ -107,9 +107,8 @@ export async function generateNarrativeBriefing(groupId, weekStart, db = null) {
   const userPrompt = `Write a weekly briefing for a restaurant manager. Data: ${JSON.stringify(stats)}`
 
   try {
-    const response = await groqWithRetry(() =>
-      groq.chat.completions.create({
-        model: 'llama-3.3-70b',
+    const response = await llmWithRetry(() =>
+      llmCreate({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

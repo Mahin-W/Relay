@@ -7,7 +7,15 @@ const NEGATIVE_KEYWORDS = ['ugh', 'hate', 'again', 'always me', 'whatever', 'fin
 const NEGATIVE_ADJECTIVES = ['awful', 'terrible', 'bad', 'horrible', 'worst', 'shit', 'sucks', 'miserable', 'exhausting']
 
 // BUG D3: distress phrases
-const DISTRESS_PHRASES = ["hard time", "burned out", "burnt out", "overwhelmed", "can't keep", "cant keep", "not sure i can", "breaking point", "at my limit", "done", "hate this job", "miserable here"]
+const DISTRESS_PHRASES = [
+  "hard time", "burned out", "burnt out", "overwhelmed",
+  "can't keep", "cant keep", "not sure i can", "breaking point",
+  "at my limit", "done", "hate this job", "miserable here",
+  // Additional distress patterns
+  "making me miserable", "making me crazy", "fed up",
+  "had enough", "checked out", "checking out",
+  "this job is making", "i'm miserable", "im miserable",
+]
 
 function _intensifierFollowedByNegativeAdj(lower) {
   const words = lower.split(/\s+/)
@@ -32,7 +40,11 @@ export function detectDistressSignal(text) {
 
 export function detectResignationIntent(text) {
   if (!text) return false
-  return /\b(two\s*weeks?|2\s*weeks?|putting?\s+in\s+my\s+notice|last\s+day|quit(ting)?\s*(tomorrow|next|soon|today)?|moving\s+on|handing\s+in\s+my\s+notice|final\s+shift)\b/i.test(text)
+  // Hard signals — explicit resignation language
+  const hard = /\b(two\s*weeks?|2\s*weeks?|putting?\s+in\s+my\s+notice|last\s+day|quit(ting)?\s*(tomorrow|next|soon|today)?|moving\s+on|handing\s+in\s+my\s+notice|final\s+shift)\b/i
+  // Soft signals — manager should be warned
+  const soft = /\b(thinking\s+about\s+(leaving|quitting)|considering\s+(leaving|quitting)|might\s+(quit|leave)|need\s+to\s+(leave|move\s+on)|done\s+with\s+this\s+(job|place))\b/i
+  return hard.test(text) || soft.test(text)
 }
 
 export function detectRemovalIntent(text) {

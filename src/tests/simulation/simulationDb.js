@@ -242,7 +242,20 @@ export class SimulationDb extends MockDB {
   }
 
   // ── Clock / time entries ─────────────────────────────────────────────────
-  async clockIn(data) {
+  // Accepts BOTH:
+  //   - (data) object form (legacy)
+  //   - (groupId, userId, staffId, shiftId, rawText) supabase-shape form (clockDb.js calls this)
+  async clockIn(...args) {
+    let data
+    if (args.length === 1 && typeof args[0] === 'object') {
+      data = args[0]
+    } else {
+      const [groupId, userId, staffId, shiftId, rawText] = args
+      data = {
+        group_id: String(groupId), user_id: userId, staff_id: staffId,
+        shift_id: shiftId, clock_in_raw: rawText,
+      }
+    }
     // BH.32: idempotency — reject if an open entry already exists for this user/staff
     const existingOpen = this.timeEntries.find(e =>
       e.user_id === data.user_id &&
@@ -253,12 +266,16 @@ export class SimulationDb extends MockDB {
     const row = { id: this._nextId(), ...data, clock_in: data.clock_in ?? this._ts(), clock_out: null, created_at: this._ts() }
     this.timeEntries.push(row); return row
   }
-  async clockOut(entryId, clockOutTime = null) {
+  async clockOut(entryId, secondArg = null) {
     const e = this.timeEntries.find(x => x.id === entryId)
     if (!e) return null
     // D.02: idempotency — never overwrite an existing clock_out
     if (e.clock_out != null) return null
-    e.clock_out = clockOutTime ?? this._ts()
+    // secondArg may be a raw text (clockDb.js form) or an ISO timestamp (legacy form).
+    // ISO strings start with a digit and contain 'T'; raw text usually doesn't.
+    const looksIso = typeof secondArg === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(secondArg)
+    e.clock_out = looksIso ? secondArg : this._ts()
+    if (!looksIso && secondArg) e.clock_out_raw = secondArg
     return e
   }
   async manualClockIn(data) { return this.clockIn(data) }
@@ -435,8 +452,11 @@ export class SimulationDb extends MockDB {
     return bs
   }
   async saveRecognitionEvent(groupId, managerId, recognition) {
-    const row = { id: this._nextId(), group_id: String(groupId), recipient_id: recognition.recipientStaffId ?? null,
-      recipient_name: recognition.recipientName ?? null, message: recognition.reason ?? recognition.originalText ?? null,
+    const row = { id: this._nextId(), group_id: String(groupId),
+      recipient_id: recognition.recipientStaffId ?? null,
+      recipient_name: recognition.recipientName ?? null,
+      recipient_type: recognition.recipientType ?? null,
+      message: recognition.reason ?? recognition.originalText ?? null,
       created_at: this._ts() }
     this.recognitionEvents.push(row); return row
   }
@@ -533,7 +553,20 @@ export class SimulationDb extends MockDB {
   }
 
   // ── Time off ─────────────────────────────────────────────────────────────
-  async saveTimeOffRequest(row) {
+  // Accepts BOTH:
+  //   - (row) object form (legacy)
+  //   - (groupId, telegramId, name, date, weekStart) supabase-shape form
+  async saveTimeOffRequest(...args) {
+    let row
+    if (args.length === 1 && typeof args[0] === 'object') {
+      row = args[0]
+    } else {
+      const [groupId, telegramId, staffName, requestedDate, weekStart] = args
+      row = {
+        group_id: String(groupId), staff_telegram_id: telegramId,
+        staff_name: staffName, requested_date: requestedDate, week_start: weekStart,
+      }
+    }
     const withId = { id: this._nextId(), status: 'pending', ...row, requested_at: this._ts() }
     this.timeOffRequests.push(withId); return withId
   }

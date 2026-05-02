@@ -818,11 +818,14 @@ router.post('/schedule/assign', async (req, res) => {
       .from('schedule_assignments')
       .insert({ group_id: groupId, staff_id: staffId, shift_id: shiftId, week_start: weekStart, status: 'scheduled' })
     if (error) {
-      // Surface the underlying DB error message — usually FK violation
-      // ("Key (staff_id)=(...) is not present in table 'staff'") which is
-      // far more diagnostic than a generic 500.
       console.error('POST /schedule/assign insert error:', error.message)
-      return res.status(400).json({ error: error.message || 'Could not save assignment' })
+      // Distinguish client-error (FK violation, bad shape) from server-error
+      // (connection failure, timeout). FK / type errors mention "Key" or
+      // "violates"; everything else (network, RLS) is a 500.
+      const msg = error.message || ''
+      const isClientErr = /violates|Key \(.+\) is not present|invalid input syntax|duplicate key/i.test(msg)
+      const status = isClientErr ? 400 : 500
+      return res.status(status).json({ error: msg || 'Could not save assignment' })
     }
 
     res.json({ success: true })

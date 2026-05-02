@@ -90,9 +90,15 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
     if (!body.staffId || !body.shiftId || !body.weekStart) {
       return { status: 400, body: { error: 'staffId, shiftId, weekStart required' } }
     }
-
-    // B3: reject past weekStart (>= 7 days before today)
+    // Validate weekStart format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.weekStart))) {
+      return { status: 400, body: { error: 'weekStart must be YYYY-MM-DD' } }
+    }
     const weekStartDate = new Date(body.weekStart)
+    if (isNaN(weekStartDate.getTime())) {
+      return { status: 400, body: { error: 'weekStart is not a valid date' } }
+    }
+    // B3: reject past weekStart (>= 7 days before today)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     sevenDaysAgo.setHours(0, 0, 0, 0)
     if (weekStartDate < sevenDaysAgo) {
@@ -248,6 +254,349 @@ export async function simulateDashboardRequest(db, method, path, body = {}, toke
       await db.saveTipSettings(groupId, { ...s, mode: body.tipMode })
     }
     return { status: 200, body: { ok: true } }
+  }
+
+  // ── Dashboard summary ───────────────────────────────────────────────────
+  if (M === 'GET' && path.startsWith('/api/dashboard/overview')) {
+    const session = await db.getSetupSession(groupId)
+    const ws = new URL('http://x' + path).searchParams.get('week') ||
+      new Date().toISOString().slice(0, 10)
+    const staff = db.staff.filter(s => s.group_id === groupId && s.active !== false)
+    const shifts = db.shifts.filter(s => s.group_id === groupId)
+    const assignments = db.scheduleAssignments.filter(a =>
+      a.group_id === groupId && a.week_start === ws)
+    const open = await db.getOpenCoverageRequests(groupId)
+    const payroll = await db.getPayrollForWeek(groupId, ws)
+    const totalLabor = payroll.reduce((s, r) => s + (Number(r.total_gross_pay) || 0), 0)
+    const quality = (await db.getQualityHistory(groupId, 1)).slice(-1)[0]
+    return {
+      status: 200, body: {
+        restaurantName: session?.restaurant_name || session?.group_name,
+        weekStart: ws,
+        staffCount: staff.length,
+        shiftsThisWeek: assignments.length,
+        coverageRequests: open.length,
+        avgFillMinutes: 10,
+        laborCost: totalLabor,
+        qualityScore: quality?.score ?? null,
+        qualityGrade: quality?.grade ?? null,
+        lastWeek: { shiftsCount: 0 },
+      }
+    }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/dashboard/intelligence')) {
+    const insights = []
+    const recent = await db.getMoraleEvents(groupId, null, 4)
+    const negative = recent.filter(e => e.sentiment === 'negative')
+    if (negative.length > 5) insights.push({ type: 'morale', message: 'Team morale trending negative' })
+    return { status: 200, body: { insights } }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/dashboard/activity')) {
+    return { status: 200, body: db.coverageRequests.slice(-20).reverse() }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/dashboard/schedule')) {
+    const ws = new URL('http://x' + path).searchParams.get('week')
+    return { status: 200, body: await db.getScheduleAssignments(groupId, ws) }
+  }
+
+  // ── Schedule generate / approve / move / swap ───────────────────────────
+  if (M === 'POST' && path === '/api/schedule/generate') {
+    if (!body.weekStart) return { status: 400, body: { error: 'weekStart required' } }
+    try {
+      const { generateWeeklySchedule } = await import('../../schedule/generateSchedule.js')
+      const mockData = {
+        shifts: db.shifts.filter(x => x.group_id === groupId),
+        staff: db.staff.filter(x => x.group_id === groupId && x.active !== false && x.user_id).map(x => ({
+          id: x.id, name: x.name, role: x.role, userId: x.user_id, dmChatId: x.dm_chat_id,
+        })),
+        availability: db.availability.filter(a => a.group_id === groupId && a.week_start === body.weekStart),
+        requirements: db.shiftRequirements,
+        rules: await db.getRules(groupId),
+        maxShiftsPerDay: 2,
+      }
+      const draft = await generateWeeklySchedule(groupId, body.weekStart, mockData)
+      // Persist to the test-store generatedSchedules so /approve can find it
+      if (typeof db.saveGeneratedSchedule === 'function') {
+        await db.saveGeneratedSchedule(groupId, body.weekStart, draft.assignments, draft.gaps)
+      }
+      return { status: 200, body: draft }
+    } catch (err) {
+      return { status: 500, body: { error: err.message } }
+    }
+  }
+
+  if (M === 'POST' && path === '/api/schedule/approve') {
+    if (!body.weekStart) return { status: 400, body: { error: 'weekStart required' } }
+    const draft = (db.generatedSchedules || []).slice().reverse()
+      .find(s => s.group_id === groupId && s.week_start === body.weekStart)
+    if (!draft?.assignments) return { status: 404, body: { error: 'No draft for this week' } }
+    db.scheduleAssignments = db.scheduleAssignments.filter(a =>
+      !(a.group_id === groupId && a.week_start === body.weekStart))
+    for (const a of draft.assignments) {
+      const shift = db.shifts.find(s => s.id === a.shiftId)
+      db.scheduleAssignments.push({
+        id: db._nextId(), group_id: groupId, staff_id: a.staffId, shift_id: a.shiftId,
+        week_start: body.weekStart, day_of_week: shift?.day_of_week ?? null, status: 'scheduled',
+      })
+    }
+    return { status: 200, body: { success: true, count: draft.assignments.length } }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/schedule/status')) {
+    const ws = new URL('http://x' + path).searchParams.get('week')
+    const assignments = await db.getPublishedSchedule(groupId, ws)
+    return {
+      status: 200, body: {
+        weekStart: ws, isPublished: assignments.length > 0,
+        publishedAt: assignments[0]?.created_at ?? null,
+        count: assignments.length,
+      }
+    }
+  }
+
+  if (M === 'POST' && path === '/api/schedule/swap') {
+    if (!body.fromStaffId || !body.toStaffId || !body.shiftId || !body.weekStart) {
+      return { status: 400, body: { error: 'fromStaffId, toStaffId, shiftId, weekStart required' } }
+    }
+    const fromAssignment = db.scheduleAssignments.find(a =>
+      a.group_id === groupId && a.staff_id === body.fromStaffId &&
+      a.shift_id === body.shiftId && a.week_start === body.weekStart)
+    if (!fromAssignment) return { status: 404, body: { error: 'Assignment not found' } }
+    fromAssignment.staff_id = body.toStaffId
+    return { status: 200, body: { success: true, swapped: fromAssignment } }
+  }
+
+  if (M === 'POST' && path === '/api/schedule/move') {
+    if (!body.staffId || !body.fromShiftId || !body.toShiftId || !body.weekStart) {
+      return { status: 400, body: { error: 'staffId, fromShiftId, toShiftId, weekStart required' } }
+    }
+    const a = db.scheduleAssignments.find(x =>
+      x.group_id === groupId && x.staff_id === body.staffId &&
+      x.shift_id === body.fromShiftId && x.week_start === body.weekStart)
+    if (!a) return { status: 404, body: { error: 'Assignment not found' } }
+    a.shift_id = body.toShiftId
+    const shift = db.shifts.find(s => s.id === body.toShiftId)
+    if (shift) a.day_of_week = shift.day_of_week
+    return { status: 200, body: { success: true, moved: a } }
+  }
+
+  if (M === 'DELETE' && path === '/api/schedule/assign') {
+    const before = db.scheduleAssignments.length
+    db.scheduleAssignments = db.scheduleAssignments.filter(a =>
+      !(a.group_id === groupId && a.staff_id === body.staffId &&
+        a.shift_id === body.shiftId && a.week_start === body.weekStart))
+    return { status: 200, body: { success: true, removed: before - db.scheduleAssignments.length } }
+  }
+
+  // ── Payroll GET, override ───────────────────────────────────────────────
+  if (M === 'GET' && path.startsWith('/api/payroll/planned')) {
+    const ws = new URL('http://x' + path).searchParams.get('week')
+    const assignments = await db.getPublishedSchedule(groupId, ws)
+    const rows = []
+    let total = 0
+    for (const s of db.staff.filter(x => x.group_id === groupId && x.active !== false)) {
+      const myShifts = assignments.filter(a => a.staff_id === s.id)
+      const hours = myShifts.length * 6 // rough
+      const rate = Number(s.hourlyRate) || 15
+      const cost = hours * rate
+      total += cost
+      rows.push({ staffId: s.id, name: s.name, hours, rate, plannedCost: cost })
+    }
+    return { status: 200, body: { totalPlannedCost: total, rows } }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/payroll')) {
+    const ws = new URL('http://x' + path).searchParams.get('week')
+    return { status: 200, body: await db.getPayrollForWeek(groupId, ws) }
+  }
+
+  if (M === 'PATCH' && path === '/api/payroll/override') {
+    if (!body.staffId || !body.weekStart) return { status: 400, body: { error: 'staffId, weekStart required' } }
+    const row = await db.savePeriodPayroll({
+      group_id: groupId, staff_id: body.staffId, week_start: body.weekStart,
+      total_hours: body.totalHours ?? 0,
+      total_late_minutes: 0, total_late_deduction: 0,
+      total_gross_pay: body.totalGrossPay ?? 0,
+      shift_breakdown: body.adjustments ?? {},
+    })
+    return { status: 200, body: row }
+  }
+
+  // ── Tips ─────────────────────────────────────────────────────────────────
+  if (M === 'POST' && path === '/api/tips') {
+    if (typeof body.totalTips !== 'number' && typeof body.tipAmount !== 'number') {
+      return { status: 400, body: { error: 'totalTips required' } }
+    }
+    const total = body.totalTips ?? body.tipAmount
+    const row = await db.saveTipRecord({
+      group_id: groupId, shift_date: body.shiftDate ?? body.weekStart ?? new Date().toISOString().slice(0, 10),
+      total_tips: total, splits: [], split_method: 'hours', mode: 'pool',
+    })
+    return { status: 200, body: row }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/tips')) {
+    return { status: 200, body: await db.getTipHistory(groupId, 4) }
+  }
+
+  // ── Revenue ──────────────────────────────────────────────────────────────
+  if (M === 'POST' && path === '/api/revenue/daily') {
+    if (!body.date || typeof body.amount !== 'number') {
+      return { status: 400, body: { error: 'date and amount required' } }
+    }
+    if (body.amount < 0) {
+      return { status: 400, body: { error: 'amount must be >= 0' } }
+    }
+    const row = { id: db._nextId(), group_id: groupId, entry_date: body.date,
+      amount: body.amount, category: body.category ?? 'general',
+      note: body.note ?? null, created_at: new Date().toISOString() }
+    db.weeklyRevenue.push(row) // approximate — real impl uses daily_revenue table
+    return { status: 201, body: row }
+  }
+
+  if (M === 'GET' && path.startsWith('/api/revenue/daily')) {
+    const ws = new URL('http://x' + path).searchParams.get('weekStart')
+    const days = db.weeklyRevenue.filter(r => r.group_id === groupId)
+    const weekTotal = days.reduce((s, r) => s + (r.amount ?? r.revenue ?? 0), 0)
+    return { status: 200, body: { days, weekTotal } }
+  }
+
+  if (M === 'GET' && path === '/api/revenue/types') {
+    db._revenueTypes ??= [{ id: 1, name: 'Dine-in' }, { id: 2, name: 'Takeout' }]
+    return { status: 200, body: db._revenueTypes.filter(t => !t._deleted) }
+  }
+  if (M === 'POST' && path === '/api/revenue/types') {
+    if (!body.name) return { status: 400, body: { error: 'name required' } }
+    db._revenueTypes ??= [{ id: 1, name: 'Dine-in' }, { id: 2, name: 'Takeout' }]
+    const row = { id: db._nextId(), name: body.name, group_id: groupId }
+    db._revenueTypes.push(row)
+    return { status: 201, body: row }
+  }
+  if (M === 'DELETE' && path.startsWith('/api/revenue/types/')) {
+    const id = Number(path.split('/').pop())
+    db._revenueTypes ??= []
+    const t = db._revenueTypes.find(x => x.id === id)
+    if (t) t._deleted = true
+    return { status: 200, body: { success: true } }
+  }
+
+  // ── Coverage ─────────────────────────────────────────────────────────────
+  if (M === 'GET' && path.startsWith('/api/coverage')) {
+    return { status: 200, body: await db.getOpenCoverageRequests(groupId) }
+  }
+  if (M === 'POST' && path === '/api/coverage') {
+    if (!body.staffId || !body.shiftId || !body.weekStart) {
+      return { status: 400, body: { error: 'staffId, shiftId, weekStart required' } }
+    }
+    const row = await db.saveRequest(groupId, 'Group', `Shift ${body.shiftId}`, 'manager', null)
+    return { status: 201, body: row }
+  }
+
+  // ── Timeclock weekly ─────────────────────────────────────────────────────
+  if (M === 'GET' && path.startsWith('/api/timeclock/weekly')) {
+    const ws = new URL('http://x' + path).searchParams.get('weekStart')
+    const entries = await db.getTimeEntriesForWeek(groupId, ws)
+    return { status: 200, body: { weekStart: ws, entries, count: entries.length } }
+  }
+
+  // ── Events / Activity ────────────────────────────────────────────────────
+  if (M === 'GET' && path.startsWith('/api/events')) {
+    return {
+      status: 200, body: {
+        events: [
+          ...db.coverageRequests.slice(-10).map(r => ({
+            id: r.id, title: r.shift_description, eventType: 'coverage',
+            timestamp: r.created_at, meta: r,
+          })),
+        ]
+      }
+    }
+  }
+
+  // ── Settings full ────────────────────────────────────────────────────────
+  if (M === 'GET' && path === '/api/settings') {
+    const session = await db.getSetupSession(groupId)
+    const tip = await db.getTipSettings(groupId)
+    const ot = await db.getOvertimeSettings(groupId)
+    const budget = await db.getBudget(groupId)
+    return {
+      status: 200, body: {
+        restaurantName: session?.restaurant_name ?? session?.group_name,
+        restaurant: { name: session?.restaurant_name ?? session?.group_name },
+        tips: tip,
+        overtime: ot,
+        weeklyBudget: budget?.weekly_budget,
+        timeclockEnabled: session?.setup_data?.timeclockEnabled ?? true,
+      }
+    }
+  }
+  if (M === 'GET' && path === '/api/settings/full') {
+    const settings = (await simulateDashboardRequest(db, 'GET', '/api/settings', {}, token)).body
+    return {
+      status: 200, body: {
+        ...settings,
+        roles: db.roleRates.filter(r => r.group_id === groupId),
+        coverageRules: db.businessRules.filter(r => r.group_id === groupId),
+      }
+    }
+  }
+
+  // ── Roles ────────────────────────────────────────────────────────────────
+  if (M === 'GET' && path === '/api/roles') {
+    return { status: 200, body: db.roleRates.filter(r => r.group_id === groupId) }
+  }
+  if (M === 'POST' && path === '/api/roles') {
+    if (!body.name) return { status: 400, body: { error: 'name required' } }
+    const row = { id: db._nextId(), group_id: groupId, role: body.name, rate: body.rate ?? 0 }
+    db.roleRates.push(row)
+    return { status: 201, body: row }
+  }
+
+  // ── Shifts DELETE / PATCH requirements ───────────────────────────────────
+  if (M === 'DELETE' && path.startsWith('/api/shifts/')) {
+    const id = Number(path.split('/').pop())
+    db.shifts = db.shifts.filter(s => s.id !== id)
+    return { status: 200, body: { success: true } }
+  }
+  if (M === 'PUT' && path.match(/^\/api\/shifts\/\d+\/requirements$/)) {
+    const id = Number(path.split('/')[3])
+    db.shiftRequirements = db.shiftRequirements.filter(r => r.shift_id !== id)
+    for (const req of (body.requirements || [])) {
+      db.shiftRequirements.push({ id: db._nextId(), shift_id: id, role: req.role, count: req.count })
+    }
+    return { status: 200, body: { success: true, count: (body.requirements || []).length } }
+  }
+
+  // ── Rules DELETE ─────────────────────────────────────────────────────────
+  if (M === 'DELETE' && path.startsWith('/api/rules/')) {
+    const id = Number(path.split('/').pop())
+    await db.deactivateRule(id)
+    return { status: 200, body: { success: true } }
+  }
+
+  // ── Rates ────────────────────────────────────────────────────────────────
+  if (M === 'POST' && path === '/api/rates') {
+    if (!body.roleName || typeof body.hourlyRate !== 'number') {
+      return { status: 400, body: { error: 'roleName and hourlyRate required' } }
+    }
+    if (body.hourlyRate < 0 || body.hourlyRate > 500) {
+      return { status: 400, body: { error: 'hourlyRate must be 0–500' } }
+    }
+    const row = await db.updateRoleRate(groupId, body.roleName, body.hourlyRate)
+    return { status: 200, body: row }
+  }
+
+  // ── Intelligence (alias) ─────────────────────────────────────────────────
+  if (M === 'GET' && path.startsWith('/api/intelligence')) {
+    return simulateDashboardRequest(db, 'GET', '/api/dashboard/intelligence', {}, token)
+  }
+
+  // ── Activity (alias) ─────────────────────────────────────────────────────
+  if (M === 'GET' && path === '/api/activity') {
+    return { status: 200, body: { events: db.coverageRequests.slice(-20).reverse() } }
   }
 
   return { status: 404, body: { error: `No handler for ${M} ${path}` } }

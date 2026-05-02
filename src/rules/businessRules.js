@@ -1,4 +1,4 @@
-import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from '../parsers/groq.js'
+import { llmCreate, llmWithRetry, extractJSON } from '../parsers/llm.js'
 import { getRules, deactivateRule, saveRule } from './rulesDb.js'
 
 // ── extractRule (LLM) ────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ Return JSON (no markdown):
 If the message is not a scheduling rule, return: {"isRule": false}`
 
 export async function extractRule(text, staff, shifts, groupId) {
-  // Lazy import to avoid module-level crash when CEREBRAS_API_KEY is missing
-  const { groqWithRetry, extractJSON, groq } = await import('../parsers/groq.js')
+  // Lazy import to avoid module-level crash when no LLM key is set
+  const { llmWithRetry, extractJSON, llmCreate } = await import('../parsers/llm.js')
   const staffNames = staff.map(s => s.name).join(', ')
   const shiftNames = shifts.map(s => `${s.name} (${s.dayOfWeek} ${s.startTime}-${s.endTime})`).join(', ')
 
@@ -39,9 +39,8 @@ Message: "${text}"
 
 Extract the scheduling rule if present.`
 
-  const response = await groqWithRetry(() =>
-    groq.chat.completions.create({
-      model: GROQ_MODEL,
+  const response = await llmWithRetry(() =>
+    llmCreate({
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: RULE_SYSTEM_PROMPT },

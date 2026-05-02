@@ -1,4 +1,4 @@
-import { groq, groqWithRetry, extractJSON, GROQ_MODEL } from '../parsers/groq.js'
+import { llmCreate, llmWithRetry, extractJSON } from '../parsers/llm.js'
 import { saveCrossTraining, removeCrossTraining, getAllCrossTraining } from './crossTrainingDb.js'
 import { logger } from '../logger.js'
 
@@ -44,9 +44,8 @@ export async function extractCrossTrainingMention(text, staff, roles) {
     .replace('{roles}', roleNames)
 
   try {
-    const response = await groqWithRetry(() =>
-      groq.chat.completions.create({
-        model: GROQ_MODEL,
+    const response = await llmWithRetry(() =>
+      llmCreate({
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: systemPrompt },

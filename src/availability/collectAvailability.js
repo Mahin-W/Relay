@@ -185,9 +185,24 @@ function keysForDays(shiftMap, canonicalDays) {
 // shiftMap accepts: { "1": shiftId } OR { "1": { id, day_of_week, ... } }
 export function parseAvailabilityResponse(text, shiftMap) {
   if (text == null) return { type: 'unclear' }
-  const lower = text.toLowerCase().trim()
+  // Tolerate common misspellings of "available" before further analysis.
+  // Pattern: starts with 'av', then 4-7 letters that include any of a/i/l/b
+  // and end with 'e' or 'le'. Caps common typos: avaliable, avalable,
+  // avilable, availible, availalbe, avaible, avliable, etc.
+  const normalized = String(text)
+    .replace(/\bav[a-z]{3,7}\b/gi, m => /^av[ai][a-z]*l[a-z]*b[a-z]*[el]e?$/i.test(m) ? 'available' : m)
+    .toLowerCase()
+  const lower = normalized.trim()
 
-  if (/^(off|can'?t|no|nope|none|unavailable|not available|busy all week)$/i.test(lower)) {
+  // Unavailable — short phrases or natural inflections
+  if (/^(off|can'?t|cant|no|nope|none|unavailable|not available|busy all week)$/i.test(lower)) {
+    return { type: 'unavailable' }
+  }
+  // Looser unavailable: "none this week", "cant work", "cannot work", "i'm out", "can't make it"
+  if (/^(?:i'?m\s+)?(?:out|done|booked|slammed)\s*(?:this|next)?\s*(?:week|month)?$/.test(lower)
+      || /\b(none|nothing)\s+(?:this|next)\s+week\b/.test(lower)
+      || /\b(can'?t|cant|cannot|won'?t)\s+(work|make\s+it|do\s+(?:any|it))\b/.test(lower)
+      || /^not\s+available\b/.test(lower)) {
     return { type: 'unavailable' }
   }
 
@@ -195,7 +210,19 @@ export function parseAvailabilityResponse(text, shiftMap) {
   if (/^(all|all shifts|every shift|every day|all week|available all|yes all)$/i.test(lower)) {
     return { type: 'all_week' }
   }
-  if (lower.length <= 20 && /\ball\b/.test(lower) && /\b(good|yes|yeah|works|fine|sure|ok|free)\b/.test(lower)) {
+  // Phrases like "all of them", "all of those", "all good", "all 6", "yes to all", "every day works"
+  if (/^all\s+of\s+(them|those|it)\b/.test(lower)
+      || /^yes\s+to\s+all\b/.test(lower)
+      || /^every\s+day\s+(works|fine|good|ok)\b/.test(lower)
+      || /^all\s+\d+\b/.test(lower)
+      || /^all\s+six\b/.test(lower)) {
+    return { type: 'all_week' }
+  }
+  if (lower.length <= 25 && /\b(all|every)\b/.test(lower) && /\b(week|day|shift|shifts|good|yes|yeah|works|fine|sure|ok|free|available)\b/.test(lower)) {
+    return { type: 'all_week' }
+  }
+  // Length-agnostic strong signal: "available" + "all" + week/shift/day
+  if (/\bavailable\b/.test(lower) && /\b(all|every)\b/.test(lower) && /\b(week|shift|shifts|day|days)\b/.test(lower)) {
     return { type: 'all_week' }
   }
 

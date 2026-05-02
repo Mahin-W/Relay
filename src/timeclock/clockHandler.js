@@ -24,14 +24,26 @@ function formatDuration(clockIn, clockOut) {
   return `${hours}h ${mins}m`
 }
 
-async function resolveStaffId(userId, groupId) {
+async function resolveStaffId(userId, groupId, db = null) {
   try {
-    const allStaff = await getStaffForGroup(groupId)
-    const dmPool = await getGroupMembersWithDm(groupId)
+    // Fast path: if db has direct lookup, use it
+    if (db?.getStaffByUserId) {
+      const direct = await db.getStaffByUserId(userId, groupId)
+      if (direct?.id) return direct.id
+    }
+
+    const _getStaffForGroup = db?.getStaffForGroup ?? getStaffForGroup
+    const _getGroupMembersWithDm = db?.getGroupMembersWithDm ?? getGroupMembersWithDm
+    const allStaff = await _getStaffForGroup(groupId)
+    const dmPool = await _getGroupMembersWithDm(groupId)
     const member = dmPool.find(m => String(m.userId) === String(userId))
-    if (!member) return null
+    if (!member) {
+      // Last-resort: match staff directly by user_id field if mock DB exposes it
+      const direct = (allStaff || []).find(s => String(s.user_id) === String(userId))
+      return direct?.id ?? null
+    }
     const nameLower = (member.firstName || '').toLowerCase().trim()
-    const matched = allStaff.find(s => {
+    const matched = (allStaff || []).find(s => {
       const sLower = (s.name || '').toLowerCase().trim()
       return sLower === nameLower || nameLower.startsWith(sLower) || sLower.startsWith(nameLower)
     })
@@ -59,7 +71,7 @@ export async function handleClockIn(bot, msg, db = null) {
     return true
   }
 
-  const staffId = await resolveStaffId(userId, groupId)
+  const staffId = await resolveStaffId(userId, groupId, db)
   const today = getTodayDayName()
 
   // Find today's shift(s)
@@ -180,19 +192,32 @@ async function resolveGroupId(userId, db = null) {
     const managerGroup = await _getManagerGroup(userId)
     if (managerGroup) return managerGroup.group_id
 
-    // Not a manager — check group_members for their group
-    if (db?.getGroupForUser) return db.getGroupForUser(userId)
+    // Not a manager — check via injected db first
+    if (db?.getGroupForUser) {
+      const result = await db.getGroupForUser(userId)
+      // Result might be { group_id } or just a string id
+      if (typeof result === 'string') return result
+      return result?.group_id ?? null
+    }
+    if (db?.getStaffByUserId) {
+      const staff = await db.getStaffByUserId(userId)
+      if (staff?.group_id) return staff.group_id
+    }
 
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-    const { data } = await supabase
-      .from('group_members')
-      .select('group_id')
-      .eq('user_id', userId)
-      .order('last_seen', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    return data?.group_id ?? null
+    // Fall back to direct supabase only when no db was provided
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+      const { data } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', userId)
+        .order('last_seen', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      return data?.group_id ?? null
+    }
+    return null
   } catch {
     return null
   }

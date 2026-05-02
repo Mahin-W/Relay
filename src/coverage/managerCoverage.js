@@ -11,7 +11,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { groq, groqWithRetry, GROQ_MODEL } from '../parsers/groq.js'
+import { llmCreate, llmWithRetry } from '../parsers/llm.js'
 import { logger } from '../logger.js'
 
 // ── Supabase client (lazy) ────────────────────────────────────────────────────
@@ -117,9 +117,8 @@ export async function detectManagerCoverageRequest(text, shiftNames) {
       ? `Available shifts: ${shiftNames.join(', ')}`
       : 'No shifts provided.'
 
-    const completion = await groqWithRetry(() =>
-      groq.chat.completions.create({
-        model: GROQ_MODEL,
+    const completion = await llmWithRetry(() =>
+      llmCreate({
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: MANAGER_COVERAGE_SYSTEM_PROMPT },

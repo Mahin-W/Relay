@@ -8,14 +8,23 @@ const HIGH_KEYWORDS = [
   'big event', 'full house', 'packed', 'large party', 'reservation',
   'expecting a crowd', 'game day', 'holiday', 'festival', 'graduation',
   'birthday party', 'special event', 'sold out', 'fully booked', 'rush',
+  // Common manager phrases for "going to be busy"
+  'biggest ever', 'biggest night', 'huge night', 'huge crowd',
+  'crushing it', 'going to be crushed', "we're crushed", 'wave coming',
+  'standing room only', 'expecting a packed', 'packed house',
+  'massive night', 'all hands', 'big crowd',
 ]
 
 const LOW_KEYWORDS = [
   'slow week', 'light week', 'probably slow', 'not much going on',
   'slow night', 'light covers', 'off season', 'quiet week',
+  // Common manager phrases for "going to be slow"
+  'ghost town', 'tumbleweeds', 'crickets in here',
+  'nobody coming', 'nobody booked', 'no one tonight',
 ]
 
-const SINGLE_HIGH = ['busy']
+// Whole-word triggers — short, common single words
+const SINGLE_HIGH = ['busy', 'slammed', 'jammed', 'mobbed', 'pumping']
 const SINGLE_LOW = ['slow', 'quiet', 'dead']
 
 const FALSE_POSITIVE_PATTERNS = [
@@ -26,6 +35,12 @@ const FALSE_POSITIVE_PATTERNS = [
   'deadline',
   'quiet down',
   'rush hour',
+  // Don't fire on questions about being busy/slow
+  'are you busy',
+  'are we busy',
+  'is it busy',
+  'how busy',
+  'how slow',
 ]
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']

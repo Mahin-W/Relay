@@ -34,8 +34,23 @@ function targetTierForAge(ageMin) {
 // Exported for unit testing.
 export { targetTierForAge }
 
-async function getOutreachedUsers(supabase, requestId) {
-  const { data, error } = await supabase
+// Detect whether `db` is the Supabase client or an abstract test store.
+// Test stores expose mutable arrays directly (coverageRequests, etc.); supabase
+// only exposes `.from()`/`.auth`/`.realtime`. We check for the array directly
+// because Proxy-backed mock DBs may also resolve `db.from` as a function.
+function isSupabase(db) {
+  if (!db) return false
+  if (Array.isArray(db.coverageRequests)) return false  // test store
+  if (Array.isArray(db.scheduleAssignments)) return false  // test store
+  return typeof db.from === 'function'
+}
+
+async function getOutreachedUsers(db, requestId) {
+  if (!isSupabase(db)) {
+    const rows = (db.coverageOutreach || []).filter(r => r.request_id === requestId)
+    return [...new Set(rows.map(r => r.user_id).filter(Boolean))]
+  }
+  const { data, error } = await db
     .from('coverage_outreach')
     .select('user_id')
     .eq('request_id', requestId)
@@ -46,8 +61,13 @@ async function getOutreachedUsers(supabase, requestId) {
   return [...new Set((data || []).map(r => r.user_id).filter(Boolean))]
 }
 
-async function getManagerDm(supabase, groupId) {
-  const { data, error } = await supabase
+async function getManagerDm(db, groupId) {
+  if (!isSupabase(db)) {
+    const row = (db.setupSessions || []).find(s => String(s.group_id) === String(groupId))
+    if (!row) return null
+    return { managerId: row.manager_id, dmChatId: row.dm_chat_id, groupName: row.group_name }
+  }
+  const { data, error } = await db
     .from('setup_sessions')
     .select('manager_id, dm_chat_id, group_name')
     .eq('group_id', groupId)
@@ -56,9 +76,15 @@ async function getManagerDm(supabase, groupId) {
   return { managerId: data.manager_id, dmChatId: data.dm_chat_id, groupName: data.group_name }
 }
 
-async function getStaffDmsByUserIds(supabase, userIds) {
+async function getStaffDmsByUserIds(db, userIds) {
   if (userIds.length === 0) return []
-  const { data, error } = await supabase
+  if (!isSupabase(db)) {
+    const idSet = new Set(userIds)
+    return (db.staff || [])
+      .filter(s => idSet.has(s.user_id) && s.dm_chat_id)
+      .map(s => ({ user_id: s.user_id, first_name: s.name, dm_chat_id: s.dm_chat_id }))
+  }
+  const { data, error } = await db
     .from('staff_dms')
     .select('user_id, first_name, dm_chat_id')
     .in('user_id', userIds)
@@ -74,15 +100,24 @@ function buildShiftLabel(req) {
   return 'shift'
 }
 
-async function sendTier1Reminder(bot, req, supabase) {
-  const outreachedUserIds = await getOutreachedUsers(supabase, req.id)
+async function recordOutreach(db, requestId, userId) {
+  if (!isSupabase(db)) {
+    db.coverageOutreach = db.coverageOutreach || []
+    db.coverageOutreach.push({ request_id: requestId, user_id: userId, asked_at: new Date().toISOString() })
+    return
+  }
+  await db.from('coverage_outreach').insert({ request_id: requestId, user_id: userId })
+}
+
+async function sendTier1Reminder(bot, req, db) {
+  const outreachedUserIds = await getOutreachedUsers(db, req.id)
   // Don't ping the original requester back.
   const targets = outreachedUserIds.filter(uid => uid !== req.requester_telegram_id)
   if (targets.length === 0) {
     logger.bot(`escalation tier 1: no outreached users to remind for request ${req.id}`)
     return
   }
-  const dms = await getStaffDmsByUserIds(supabase, targets)
+  const dms = await getStaffDmsByUserIds(db, targets)
   const shiftLabel = buildShiftLabel(req)
   const text =
     `⏰ *Reminder — coverage still needed*\n\n` +
@@ -94,8 +129,7 @@ async function sendTier1Reminder(bot, req, supabase) {
     if (!m.dm_chat_id) continue
     try {
       await bot.sendMessage(m.dm_chat_id, text, { parse_mode: 'Markdown' })
-      // Record this re-outreach so future cron runs see the timestamp.
-      await supabase.from('coverage_outreach').insert({ request_id: req.id, user_id: m.user_id })
+      await recordOutreach(db, req.id, m.user_id)
     } catch (err) {
       logger.error(`escalation tier 1: DM to ${m.first_name} failed: ${err.message}`)
     }
@@ -103,13 +137,13 @@ async function sendTier1Reminder(bot, req, supabase) {
   logger.bot(`escalation tier 1: re-DMed ${dms.length} unresponsive staff for request ${req.id}`)
 }
 
-async function sendManagerAlert(bot, req, supabase, kind /* 'hour' | 'urgent' */) {
-  const mgr = await getManagerDm(supabase, req.group_id)
+async function sendManagerAlert(bot, req, db, kind /* 'hour' | 'urgent' */) {
+  const mgr = await getManagerDm(db, req.group_id)
   if (!mgr?.dmChatId) {
     logger.warn(`escalation: no manager DM on file for group ${req.group_id}; skipping alert`)
     return
   }
-  const outreachedUserIds = await getOutreachedUsers(supabase, req.id)
+  const outreachedUserIds = await getOutreachedUsers(db, req.id)
   const askedCount = outreachedUserIds.length
   const shiftLabel = buildShiftLabel(req)
   const text = kind === 'urgent'
@@ -127,7 +161,7 @@ async function sendManagerAlert(bot, req, supabase, kind /* 'hour' | 'urgent' */
     await bot.sendMessage(mgr.dmChatId, text, { parse_mode: 'Markdown' })
     // Mark the manager-alert as an outreach row too, so visibility is consistent.
     if (mgr.managerId) {
-      await supabase.from('coverage_outreach').insert({ request_id: req.id, user_id: mgr.managerId })
+      await recordOutreach(db, req.id, mgr.managerId)
     }
     logger.bot(`escalation tier ${kind === 'urgent' ? 3 : 2}: alerted manager for request ${req.id}`)
   } catch (err) {
@@ -137,8 +171,15 @@ async function sendManagerAlert(bot, req, supabase, kind /* 'hour' | 'urgent' */
 
 // Compare-and-swap advance of the tier column. Returns true iff this caller
 // won the race and should perform the tier action.
-async function casAdvanceTier(supabase, requestId, fromTier, toTier) {
-  const { data, error } = await supabase
+async function casAdvanceTier(database, requestId, fromTier, toTier) {
+  if (!isSupabase(database)) {
+    const row = (database.coverageRequests || []).find(r =>
+      r.id === requestId && r.status === 'open' && (r.escalation_tier || 0) === fromTier)
+    if (!row) return false
+    row.escalation_tier = toTier
+    return true
+  }
+  const { data, error } = await database
     .from('coverage_requests')
     .update({ escalation_tier: toTier })
     .eq('id', requestId)
@@ -152,21 +193,32 @@ async function casAdvanceTier(supabase, requestId, fromTier, toTier) {
   return Array.isArray(data) && data.length === 1
 }
 
-export async function runEscalationSweep(bot, opts = {}) {
-  const supabase = opts.db || db()
-  const cutoff = new Date(Date.now() - TIER_THRESHOLDS_MIN[1] * 60 * 1000).toISOString()
-  const { data: open, error } = await supabase
+async function fetchOpenStale(database, cutoffIso) {
+  if (!isSupabase(database)) {
+    const cutoffMs = new Date(cutoffIso).getTime()
+    return (database.coverageRequests || []).filter(r =>
+      r.status === 'open' && new Date(r.created_at).getTime() < cutoffMs)
+  }
+  const { data, error } = await database
     .from('coverage_requests')
     .select('id, group_id, group_name, shift_description, requested_by, requester_telegram_id, matched_shift_id, week_start, created_at, escalation_tier')
     .eq('status', 'open')
-    .lt('created_at', cutoff)
+    .lt('created_at', cutoffIso)
   if (error) {
     logger.error(`escalation sweep query failed: ${error.message}`)
-    return { processed: 0, advanced: 0 }
+    return null
   }
+  return data || []
+}
+
+export async function runEscalationSweep(bot, opts = {}) {
+  const database = opts.db || db()
+  const cutoff = new Date(Date.now() - TIER_THRESHOLDS_MIN[1] * 60 * 1000).toISOString()
+  const open = await fetchOpenStale(database, cutoff)
+  if (open === null) return { processed: 0, advanced: 0 }
 
   let advanced = 0
-  for (const req of open || []) {
+  for (const req of open) {
     const ageMin = (Date.now() - new Date(req.created_at).getTime()) / 60000
     const target = targetTierForAge(ageMin)
     const current = req.escalation_tier || 0
@@ -175,18 +227,18 @@ export async function runEscalationSweep(bot, opts = {}) {
     // Advance one tier at a time so each tier gets its action even if the
     // sweep was offline through multiple thresholds.
     const next = current + 1
-    const won = await casAdvanceTier(supabase, req.id, current, next)
+    const won = await casAdvanceTier(database, req.id, current, next)
     if (!won) continue
     advanced++
 
     try {
-      if (next === 1) await sendTier1Reminder(bot, req, supabase)
-      else if (next === 2) await sendManagerAlert(bot, req, supabase, 'hour')
-      else if (next === 3) await sendManagerAlert(bot, req, supabase, 'urgent')
+      if (next === 1) await sendTier1Reminder(bot, req, database)
+      else if (next === 2) await sendManagerAlert(bot, req, database, 'hour')
+      else if (next === 3) await sendManagerAlert(bot, req, database, 'urgent')
     } catch (err) {
       logger.error(`escalation: tier ${next} action failed for request ${req.id}: ${err.message}`)
     }
   }
 
-  return { processed: (open || []).length, advanced }
+  return { processed: open.length, advanced }
 }
