@@ -1842,6 +1842,15 @@
     .schedule-cell { transition: background var(--transition-fast); }
     .schedule-cell.droppable { cursor: copy; }
 
+    /* Shift requirement chips */
+    .req-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--color-surface-alt, #F7F3EE);
+      border: 1px solid var(--color-border, #E8DFD0);
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 12px; color: var(--color-text-primary);
+    }
+
     /* ── Manual availability overlay ── */
     #avail-toggle.active {
       background: var(--color-success-dim, #E6F4ED);
@@ -2353,7 +2362,21 @@
         </div>`;
       document.body.appendChild(m);
       document.querySelector('#modal-backdrop .modal-title').textContent = title;
-      document.getElementById('modal-confirm').onclick = () => { m.remove(); onConfirm(); };
+      const confirmBtn = document.getElementById('modal-confirm');
+      confirmBtn.onclick = async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Saving…';
+        try {
+          await onConfirm();
+          // onConfirm is responsible for closing the modal on success
+          // but if it didn't, close it now
+          document.getElementById('modal-backdrop')?.remove();
+        } catch (e) {
+          // Validation errors throw intentionally — keep modal open
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = confirmLabel;
+        }
+      };
       m.addEventListener('click', e => { if (e.target === m) m.remove(); });
       document.addEventListener('keydown', function esc(e) {
         if (e.key === 'Escape') { m.remove(); document.removeEventListener('keydown', esc); }
@@ -5157,6 +5180,7 @@
           <button data-target="tips"        onclick="scrollToSection(this)">Tips</button>
           <button data-target="budget"      onclick="scrollToSection(this)">Budget</button>
           <button data-target="shifts"      onclick="scrollToSection(this)">Shifts</button>
+          <button data-target="shift-reqs"  onclick="scrollToSection(this)">Requirements</button>
           <button data-target="rules"       onclick="scrollToSection(this)">Rules</button>
         </div>
 
@@ -5337,6 +5361,42 @@
           <button class="setting-save-btn ghost" onclick="openAddShift()">+ Add Shift</button>
         </div>
 
+        <div class="settings-section" id="shift-reqs">
+          <div class="settings-section-title">Shift Requirements
+            <span style="font-size:12px;font-weight:400;color:var(--color-text-muted);margin-left:8px">
+              How many staff and which roles each shift needs
+            </span>
+          </div>
+          <div class="setting-desc" style="margin-bottom:12px">
+            These control how the auto-scheduler fills shifts. Click <b>Edit</b> on any shift to set its required roles and counts.
+          </div>
+          ${shifts.length === 0
+            ? '<div class="setting-desc">No shifts configured yet. Add shifts above first.</div>'
+            : shifts.map(s => {
+                const reqs = s.requirements || [];
+                const reqsHtml = reqs.length > 0
+                  ? reqs.map(r => `
+                      <span class="req-chip">
+                        ${r.count}× <strong>${escapeHtml(r.role)}</strong>
+                      </span>`).join('')
+                  : '<span class="setting-desc" style="font-style:italic">No requirements — shift will accept any role, 1 person</span>';
+                return `
+                <div class="setting-row" style="align-items:flex-start;gap:12px">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                      <div class="setting-label" style="margin:0">${escapeHtml(s.name)}</div>
+                      <span class="setting-desc" style="margin:0">${escapeHtml(s.dayOfWeek || '')}</span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                      ${reqsHtml}
+                    </div>
+                  </div>
+                  <button class="setting-save-btn" style="margin-top:0;padding:6px 14px;flex-shrink:0"
+                    onclick="openEditShiftReqs(${s.id})">Edit</button>
+                </div>`;
+              }).join('')}
+        </div>
+
         <div class="settings-section" id="revenue-types-section"></div>
 
         <div class="settings-section" id="rules">
@@ -5390,8 +5450,6 @@
 
     async function addRate() {
       const roles = await getKnownRoles(true);
-      // Prefer roles that don't have a rate yet, but include all so a manager
-      // can re-add if a rate was somehow lost.
       const unrated = roles.filter(r => r.rate == null);
       const list = unrated.length > 0 ? unrated : roles;
       const helpText = unrated.length === 0 && roles.length > 0
@@ -5399,19 +5457,18 @@
         : '';
       showModal('Add a role rate',
         `<label>Role</label>${buildRoleSelectHtml('new-role', '', list)}${helpText}
-         <label>Hourly rate</label><input id="new-rate" type="number" min="0" max="500" step="0.01" placeholder="15.50" />`,
+         <label>Hourly rate ($)</label><input id="new-rate" type="number" min="0" max="500" step="0.01" placeholder="15.50" />`,
         async () => {
           const roleName = getRoleFromSelect('new-role');
           const rate = parseFloat(document.getElementById('new-rate').value);
-          if (!roleName) { showToast('Choose a role', 'error'); return; }
-          if (!Number.isFinite(rate) || rate < 0) { showToast('Enter a valid hourly rate', 'error'); return; }
-          try {
-            await api('/api/rates', 'POST', { roleName, hourlyRate: rate });
-            invalidateRolesCache();
-            await loadSettingsPage();
-            showToast('Rate added');
-          } catch (e) { showToast(e.message, 'error'); }
-        }, 'Add');
+          if (!roleName) { showToast('Choose a role', 'error'); throw new Error('no role'); }
+          if (!Number.isFinite(rate) || rate < 0) { showToast('Enter a valid hourly rate', 'error'); throw new Error('bad rate'); }
+          await api('/api/rates', 'POST', { roleName, hourlyRate: rate });
+          invalidateRolesCache();
+          document.getElementById('modal-backdrop')?.remove();
+          await loadSettingsPage();
+          showToast('Rate added ✓');
+        }, 'Add Rate');
     }
 
     async function saveOvertime(ev) {
@@ -5600,6 +5657,61 @@
         showToast(`Shift "${name}" deleted`);
         loadSettingsPage();
       } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    // ── Shift Requirements editor (dedicated modal from Requirements section) ──
+    function openEditShiftReqs(shiftId) {
+      const shift = (window.__shiftCache || {})[shiftId];
+      if (!shift) { showToast('Shift data not found — refresh the page', 'error'); return; }
+
+      window.__editingReqs = (shift.requirements || []).map(r => ({ role: r.role, count: r.count }));
+
+      function reqsHtml() {
+        if (!window.__editingReqs.length) {
+          return '<div style="color:var(--color-text-muted);font-size:12px;margin-bottom:6px">No role requirements yet — shift accepts any role.</div>';
+        }
+        return window.__editingReqs.map((r, i) => `
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+            <input type="number" min="1" max="20" value="${r.count}"
+              style="width:52px;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-surface);color:var(--color-text-primary)"
+              oninput="window.__editingReqs[${i}].count = parseInt(this.value)||1">
+            <input type="text" placeholder="Role name" value="${escapeHtml(r.role || '')}"
+              style="flex:1;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-surface);color:var(--color-text-primary)"
+              oninput="window.__editingReqs[${i}].role = this.value">
+            <button style="background:none;border:none;cursor:pointer;color:var(--color-danger,#DC2626);font-size:16px;padding:0 4px;line-height:1"
+              onclick="window.__editingReqs.splice(${i},1);_redrawReqs()">×</button>
+          </div>`).join('');
+      }
+
+      function _redrawReqs() {
+        const wrap = document.getElementById('reqs-wrapper');
+        if (wrap) wrap.innerHTML = reqsHtml() +
+          `<button class="setting-save-btn ghost" style="margin-top:4px;padding:5px 12px"
+            onclick="window.__editingReqs.push({role:'',count:1});_redrawReqs()">+ Add Role</button>`;
+      }
+      window._redrawReqs = _redrawReqs;
+
+      showModal(`Requirements: ${shift.name}`,
+        `<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px">
+           ${escapeHtml(shift.dayOfWeek || '')}
+           ${shift.startTime ? '· ' + escapeHtml(shift.startTime) : ''}
+           ${shift.endTime ? '– ' + escapeHtml(shift.endTime) : ''}
+         </div>
+         <div id="reqs-wrapper">${reqsHtml()}
+           <button class="setting-save-btn ghost" style="margin-top:4px;padding:5px 12px"
+             onclick="window.__editingReqs.push({role:'',count:1});_redrawReqs()">+ Add Role</button>
+         </div>`,
+        async () => {
+          const cleaned = (window.__editingReqs || [])
+            .map(r => ({ role: String(r.role || '').trim(), count: parseInt(r.count) || 0 }))
+            .filter(r => r.role && r.count > 0);
+          await api(`/api/shifts/${shiftId}/requirements`, 'PUT', { requirements: cleaned });
+          document.getElementById('modal-backdrop')?.remove();
+          await loadSettingsPage();
+          // scroll back to requirements section after reload
+          setTimeout(() => document.getElementById('shift-reqs')?.scrollIntoView({ behavior:'smooth', block:'start' }), 100);
+          showToast('Requirements saved ✓');
+        }, 'Save Requirements');
     }
 
     function openAddShift() {
