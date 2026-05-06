@@ -5362,39 +5362,15 @@
         </div>
 
         <div class="settings-section" id="shift-reqs">
-          <div class="settings-section-title">Shift Requirements
-            <span style="font-size:12px;font-weight:400;color:var(--color-text-muted);margin-left:8px">
-              How many staff and which roles each shift needs
-            </span>
+          <div class="settings-section-title" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Shift Requirements</span>
+            <button class="setting-save-btn ghost" style="margin-top:0;padding:5px 14px"
+              onclick="openAddRequirement()">+ Add Requirement</button>
           </div>
-          <div class="setting-desc" style="margin-bottom:12px">
-            These control how the auto-scheduler fills shifts. Click <b>Edit</b> on any shift to set its required roles and counts.
+          <div class="setting-desc" style="margin-bottom:14px">
+            Define how many of each role are needed — then pick which shifts that rule applies to.
           </div>
-          ${shifts.length === 0
-            ? '<div class="setting-desc">No shifts configured yet. Add shifts above first.</div>'
-            : shifts.map(s => {
-                const reqs = s.requirements || [];
-                const reqsHtml = reqs.length > 0
-                  ? reqs.map(r => `
-                      <span class="req-chip">
-                        ${r.count}× <strong>${escapeHtml(r.role)}</strong>
-                      </span>`).join('')
-                  : '<span class="setting-desc" style="font-style:italic">No requirements — shift will accept any role, 1 person</span>';
-                return `
-                <div class="setting-row" style="align-items:flex-start;gap:12px">
-                  <div style="flex:1;min-width:0">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                      <div class="setting-label" style="margin:0">${escapeHtml(s.name)}</div>
-                      <span class="setting-desc" style="margin:0">${escapeHtml(s.dayOfWeek || '')}</span>
-                    </div>
-                    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-                      ${reqsHtml}
-                    </div>
-                  </div>
-                  <button class="setting-save-btn" style="margin-top:0;padding:6px 14px;flex-shrink:0"
-                    onclick="openEditShiftReqs(${s.id})">Edit</button>
-                </div>`;
-              }).join('')}
+          <div id="shift-reqs-list">${renderShiftReqsList(shifts)}</div>
         </div>
 
         <div class="settings-section" id="revenue-types-section"></div>
@@ -5659,59 +5635,221 @@
       } catch (e) { showToast(e.message, 'error'); }
     }
 
-    // ── Shift Requirements editor (dedicated modal from Requirements section) ──
-    function openEditShiftReqs(shiftId) {
-      const shift = (window.__shiftCache || {})[shiftId];
-      if (!shift) { showToast('Shift data not found — refresh the page', 'error'); return; }
+    // ── Shift Requirements — role-centric view + add/edit/delete ──
 
-      window.__editingReqs = (shift.requirements || []).map(r => ({ role: r.role, count: r.count }));
-
-      function reqsHtml() {
-        if (!window.__editingReqs.length) {
-          return '<div style="color:var(--color-text-muted);font-size:12px;margin-bottom:6px">No role requirements yet — shift accepts any role.</div>';
+    // Build a role → [{shiftId, shiftName, count}] map from all shifts
+    function buildReqsByRole(shifts) {
+      const map = new Map(); // role → [{shiftId, shiftName, count}]
+      for (const s of shifts) {
+        for (const r of (s.requirements || [])) {
+          if (!map.has(r.role)) map.set(r.role, []);
+          map.get(r.role).push({ shiftId: s.id, shiftName: s.name, count: r.count });
         }
-        return window.__editingReqs.map((r, i) => `
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-            <input type="number" min="1" max="20" value="${r.count}"
-              style="width:52px;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-surface);color:var(--color-text-primary)"
-              oninput="window.__editingReqs[${i}].count = parseInt(this.value)||1">
-            <input type="text" placeholder="Role name" value="${escapeHtml(r.role || '')}"
-              style="flex:1;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-surface);color:var(--color-text-primary)"
-              oninput="window.__editingReqs[${i}].role = this.value">
-            <button style="background:none;border:none;cursor:pointer;color:var(--color-danger,#DC2626);font-size:16px;padding:0 4px;line-height:1"
-              onclick="window.__editingReqs.splice(${i},1);_redrawReqs()">×</button>
-          </div>`).join('');
       }
+      return map;
+    }
 
-      function _redrawReqs() {
-        const wrap = document.getElementById('reqs-wrapper');
-        if (wrap) wrap.innerHTML = reqsHtml() +
-          `<button class="setting-save-btn ghost" style="margin-top:4px;padding:5px 12px"
-            onclick="window.__editingReqs.push({role:'',count:1});_redrawReqs()">+ Add Role</button>`;
-      }
-      window._redrawReqs = _redrawReqs;
+    function renderShiftReqsList(shifts) {
+      if (!shifts || shifts.length === 0)
+        return '<div class="setting-desc">No shifts configured yet. Add shifts above first.</div>';
 
-      showModal(`Requirements: ${shift.name}`,
-        `<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px">
-           ${escapeHtml(shift.dayOfWeek || '')}
-           ${shift.startTime ? '· ' + escapeHtml(shift.startTime) : ''}
-           ${shift.endTime ? '– ' + escapeHtml(shift.endTime) : ''}
+      const byRole = buildReqsByRole(shifts);
+      if (byRole.size === 0)
+        return '<div class="setting-desc" style="font-style:italic">No requirements set yet. Use "+ Add Requirement" to define role needs.</div>';
+
+      return Array.from(byRole.entries()).sort((a,b) => a[0].localeCompare(b[0])).map(([role, entries]) => `
+        <div class="setting-row" style="align-items:flex-start;gap:12px">
+          <div style="flex:1;min-width:0">
+            <div class="setting-label" style="margin:0 0 6px">${escapeHtml(role)}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${entries.map(e => `
+                <span class="req-chip">
+                  ${e.count}× <span style="color:var(--color-text-muted)">${escapeHtml(e.shiftName)}</span>
+                </span>`).join('')}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button class="setting-save-btn" style="margin-top:0;padding:6px 14px"
+              onclick="openEditRequirement(${JSON.stringify(escapeHtml(role))})">Edit</button>
+            <button class="setting-save-btn danger" style="margin-top:0;padding:6px 14px"
+              onclick="deleteRequirementRole(${JSON.stringify(escapeHtml(role))})">Remove</button>
+          </div>
+        </div>`).join('');
+    }
+
+    // Open modal: add a new role requirement across selected shifts
+    async function openAddRequirement() {
+      const shifts = Object.values(window.__shiftCache || {});
+      if (!shifts.length) { showToast('No shifts configured yet', 'error'); return; }
+
+      let roles = [];
+      try { roles = (await getKnownRoles()) || []; } catch(_) {}
+
+      const roleOpts = roles.length
+        ? roles.map(r => `<option value="${escapeHtml(r.role)}">${escapeHtml(r.role)}</option>`).join('')
+        : '';
+      const customOpt = `<option value="__custom__">Custom role…</option>`;
+
+      const shiftChecks = shifts.map(s => `
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer">
+          <input type="checkbox" data-shift-id="${s.id}" style="width:15px;height:15px">
+          <span>${escapeHtml(s.name)}</span>
+          <span class="setting-desc" style="margin:0">${escapeHtml(s.dayOfWeek || '')}</span>
+        </label>`).join('');
+
+      showModal('Add Requirement',
+        `<label>Role</label>
+         <select id="req-role-select" onchange="
+           const v = this.value;
+           const ci = document.getElementById('req-custom-wrap');
+           if (ci) ci.style.display = v === '__custom__' ? 'block' : 'none';
+         ">
+           <option value="">— choose a role —</option>
+           ${roleOpts}
+           ${customOpt}
+         </select>
+         <div id="req-custom-wrap" style="display:none;margin-top:8px">
+           <input id="req-custom-role" placeholder="Enter role name" />
          </div>
-         <div id="reqs-wrapper">${reqsHtml()}
-           <button class="setting-save-btn ghost" style="margin-top:4px;padding:5px 12px"
-             onclick="window.__editingReqs.push({role:'',count:1});_redrawReqs()">+ Add Role</button>
+         <label style="margin-top:12px">Count needed per shift</label>
+         <input id="req-count" type="number" min="1" max="20" value="1" style="width:80px" />
+         <label style="margin-top:12px">Apply to shifts</label>
+         <div style="border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;margin-top:4px;max-height:180px;overflow-y:auto">
+           <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid var(--color-border);margin-bottom:4px">
+             <input type="checkbox" id="req-select-all" onchange="
+               document.querySelectorAll('[data-shift-id]').forEach(c => c.checked = this.checked)
+             " style="width:15px;height:15px">
+             <span style="font-size:12px;color:var(--color-text-muted)">Select all</span>
+           </label>
+           ${shiftChecks}
          </div>`,
         async () => {
-          const cleaned = (window.__editingReqs || [])
-            .map(r => ({ role: String(r.role || '').trim(), count: parseInt(r.count) || 0 }))
-            .filter(r => r.role && r.count > 0);
-          await api(`/api/shifts/${shiftId}/requirements`, 'PUT', { requirements: cleaned });
-          document.getElementById('modal-backdrop')?.remove();
+          const select = document.getElementById('req-role-select');
+          let role = select?.value || '';
+          if (role === '__custom__') role = document.getElementById('req-custom-role')?.value?.trim() || '';
+          const count = parseInt(document.getElementById('req-count')?.value) || 0;
+          const checked = [...document.querySelectorAll('[data-shift-id]:checked')];
+
+          if (!role) throw new Error('Please select or enter a role name');
+          if (count < 1) throw new Error('Count must be at least 1');
+          if (!checked.length) throw new Error('Select at least one shift');
+
+          // For each selected shift: merge this role+count into its requirements
+          await Promise.all(checked.map(async el => {
+            const shiftId = parseInt(el.dataset.shiftId);
+            const shift = (window.__shiftCache || {})[shiftId];
+            const existing = (shift?.requirements || []).filter(r => r.role !== role);
+            const merged = [...existing, { role, count }];
+            await api(`/api/shifts/${shiftId}/requirements`, 'PUT', { requirements: merged });
+          }));
+
           await loadSettingsPage();
-          // scroll back to requirements section after reload
-          setTimeout(() => document.getElementById('shift-reqs')?.scrollIntoView({ behavior:'smooth', block:'start' }), 100);
-          showToast('Requirements saved ✓');
-        }, 'Save Requirements');
+          setTimeout(() => document.getElementById('shift-reqs')?.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+          showToast(`Requirement saved for ${checked.length} shift(s) ✓`);
+        }, 'Save Requirement');
+    }
+
+    // Open modal: edit an existing role across all shifts
+    async function openEditRequirement(role) {
+      const shifts = Object.values(window.__shiftCache || {});
+      // Current entries for this role
+      const entries = {}; // shiftId → count
+      for (const s of shifts) {
+        const req = (s.requirements || []).find(r => r.role === role);
+        if (req) entries[s.id] = req.count;
+      }
+
+      let roles = [];
+      try { roles = (await getKnownRoles()) || []; } catch(_) {}
+
+      const roleOpts = roles.map(r =>
+        `<option value="${escapeHtml(r.role)}" ${r.role === role ? 'selected' : ''}>${escapeHtml(r.role)}</option>`
+      ).join('');
+      const hasRole = roles.some(r => r.role === role);
+      const customOpt = `<option value="__custom__" ${!hasRole ? 'selected' : ''}>Custom role…</option>`;
+
+      const shiftChecks = shifts.map(s => {
+        const checked = s.id in entries ? 'checked' : '';
+        const count = entries[s.id] || 1;
+        return `
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+            <input type="checkbox" data-shift-id="${s.id}" ${checked} style="width:15px;height:15px" onchange="
+              const row = document.getElementById('count-row-${s.id}');
+              if(row) row.style.display = this.checked ? 'inline-flex' : 'none';
+            ">
+            <span style="flex:1">${escapeHtml(s.name)}</span>
+            <span class="setting-desc" style="margin:0;min-width:60px">${escapeHtml(s.dayOfWeek || '')}</span>
+            <div id="count-row-${s.id}" style="display:${checked ? 'inline-flex' : 'none'};align-items:center;gap:4px">
+              <input type="number" min="1" max="20" value="${count}"
+                data-shift-count="${s.id}"
+                style="width:52px;padding:3px 6px;border:1px solid var(--color-border);border-radius:6px;font-size:13px;background:var(--color-surface);color:var(--color-text-primary)">
+              <span style="font-size:12px;color:var(--color-text-muted)">needed</span>
+            </div>
+          </div>`;
+      }).join('');
+
+      showModal(`Edit: ${role}`,
+        `<label>Role name</label>
+         <select id="req-role-select" onchange="
+           const v = this.value;
+           document.getElementById('req-custom-wrap').style.display = v === '__custom__' ? 'block' : 'none';
+         ">
+           ${roleOpts}
+           ${customOpt}
+         </select>
+         <div id="req-custom-wrap" style="display:${!hasRole ? 'block' : 'none'};margin-top:8px">
+           <input id="req-custom-role" placeholder="Role name" value="${!hasRole ? escapeHtml(role) : ''}"/>
+         </div>
+         <label style="margin-top:14px">Per-shift counts</label>
+         <div style="border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;margin-top:4px;max-height:220px;overflow-y:auto">
+           ${shiftChecks}
+         </div>`,
+        async () => {
+          const select = document.getElementById('req-role-select');
+          let newRole = select?.value || '';
+          if (newRole === '__custom__') newRole = document.getElementById('req-custom-role')?.value?.trim() || '';
+          if (!newRole) throw new Error('Role name is required');
+
+          const checked = [...document.querySelectorAll('[data-shift-id]:checked')];
+
+          // Apply to all shifts: add/update for checked, remove for unchecked
+          await Promise.all(shifts.map(async s => {
+            const cb = document.querySelector(`[data-shift-id="${s.id}"]`);
+            if (!cb) return;
+            const oldReqs = (s.requirements || []).filter(r => r.role !== role && r.role !== newRole);
+            if (cb.checked) {
+              const countEl = document.querySelector(`[data-shift-count="${s.id}"]`);
+              const count = parseInt(countEl?.value) || 1;
+              await api(`/api/shifts/${s.id}/requirements`, 'PUT', { requirements: [...oldReqs, { role: newRole, count }] });
+            } else if (s.id in entries) {
+              // Was set before but now unchecked — remove it
+              await api(`/api/shifts/${s.id}/requirements`, 'PUT', { requirements: oldReqs });
+            }
+          }));
+
+          await loadSettingsPage();
+          setTimeout(() => document.getElementById('shift-reqs')?.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+          showToast('Requirement updated ✓');
+        }, 'Save Changes');
+    }
+
+    // Remove a role from ALL shifts
+    async function deleteRequirementRole(role) {
+      const ok = await showConfirmModal(
+        `Remove "${escapeHtml(role)}" requirement?`,
+        'This will remove this role requirement from all shifts.',
+        'Remove', 'Cancel');
+      if (!ok) return;
+      const shifts = Object.values(window.__shiftCache || {});
+      await Promise.all(shifts.map(async s => {
+        const remaining = (s.requirements || []).filter(r => r.role !== role);
+        if (remaining.length !== (s.requirements || []).length) {
+          await api(`/api/shifts/${s.id}/requirements`, 'PUT', { requirements: remaining });
+        }
+      }));
+      await loadSettingsPage();
+      setTimeout(() => document.getElementById('shift-reqs')?.scrollIntoView({ behavior:'smooth', block:'start' }), 80);
+      showToast(`"${role}" removed from all shifts`);
     }
 
     function openAddShift() {
