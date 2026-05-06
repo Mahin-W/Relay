@@ -17,7 +17,9 @@
     "test:integration": "node --env-file=.env --test src/tests/integration/coverageFlow.test.js src/tests/integration/setupFlow.test.js src/tests/integration/botAdminFlow.test.js src/tests/integration/scheduleFlow.test.js",
     "test:e2e": "node --env-file=.env --test src/tests/e2e/fullWeekFlow.test.js",
     "test-parse": "node src/test-parse.js",
-    "watch": "node scripts/auto-commit.js"
+    "watch": "node scripts/auto-commit.js",
+    "migrate": "node scripts/migrate.js",
+    "migrate:dry": "node scripts/migrate.js --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
