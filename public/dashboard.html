@@ -1841,6 +1841,66 @@
     .draggable-pill:hover .pill-remove { display: block; }
     .schedule-cell { transition: background var(--transition-fast); }
     .schedule-cell.droppable { cursor: copy; }
+
+    /* ── Manual availability overlay ── */
+    #avail-toggle.active {
+      background: var(--color-success-dim, #E6F4ED);
+      border-color: var(--color-success, #2D7D5A);
+      color: var(--color-success, #2D7D5A);
+    }
+    .avail-legend {
+      display: flex; align-items: center;
+      gap: 8px; font-size: 12px;
+      color: var(--color-text-muted);
+      padding: 8px 4px; margin-bottom: 8px;
+    }
+    .avail-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%; flex-shrink: 0;
+    }
+    .avail-dot.avail-yes { background: #2D7D5A; }
+    .avail-dot.avail-no { background: #DC2626; opacity: 0.6; }
+    .avail-dot.avail-unknown { background: var(--color-border, #E8DFD0); }
+
+    /* Availability grid that appears when overlay is ON */
+    .avail-grid-wrap {
+      overflow-x: auto;
+      margin-bottom: 12px;
+    }
+    .avail-grid {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+    }
+    .avail-grid th, .avail-grid td {
+      border: 1px solid var(--color-border, #E8DFD0);
+      padding: 6px 10px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .avail-grid th { background: var(--color-surface-alt, #F7F3EE); font-weight: 600; }
+    .avail-grid td:first-child { text-align: left; font-weight: 500; }
+    .avail-grid td.avail-cell {
+      cursor: pointer;
+      transition: background 0.15s;
+      min-width: 70px;
+    }
+    .avail-grid td.avail-cell.avail-yes {
+      background: rgba(45,125,90,0.12);
+    }
+    .avail-grid td.avail-cell.avail-no {
+      background: rgba(220,38,38,0.08);
+    }
+    .avail-grid td.avail-cell.avail-yes:hover {
+      background: rgba(45,125,90,0.22);
+    }
+    .avail-grid td.avail-cell.avail-no:hover {
+      background: rgba(220,38,38,0.16);
+    }
+    .avail-grid td.avail-cell.avail-unknown:hover {
+      background: var(--color-surface-alt, #F7F3EE);
+    }
+    .avail-cell-icon { font-size: 15px; }
     .drop-target-valid {
       background: var(--color-success-dim) !important;
       outline: 2px dashed var(--color-success);
@@ -2094,6 +2154,10 @@
     let _lastAction = null;
     let dashboardData = {};
     let refreshInterval = null;
+
+    // ── Manual availability overlay state ──
+    let _availOverlayOn = false;
+    let _availData = {}; // key: 'staffId-day', val: true / false / null (not set)
 
     const PAGE_TITLES = {
       overview: 'Overview',
@@ -3156,9 +3220,21 @@
       const copyBtn = (isCurrentWeek && !s.hasAssignments) ? `
         <button class="btn-secondary" onclick="copyLastWeek()" title="Copy last week's schedule as a draft">↩ Copy Last Week</button>` : '';
 
+      const availToggleBtn = `<button id="avail-toggle" class="btn-secondary" onclick="toggleAvailabilityOverlay()" title="Toggle manual availability overlay">👁 Availability</button>`;
+
       const actionBar = isCurrentWeek
-        ? `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">${generateBtn}${approveBtn}${copyBtn}</div>`
-        : '';
+        ? `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">${generateBtn}${approveBtn}${copyBtn}${availToggleBtn}</div>`
+        : `<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">${availToggleBtn}</div>`;
+
+      const legend = `
+        <div id="avail-legend" class="avail-legend" style="display:none">
+          <span class="avail-dot avail-yes"></span> Available
+          <span class="avail-dot avail-no"></span> Unavailable
+          <span class="avail-dot avail-unknown"></span> Not set
+          <span style="margin-left:auto;font-size:12px;color:var(--color-text-muted)">Click any cell to toggle</span>
+        </div>`;
+
+      const availGrid = `<div id="avail-grid-container"></div>`;
 
       // Week-nav header (lives outside the table now since we no longer use renderScheduleTable for the full view)
       const atCurrent = currentScheduleWeek === getCurrentWeekStart();
@@ -3169,23 +3245,30 @@
           <button class="schedule-nav-btn" onclick="changeScheduleWeek(7)" ${atCurrent ? 'disabled style="opacity:.35;cursor:not-allowed"' : ''}>Next &rarr;</button>
         </div>`;
 
-      return banner + actionBar + weekNav + renderShiftCentricSchedule(schedule, shifts || [], settings || {}, !!isCurrentWeek);
+      return banner + actionBar + legend + availGrid + weekNav + renderShiftCentricSchedule(schedule, shifts || [], settings || {}, !!isCurrentWeek);
     }
 
     async function loadSchedulePage() {
       const content = document.getElementById('page-content');
       content.innerHTML = renderScheduleSkeleton();
       try {
-        const [schedule, status, shifts, settings] = await Promise.all([
+        const [schedule, status, shifts, settings, staffList] = await Promise.all([
           apiFetch('/api/dashboard/schedule?week=' + currentScheduleWeek),
           api(`/api/schedule/status?week=${currentScheduleWeek}`),
           api('/api/shifts'),
           api('/api/settings'),
+          api('/api/staff').catch(() => []),
         ]);
         dashboardData.schedule = schedule;
+        dashboardData.staffList = staffList || [];
         scheduleStatus = status;
         const isCurrentWeek = currentScheduleWeek === getCurrentWeekStart();
         content.innerHTML = renderSchedulePage(schedule, status, shifts || [], settings || {}, isCurrentWeek);
+        // Restore toggle button active state after re-render
+        const availBtn = document.getElementById('avail-toggle');
+        if (availBtn && _availOverlayOn) availBtn.classList.add('active');
+        // If availability overlay is on, re-render the grid after page reloads
+        if (_availOverlayOn) renderAvailabilityGrid();
       } catch (e) {
         content.innerHTML = renderError("loadSchedulePage()");
       }
@@ -3592,6 +3675,148 @@
       // Clamp: don't allow navigating into future weeks
       currentScheduleWeek = (delta > 0 && next > currentWeek) ? currentWeek : next;
       await loadSchedulePage();
+      // Reload availability data for the new week if overlay is active
+      if (_availOverlayOn) {
+        await loadAvailabilityData();
+        renderAvailabilityGrid();
+      }
+    }
+
+    // ── Manual Availability Overlay ────────────────────────────────────────────
+
+    async function toggleAvailabilityOverlay() {
+      _availOverlayOn = !_availOverlayOn;
+      const btn = document.getElementById('avail-toggle');
+      if (btn) btn.classList.toggle('active', _availOverlayOn);
+      if (_availOverlayOn) {
+        await loadAvailabilityData();
+      }
+      renderAvailabilityGrid();
+    }
+
+    async function loadAvailabilityData() {
+      try {
+        const data = await api(`/api/availability?weekStart=${currentScheduleWeek}`);
+        _availData = {};
+        for (const r of (data || [])) {
+          _availData[`${r.staffId}-${r.day}`] = r.available;
+        }
+      } catch (e) {
+        showToast('Could not load availability data', 'error');
+      }
+    }
+
+    function renderAvailabilityGrid() {
+      const container = document.getElementById('avail-grid-container');
+      const legend = document.getElementById('avail-legend');
+      if (!container) return;
+
+      if (legend) legend.style.display = _availOverlayOn ? 'flex' : 'none';
+
+      if (!_availOverlayOn) {
+        container.innerHTML = '';
+        return;
+      }
+
+      // Gather all staff from the current schedule data
+      const schedule = dashboardData.schedule;
+      const staffList = [];
+      const seenIds = new Set();
+      if (schedule && schedule.staff) {
+        for (const m of schedule.staff) {
+          const sid = m.staffId ?? m.id;
+          if (sid != null && !seenIds.has(sid)) {
+            seenIds.add(sid);
+            staffList.push({ id: sid, name: m.staffName || m.name || '' });
+          }
+        }
+      }
+      // Also pick up staff from shift-centric rows if available
+      if (schedule && schedule.shifts) {
+        for (const shift of schedule.shifts) {
+          for (const st of (shift.staff || [])) {
+            const sid = st.staffId ?? st.id;
+            if (sid != null && !seenIds.has(sid)) {
+              seenIds.add(sid);
+              staffList.push({ id: sid, name: st.staffName || st.name || '' });
+            }
+          }
+        }
+      }
+      // Fall back to full staff list (from /api/staff) so availability can be
+      // set even before a schedule has been generated for the week.
+      if (staffList.length === 0 && dashboardData.staffList) {
+        for (const s of dashboardData.staffList) {
+          if (s.active !== false && !seenIds.has(s.id)) {
+            seenIds.add(s.id);
+            staffList.push({ id: s.id, name: s.name || '' });
+          }
+        }
+      }
+
+      if (staffList.length === 0) {
+        container.innerHTML = '<p style="font-size:13px;color:var(--color-text-muted);margin-bottom:8px">No staff found — generate or build a schedule first to set availability.</p>';
+        return;
+      }
+
+      const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+      const dayShort = { Monday:'Mon', Tuesday:'Tue', Wednesday:'Wed', Thursday:'Thu', Friday:'Fri', Saturday:'Sat', Sunday:'Sun' };
+
+      let rows = '';
+      for (const s of staffList) {
+        let cells = '';
+        for (const day of days) {
+          const key = `${s.id}-${day}`;
+          const avail = _availData[key];
+          let cls = 'avail-unknown';
+          let icon = '<span class="avail-cell-icon" title="Not set">·</span>';
+          if (avail === true)  { cls = 'avail-yes'; icon = '<span class="avail-cell-icon" title="Available">✓</span>'; }
+          if (avail === false) { cls = 'avail-no';  icon = '<span class="avail-cell-icon" title="Unavailable">✕</span>'; }
+          cells += `<td class="avail-cell ${cls}" data-staff-id="${s.id}" data-day="${day}" onclick="toggleStaffAvailability(${s.id}, '${day}')">${icon}</td>`;
+        }
+        rows += `<tr><td>${escapeHtml(s.name)}</td>${cells}</tr>`;
+      }
+
+      const header = days.map(d => `<th>${dayShort[d]}</th>`).join('');
+      container.innerHTML = `
+        <div class="avail-grid-wrap">
+          <table class="avail-grid">
+            <thead><tr><th>Staff</th>${header}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    async function toggleStaffAvailability(staffId, day) {
+      const key = `${staffId}-${day}`;
+      const current = _availData[key];
+      // Cycle: not set → available → unavailable → not set
+      const newVal = (current === undefined || current === null) ? true
+                   : current === true                            ? false
+                   : null;
+      _availData[key] = newVal;
+      renderAvailabilityGrid(); // optimistic update
+      try {
+        if (newVal === null) {
+          await api('/api/availability', 'DELETE', {
+            staffId: parseInt(staffId),
+            weekStart: currentScheduleWeek,
+            dayOfWeek: day,
+          });
+        } else {
+          await api('/api/availability', 'POST', {
+            staffId: parseInt(staffId),
+            weekStart: currentScheduleWeek,
+            dayOfWeek: day,
+            available: newVal,
+          });
+        }
+      } catch (e) {
+        // Roll back on error
+        _availData[key] = current;
+        renderAvailabilityGrid();
+        showToast('Failed to save availability', 'error');
+      }
     }
 
     function handleRefresh() {

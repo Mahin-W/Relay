@@ -926,7 +926,30 @@ router.post('/schedule/generate', async (req, res) => {
       })
     }
 
-    const result = await generateWeeklySchedule(groupId, weekStart)
+    // Load manual availability overrides and convert to extra scheduling rules.
+    // available=false → day_off rule (blocks assignment); available=true → no rule needed
+    // (the generator already has a fallback that allows everyone).
+    let manualAvailExtraRules = []
+    try {
+      const { data: manualAvail } = await db
+        .from('staff_availability')
+        .select('staff_id, day_of_week, available')
+        .eq('group_id', groupId)
+        .eq('week_start', weekStart)
+      for (const row of (manualAvail || [])) {
+        if (row.available === false) {
+          // Treat as a day_off rule to block this staff on this day
+          manualAvailExtraRules.push({
+            type: 'day_off',
+            active: true,
+            subject_staff_id: row.staff_id,
+            day_of_week: row.day_of_week,
+          })
+        }
+      }
+    } catch { /* non-fatal — proceed without manual availability */ }
+
+    const result = await generateWeeklySchedule(groupId, weekStart, null, manualAvailExtraRules)
 
     // The generator writes a JSONB draft to generated_schedules, but the
     // dashboard /schedule view + the /schedule/approve route both read from
@@ -2603,6 +2626,122 @@ router.patch('/roles/:role', async (req, res) => {
   } catch (err) {
     console.error('PATCH /roles/:role error:', err.message)
     res.status(500).json({ error: 'Failed to update role rate' })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual staff availability (dashboard overlay)
+// Table: staff_availability
+//   group_id TEXT, staff_id INTEGER, week_start DATE, day_of_week TEXT,
+//   available BOOLEAN, UNIQUE(group_id, staff_id, week_start, day_of_week)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VALID_DAYS = new Set(['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
+
+// GET /api/availability?weekStart=YYYY-MM-DD
+router.get('/availability', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const weekStart = safeWeekParam(req.query.weekStart)
+    if (!weekStart) return res.status(400).json({ error: 'weekStart must be YYYY-MM-DD' })
+
+    const db = supabase()
+    const { data, error } = await db
+      .from('staff_availability')
+      .select('staff_id, day_of_week, available')
+      .eq('group_id', groupId)
+      .eq('week_start', weekStart)
+
+    if (error) throw error
+
+    const result = (data || []).map(r => ({
+      staffId: r.staff_id,
+      day: r.day_of_week,
+      available: r.available,
+    }))
+    res.json(result)
+  } catch (err) {
+    console.error('GET /availability error:', err.message)
+    res.status(500).json({ error: 'Failed to load availability' })
+  }
+})
+
+// POST /api/availability — upsert one record
+router.post('/availability', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { staffId, weekStart, dayOfWeek, available } = req.body || {}
+
+    const staffIdNum = Number(staffId)
+    if (!Number.isInteger(staffIdNum) || staffIdNum <= 0) {
+      return res.status(400).json({ error: 'staffId must be a positive integer' })
+    }
+    if (!safeWeekParam(weekStart)) {
+      return res.status(400).json({ error: 'weekStart must be YYYY-MM-DD' })
+    }
+    if (!VALID_DAYS.has(dayOfWeek)) {
+      return res.status(400).json({ error: 'dayOfWeek must be a full day name (e.g. Monday)' })
+    }
+    if (typeof available !== 'boolean') {
+      return res.status(400).json({ error: 'available must be a boolean' })
+    }
+
+    const db = supabase()
+    const { data, error } = await db
+      .from('staff_availability')
+      .upsert(
+        {
+          group_id: groupId,
+          staff_id: staffIdNum,
+          week_start: weekStart,
+          day_of_week: dayOfWeek,
+          available,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'group_id,staff_id,week_start,day_of_week' }
+      )
+      .select()
+      .single()
+
+    if (error) throw error
+    res.json({ success: true, record: data })
+  } catch (err) {
+    console.error('POST /availability error:', err.message)
+    res.status(500).json({ error: 'Failed to save availability' })
+  }
+})
+
+// DELETE /api/availability — remove one record (resets to "not set")
+router.delete('/availability', async (req, res) => {
+  try {
+    const groupId = req.manager.groupId
+    const { staffId, weekStart, dayOfWeek } = req.body || {}
+
+    const staffIdNum = Number(staffId)
+    if (!Number.isInteger(staffIdNum) || staffIdNum <= 0) {
+      return res.status(400).json({ error: 'staffId must be a positive integer' })
+    }
+    if (!safeWeekParam(weekStart)) {
+      return res.status(400).json({ error: 'weekStart must be YYYY-MM-DD' })
+    }
+    if (!VALID_DAYS.has(dayOfWeek)) {
+      return res.status(400).json({ error: 'dayOfWeek must be a full day name (e.g. Monday)' })
+    }
+
+    const db = supabase()
+    const { error } = await db
+      .from('staff_availability')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('staff_id', staffIdNum)
+      .eq('week_start', weekStart)
+      .eq('day_of_week', dayOfWeek)
+
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('DELETE /availability error:', err.message)
+    res.status(500).json({ error: 'Failed to delete availability' })
   }
 })
 

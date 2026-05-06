@@ -76,7 +76,7 @@ function buildFallbackAvailability(resolvedStaff, weekStart, groupId) {
 // mockData bypasses all DB calls (for tests):
 //   { shifts, staff, availability, requirements }
 //   staff must include userId already resolved (no DM-pool name matching needed)
-export async function generateWeeklySchedule(groupId, weekStart, mockData = null) {
+export async function generateWeeklySchedule(groupId, weekStart, mockData = null, extraRules = []) {
   // ── BH.06: serialize concurrent calls for the same group+week ─────────────
   const _key = `${groupId}:${weekStart}`
   if (_inProgress.has(_key)) return _inProgress.get(_key)
@@ -191,6 +191,10 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         const { getRules } = await import('../rules/rulesDb.js')
         schedulingRules = await getRules(groupId)
       } catch { /* non-fatal */ }
+    }
+    // Merge in any extra rules passed by the caller (e.g. manual availability overrides)
+    if (extraRules && extraRules.length > 0) {
+      schedulingRules = [...schedulingRules, ...extraRules]
     }
 
     // Build fast lookup: staffId → Set of day-off days
