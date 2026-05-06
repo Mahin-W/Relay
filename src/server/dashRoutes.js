@@ -926,30 +926,25 @@ router.post('/schedule/generate', async (req, res) => {
       })
     }
 
-    // Load manual availability overrides and convert to extra scheduling rules.
-    // available=false → day_off rule (blocks assignment); available=true → no rule needed
-    // (the generator already has a fallback that allows everyone).
-    let manualAvailExtraRules = []
+    // Load manual availability and pass it to the generator.
+    // available=true  → treat same as chat "available_all" for that day (overrides no-response)
+    // available=false → hard block for that staff on that day
+    // Both take precedence over Telegram-collected availability.
+    let manualAvailRecords = []
     try {
       const { data: manualAvail } = await db
         .from('staff_availability')
         .select('staff_id, day_of_week, available')
         .eq('group_id', groupId)
         .eq('week_start', weekStart)
-      for (const row of (manualAvail || [])) {
-        if (row.available === false) {
-          // Treat as a day_off rule to block this staff on this day
-          manualAvailExtraRules.push({
-            type: 'day_off',
-            active: true,
-            subject_staff_id: row.staff_id,
-            day_of_week: row.day_of_week,
-          })
-        }
-      }
+      manualAvailRecords = (manualAvail || []).map(row => ({
+        staffId: row.staff_id,
+        day: row.day_of_week,
+        available: row.available,
+      }))
     } catch { /* non-fatal — proceed without manual availability */ }
 
-    const result = await generateWeeklySchedule(groupId, weekStart, null, manualAvailExtraRules)
+    const result = await generateWeeklySchedule(groupId, weekStart, null, [], manualAvailRecords)
 
     // The generator writes a JSONB draft to generated_schedules, but the
     // dashboard /schedule view + the /schedule/approve route both read from

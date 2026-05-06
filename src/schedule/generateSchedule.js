@@ -76,7 +76,7 @@ function buildFallbackAvailability(resolvedStaff, weekStart, groupId) {
 // mockData bypasses all DB calls (for tests):
 //   { shifts, staff, availability, requirements }
 //   staff must include userId already resolved (no DM-pool name matching needed)
-export async function generateWeeklySchedule(groupId, weekStart, mockData = null, extraRules = []) {
+export async function generateWeeklySchedule(groupId, weekStart, mockData = null, extraRules = [], extraAvailability = []) {
   // ── BH.06: serialize concurrent calls for the same group+week ─────────────
   const _key = `${groupId}:${weekStart}`
   if (_inProgress.has(_key)) return _inProgress.get(_key)
@@ -153,6 +153,21 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
     if (availabilityRecords.length === 0 && resolvedStaff.length > 0) {
       availabilityRecords = buildFallbackAvailability(resolvedStaff, weekStart, groupId)
       useFallback = true
+    }
+
+    // ── Manual availability overlay (from dashboard staff_availability table) ──
+    // extraAvailability = [{ staffId, day, available }]
+    // Build a fast lookup: staffId → Set<day> for available=true, Set<day> for available=false
+    const manualAllowedDays = new Map()  // staffId → Set<day> (explicit available=true)
+    const manualBlockedDays = new Map()  // staffId → Set<day> (explicit available=false)
+    for (const row of (extraAvailability || [])) {
+      if (row.available === true) {
+        if (!manualAllowedDays.has(row.staffId)) manualAllowedDays.set(row.staffId, new Set())
+        manualAllowedDays.get(row.staffId).add(row.day)
+      } else if (row.available === false) {
+        if (!manualBlockedDays.has(row.staffId)) manualBlockedDays.set(row.staffId, new Set())
+        manualBlockedDays.get(row.staffId).add(row.day)
+      }
     }
 
     // ── Fallback: no shift requirements configured → default to 1 any-role per shift ──
@@ -252,7 +267,12 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
 
         const candidates = resolvedStaff.filter(s => {
           if (!matchAnyRole && (s.role || '').toLowerCase() !== roleLower) return false
-          if (!isAvailable(s.userId, shift.id)) return false
+          // Manual availability takes precedence over chat-collected availability:
+          //   available=false → hard block regardless of chat response
+          //   available=true  → override "no response" and allow scheduling on this day
+          if (manualBlockedDays.get(s.staffId)?.has(shift.day_of_week)) return false
+          const manuallyAllowed = manualAllowedDays.get(s.staffId)?.has(shift.day_of_week)
+          if (!manuallyAllowed && !isAvailable(s.userId, shift.id)) return false
           // G1: enforce day_off business rules during candidate filtering
           if (hasDateOff(s.staffId, shift.day_of_week)) return false
           // Enforce max shifts per day (0 = no limit)
@@ -335,10 +355,12 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
           a.staffId === ct.staffId && a.dayOfWeek === gap.dayOfWeek && a.shiftId === gap.shiftId
         )
         if (alreadyAssigned) continue
-        // Check availability
+        // Check availability — manual availability takes precedence
         const ctStaff = resolvedStaff.find(s => s.staffId === ct.staffId)
         if (!ctStaff) continue
-        if (!isAvailable(ctStaff.userId, gap.shiftId)) continue
+        if (manualBlockedDays.get(ct.staffId)?.has(gap.dayOfWeek)) continue
+        const manuallyAllowed = manualAllowedDays.get(ct.staffId)?.has(gap.dayOfWeek)
+        if (!manuallyAllowed && !isAvailable(ctStaff.userId, gap.shiftId)) continue
         // Assign via cross-training
         assignments.push({
           shiftId: gap.shiftId,
