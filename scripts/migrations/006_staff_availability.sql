@@ -15,3 +15,19 @@ CREATE TABLE IF NOT EXISTS staff_availability (
 
 CREATE INDEX IF NOT EXISTS idx_staff_avail_group_week
   ON staff_availability(group_id, week_start);
+
+-- RLS: allow anon key (used by dashboard) to read and write
+ALTER TABLE staff_availability ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'staff_availability'
+      AND policyname = 'Allow all for anon on staff_availability'
+  ) THEN
+    EXECUTE 'CREATE POLICY "Allow all for anon on staff_availability"
+      ON staff_availability FOR ALL TO anon
+      USING (true) WITH CHECK (true)';
+  END IF;
+END $$;
