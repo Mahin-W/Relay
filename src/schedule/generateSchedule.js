@@ -495,10 +495,27 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
 
     const warnings = []
     if (useFallback) {
-      warnings.push({
-        type: 'no_availability',
-        message: 'No availability was submitted for this week — schedule generated without availability filtering. Please verify before publishing.',
-      })
+      // Only show the "no availability" warning if the dashboard manual table
+      // is also empty. If extraAvailability has entries, the manager has filled
+      // out the dashboard table — that counts as availability data.
+      const hasManualAvailability = (extraAvailability || []).length > 0
+      if (!hasManualAvailability) {
+        warnings.push({
+          type: 'no_availability',
+          message: 'No availability was submitted for this week — schedule generated without availability filtering. Please verify before publishing.',
+        })
+      } else {
+        // Check if the availability table is incomplete (some staff have no entries at all)
+        const staffWithEntries = new Set((extraAvailability || []).map(e => String(e.staffId)))
+        const missingStaff = resolvedStaff.filter(s => !staffWithEntries.has(String(s.staffId)))
+        if (missingStaff.length > 0) {
+          const names = missingStaff.map(s => s.name).join(', ')
+          warnings.push({
+            type: 'incomplete_availability',
+            message: `Incomplete availability — ${missingStaff.length} staff member${missingStaff.length === 1 ? ' has' : 's have'} no availability set: ${names}. Schedule may not reflect their actual availability.`,
+          })
+        }
+      }
     }
     if (useRequirementsFallback) {
       warnings.push({
