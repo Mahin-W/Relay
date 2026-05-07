@@ -538,7 +538,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         const names = missingAll.map(s => s.name).join(', ')
         warnings.push({
           type: 'incomplete_availability',
-          message: `Incomplete availability — ${missingAll.length} staff member${missingAll.length === 1 ? ' has' : 's have'} not submitted availability: ${names}. They will be skipped when scheduling.`,
+          message: `Incomplete availability — ${missingAll.length} staff member${missingAll.length === 1 ? ' has' : 's have'} no availability set: ${names}. Schedule may not reflect their actual availability.`,
         })
       }
     }
