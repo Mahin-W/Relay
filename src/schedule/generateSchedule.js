@@ -494,18 +494,23 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       : false  // live mode: caller should pass publishedCount via options if needed
 
     const warnings = []
+
+    // ── Availability completeness check ──────────────────────────────────────
+    // resolvedStaff members who have a linked Telegram userId can respond via chat.
+    // Staff without a userId can only have availability set via the dashboard table.
+    const hasManualAvailability = (extraAvailability || []).length > 0
+
     if (useFallback) {
-      // Only show the "no availability" warning if the dashboard manual table
-      // is also empty. If extraAvailability has entries, the manager has filled
-      // out the dashboard table — that counts as availability data.
-      const hasManualAvailability = (extraAvailability || []).length > 0
+      // Zero Telegram responses this week.
       if (!hasManualAvailability) {
+        // Dashboard table also empty — no availability data at all.
         warnings.push({
           type: 'no_availability',
           message: 'No availability was submitted for this week — schedule generated without availability filtering. Please verify before publishing.',
         })
       } else {
-        // Check if the availability table is incomplete (some staff have no entries at all)
+        // Dashboard table has some entries. Check if every staff member has at
+        // least one entry (i.e. the table is fully filled out).
         const staffWithEntries = new Set((extraAvailability || []).map(e => String(e.staffId)))
         const missingStaff = resolvedStaff.filter(s => !staffWithEntries.has(String(s.staffId)))
         if (missingStaff.length > 0) {
@@ -515,6 +520,26 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
             message: `Incomplete availability — ${missingStaff.length} staff member${missingStaff.length === 1 ? ' has' : 's have'} no availability set: ${names}. Schedule may not reflect their actual availability.`,
           })
         }
+      }
+    } else {
+      // At least some Telegram responses exist. Check if everyone responded.
+      // Only staff with a linked userId can submit via Telegram — compare those
+      // against the actual availMap which was built from availabilityRecords.
+      const telegramStaff = resolvedStaff.filter(s => s.userId)
+      const missingTelegram = telegramStaff.filter(s => !availMap[s.userId])
+
+      // Also check dashboard table for staff without a userId (no Telegram link).
+      const staffWithEntries = new Set((extraAvailability || []).map(e => String(e.staffId)))
+      const noTelegramStaff = resolvedStaff.filter(s => !s.userId)
+      const missingDashboard = noTelegramStaff.filter(s => !staffWithEntries.has(String(s.staffId)))
+
+      const missingAll = [...missingTelegram, ...missingDashboard]
+      if (missingAll.length > 0) {
+        const names = missingAll.map(s => s.name).join(', ')
+        warnings.push({
+          type: 'incomplete_availability',
+          message: `Incomplete availability — ${missingAll.length} staff member${missingAll.length === 1 ? ' has' : 's have'} not submitted availability: ${names}. They will be skipped when scheduling.`,
+        })
       }
     }
     if (useRequirementsFallback) {
