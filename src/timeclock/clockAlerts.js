@@ -1,3 +1,4 @@
+import { getDb } from '../db.js'
 import { getTimeEntriesForWeek } from './clockDb.js'
 import { getOvertimeSettings } from '../setup/setupDb.js'
 import { getManagerGroup } from '../setup/setupDb.js'
@@ -33,8 +34,7 @@ export async function checkOvertimeAlert(bot, userId, groupId, db = null) {
     dmChatId = managerGroup.dm_chat_id
   } else {
     // Look up manager for this group
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    const supabase = getDb()
     const { data } = await supabase
       .from('setup_sessions')
       .select('dm_chat_id')
@@ -47,8 +47,7 @@ export async function checkOvertimeAlert(bot, userId, groupId, db = null) {
   if (!dmChatId) return
 
   // Look up staff name
-  const { createClient } = await import('@supabase/supabase-js')
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  const supabase = getDb()
   const { data: member } = await supabase
     .from('group_members')
     .select('first_name')
@@ -74,8 +73,7 @@ export async function getClockComplianceReport(groupId, date, db = null) {
   const _getTimeEntriesForWeek = db?.getTimeEntriesForWeek ?? getTimeEntriesForWeek
 
   try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    const supabase = getDb()
 
     // Get yesterday's assignments from published schedule
     const yesterday = new Date(date)

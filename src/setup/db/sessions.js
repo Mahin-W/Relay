@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function getSetupSession(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('*')
       .eq('group_id', groupId)
@@ -20,7 +18,7 @@ export async function getSetupSession(groupId) {
 
 export async function getSetupSessionByManager(managerId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('*')
       .eq('manager_id', managerId)
@@ -38,7 +36,7 @@ export async function getSetupSessionByManager(managerId) {
 
 export async function createSetupSession(groupId, groupName, managerId, dmChatId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .upsert(
         {
@@ -65,7 +63,7 @@ export async function createSetupSession(groupId, groupName, managerId, dmChatId
 
 export async function updateSetupSession(groupId, updates) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('group_id', groupId)
@@ -81,7 +79,7 @@ export async function updateSetupSession(groupId, updates) {
 
 export async function getManagerGroup(managerId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('group_id, dm_chat_id, setup_data, group_name, manager_id, phone')
       .eq('manager_id', managerId)
@@ -99,7 +97,7 @@ export async function getManagerGroup(managerId) {
 
 export async function isSetupComplete(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('setup_complete')
       .eq('group_id', groupId)

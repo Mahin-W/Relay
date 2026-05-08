@@ -1,7 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const getSupabase = () =>
-  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+import { getDb } from '../db.js'
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -94,7 +91,7 @@ export async function manualClockOut(staffId, groupId, time, db = null) {
   try {
     if (db?.manualClockOut) return db.manualClockOut(staffId, groupId, time)
 
-    const supabase = getSupabase()
+    const supabase = getDb()
     // Find most recent open entry
     const { data: entry, error: findErr } = await supabase
       .from('time_entries')
@@ -131,7 +128,7 @@ export async function manualClockIn(staffId, groupId, time, db = null) {
   try {
     if (db?.manualClockIn) return db.manualClockIn(staffId, groupId, time)
 
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('time_entries')
       .insert({
@@ -158,7 +155,7 @@ export async function logManagerAction(groupId, managerId, entryText, db = null)
   try {
     if (db?.logManagerAction) return db.logManagerAction(groupId, managerId, entryText)
 
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { error } = await supabase
       .from('manager_log_entries')
       .insert({ group_id: groupId, manager_id: managerId, entry_text: entryText })
@@ -179,7 +176,7 @@ async function getOpenClockEntry(staffId, groupId, db) {
   if (db?.getOpenClockEntry) return db.getOpenClockEntry(staffId, groupId)
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('time_entries')
       .select('*')
@@ -204,7 +201,7 @@ async function getMostRecentEntry(staffId, groupId, db) {
   if (db?.getMostRecentEntry) return db.getMostRecentEntry(staffId, groupId)
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('time_entries')
       .select('*')

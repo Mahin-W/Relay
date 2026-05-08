@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveOnboardingRecord(groupId, name, role, startDate) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('onboarding_pending')
       .insert({ group_id: groupId, name, role: role ?? null, start_date: startDate ?? null, status: 'pending' })
       .select()
@@ -20,7 +18,7 @@ export async function saveOnboardingRecord(groupId, name, role, startDate) {
 
 export async function getPendingOnboarding(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('onboarding_pending')
       .select('*')
       .eq('group_id', groupId)
@@ -36,7 +34,7 @@ export async function getPendingOnboarding(groupId) {
 
 export async function completeOnboarding(id) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('onboarding_pending')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', id)

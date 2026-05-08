@@ -1,13 +1,9 @@
 // Earned Wage Visibility — lets staff DM the bot to see how much they've earned this week.
 // Pure functions + DB-injected handler. No router modifications needed.
 
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { getCurrentWeekStart } from '../schedule/generateSchedule.js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
 
 // ── Day offset map (weekStart is always Monday) ─────────────────────────────
 
@@ -95,7 +91,7 @@ export async function calculateEarnedWages(staffId, groupId, weekStart, now = ne
   if (db?.getAssignmentsForStaffWeek) {
     assignments = await db.getAssignmentsForStaffWeek(staffId, weekStart)
   } else {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select(`
         shift_id,
@@ -133,14 +129,14 @@ export async function calculateEarnedWages(staffId, groupId, weekStart, now = ne
     }
   } else {
     // Real Supabase queries
-    const { data: staff } = await supabase
+    const { data: staff } = await getDb()
       .from('staff')
       .select('name, role')
       .eq('id', staffId)
       .maybeSingle()
     if (staff) {
       staffName = staff.name
-      const { data: rate } = await supabase
+      const { data: rate } = await getDb()
         .from('role_rates')
         .select('hourly_rate')
         .eq('group_id', groupId)
@@ -318,13 +314,13 @@ export async function handleEarnedWageQuery(bot, msg, db = null) {
     staffInfo = await db.getStaffByDmChatId(dmChatId)
   } else {
     // Real Supabase: staff_dms → staff
-    const { data: dm } = await supabase
+    const { data: dm } = await getDb()
       .from('staff_dms')
       .select('user_id')
       .eq('dm_chat_id', dmChatId)
       .maybeSingle()
     if (dm) {
-      const { data: staff } = await supabase
+      const { data: staff } = await getDb()
         .from('staff')
         .select('id, name, role, group_id')
         .eq('telegram_id', dm.user_id)

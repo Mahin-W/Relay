@@ -1,13 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
-
-const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+import { getDb } from '../db.js'
 
 // ── DB functions ──────────────────────────────────────────────────────────────
 
 export async function getShiftsForGroup(groupId, db = null) {
   try {
-    const supabase = getSupabase()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .select('*')
       .eq('group_id', String(groupId))
@@ -24,12 +21,11 @@ export async function getShiftsForGroup(groupId, db = null) {
 
 export async function updateShift(shiftId, groupId, changes, db = null) {
   try {
-    const supabase = getSupabase()
     const fields = {}
     if (changes.name !== undefined) fields.name = changes.name
     if (changes.start_time !== undefined) fields.start_time = changes.start_time
     if (changes.end_time !== undefined) fields.end_time = changes.end_time
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .update(fields)
       .eq('id', shiftId)
@@ -49,8 +45,7 @@ export async function deactivateShift(shiftId, groupId, db = null) {
     if (db?.deactivateShift) {
       return await db.deactivateShift(shiftId, groupId)
     }
-    const supabase = getSupabase()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .update({ active: false })
       .eq('id', shiftId)
@@ -67,8 +62,7 @@ export async function deactivateShift(shiftId, groupId, db = null) {
 
 export async function createShift(groupId, shiftData, db = null) {
   try {
-    const supabase = getSupabase()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .insert({
         group_id: String(groupId),
@@ -337,8 +331,7 @@ export async function handleRemoveShift(bot, msg, args, db = null) {
 
 async function getActiveAssignments(shiftId, groupId) {
   try {
-    const supabase = getSupabase()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select('*')
       .eq('shift_id', shiftId)

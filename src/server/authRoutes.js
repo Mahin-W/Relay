@@ -1,5 +1,5 @@
 import express from 'express'
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { signToken, setCookieHeader, requireAuth } from './middleware.js'
 
 const router = express.Router()
@@ -33,8 +33,7 @@ router.post('/request-code', async (req, res) => {
       return res.status(429).json({ error: 'Please wait before requesting another code' })
     }
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-    const { data: session } = await supabase
+    const { data: session } = await getDb()
       .from('setup_sessions')
       .select('group_id, group_name, manager_id, dm_chat_id')
       .eq('phone', normalized)

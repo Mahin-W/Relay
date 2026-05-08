@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 export async function saveEditEvent(groupId, edit, db = null) {
   if (db?.saveEditEvent) return db.saveEditEvent(groupId, edit)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('schedule_edit_events')
     .insert({
       group_id: groupId,
@@ -28,7 +24,7 @@ export async function saveEditEvent(groupId, edit, db = null) {
 export async function getEditHistory(groupId, weeksBack = 8, db = null) {
   if (db?.getEditHistory) return db.getEditHistory(groupId, weeksBack)
   const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('schedule_edit_events')
     .select('*')
     .eq('group_id', groupId)
@@ -40,7 +36,7 @@ export async function getEditHistory(groupId, weeksBack = 8, db = null) {
 
 export async function savePreference(groupId, preference, db = null) {
   if (db?.savePreference) return db.savePreference(groupId, preference)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('learned_preferences')
     .upsert({
       group_id: groupId,
@@ -61,7 +57,7 @@ export async function savePreference(groupId, preference, db = null) {
 
 export async function getPreferences(groupId, db = null) {
   if (db?.getPreferences) return db.getPreferences(groupId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('learned_preferences')
     .select('*')
     .eq('group_id', groupId)

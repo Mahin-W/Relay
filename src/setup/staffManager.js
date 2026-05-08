@@ -1,11 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 
-const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-
 async function liveQuery(sql, params) {
-  const supabase = getSupabase()
-  const { data, error } = await supabase.rpc('exec_sql', { sql, params })
+  const { data, error } = await getDb().rpc('exec_sql', { sql, params })
   if (error) throw error
   return data
 }

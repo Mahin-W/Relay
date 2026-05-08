@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 
 // Coverage-fill escalation cron.
@@ -17,12 +17,6 @@ import { logger } from '../logger.js'
 // two cron instances race, only one sees its UPDATE return a row.
 
 const TIER_THRESHOLDS_MIN = { 1: 30, 2: 60, 3: 120 }
-
-let _supabase
-function db() {
-  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  return _supabase
-}
 
 function targetTierForAge(ageMin) {
   if (ageMin >= TIER_THRESHOLDS_MIN[3]) return 3
@@ -212,7 +206,7 @@ async function fetchOpenStale(database, cutoffIso) {
 }
 
 export async function runEscalationSweep(bot, opts = {}) {
-  const database = opts.db || db()
+  const database = opts.db || getDb()
   const cutoff = new Date(Date.now() - TIER_THRESHOLDS_MIN[1] * 60 * 1000).toISOString()
   const open = await fetchOpenStale(database, cutoff)
   if (open === null) return { processed: 0, advanced: 0 }

@@ -1,14 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 const TIP_DEFAULTS = { mode: 'pool', splitMethod: 'hours', bohIncluded: false }
 
 export async function saveTipSettings(groupId, settings, db = null) {
   if (db?.saveTipSettings) return db.saveTipSettings(groupId, settings)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('restaurant_tip_settings')
       .upsert(
         {
@@ -37,7 +35,7 @@ export async function getTipSettings(groupId, db = null) {
     return result ?? { ...TIP_DEFAULTS }
   }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('restaurant_tip_settings')
       .select('*')
       .eq('group_id', groupId)

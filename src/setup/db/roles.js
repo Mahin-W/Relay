@@ -1,12 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function updateRoleRate(groupId, roleName, hourlyRate, db = null) {
   if (db?.updateRoleRate) return db.updateRoleRate(groupId, roleName, hourlyRate)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('role_rates')
       .upsert(
         { group_id: groupId, role_name: roleName, hourly_rate: hourlyRate },
@@ -26,7 +24,7 @@ export async function updateRoleRate(groupId, roleName, hourlyRate, db = null) {
 export async function getRoleRate(groupId, roleName, db = null) {
   if (db?.getRoleRate) return db.getRoleRate(groupId, roleName)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('role_rates')
       .select('hourly_rate')
       .eq('group_id', groupId)
@@ -46,7 +44,7 @@ export async function getRatesForGroup(groupId, db = null) {
     return rows.map(r => ({ roleName: r.role_name, hourlyRate: r.hourly_rate }))
   }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('role_rates')
       .select('role_name, hourly_rate')
       .eq('group_id', groupId)
@@ -63,7 +61,7 @@ export async function getUniqueRolesForGroup(groupId, db = null) {
   if (db?.getUniqueRolesForGroup) return db.getUniqueRolesForGroup(groupId)
   try {
     // Get all unique role names from shift_requirements for this group's shifts
-    const { data: shifts, error: shiftErr } = await supabase
+    const { data: shifts, error: shiftErr } = await getDb()
       .from('shifts')
       .select('id')
       .eq('group_id', groupId)
@@ -71,7 +69,7 @@ export async function getUniqueRolesForGroup(groupId, db = null) {
     if (!shifts || shifts.length === 0) return []
 
     const shiftIds = shifts.map(s => s.id)
-    const { data: reqs, error: reqErr } = await supabase
+    const { data: reqs, error: reqErr } = await getDb()
       .from('shift_requirements')
       .select('role')
       .in('shift_id', shiftIds)

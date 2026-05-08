@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveAvailability(userId, groupId, weekStart, availableShiftIds, availableAll, unavailable, rawResponse) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability')
       .upsert(
         {
@@ -33,7 +31,7 @@ export async function saveAvailability(userId, groupId, weekStart, availableShif
 
 export async function getAvailabilityForGroup(groupId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability')
       .select('*')
       .eq('group_id', groupId)

@@ -1,12 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { saveWeeklyQualityScore, getQualityHistory } from './scheduleQualityDb.js'
-
-let _supabase
-function supabase() {
-  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  return _supabase
-}
 
 // ── collectWeekMetrics ───────────────────────────────────────────────────────
 // Accepts either a Supabase-shaped client (with `.from(...)`) or a named-method
@@ -14,7 +8,7 @@ function supabase() {
 // be exercised in unit tests without a live DB connection.
 
 export async function collectWeekMetrics(groupId, weekStart, db = null) {
-  const _db = db ?? supabase()
+  const _db = db ?? getDb()
   const gid = String(groupId)
 
   // Calculate week boundaries

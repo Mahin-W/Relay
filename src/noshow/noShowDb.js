@@ -1,14 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 /**
  * Returns group_ids for all groups where setup is complete.
  */
 export async function getConfiguredGroups() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('group_id')
       .eq('setup_complete', true)
@@ -36,7 +34,7 @@ export async function getUpcomingShifts(groupId) {
     const weekStart = monday.toISOString().split('T')[0]
 
     // Check if schedule is published
-    const { data: schedule } = await supabase
+    const { data: schedule } = await getDb()
       .from('generated_schedules')
       .select('id')
       .eq('group_id', groupId)
@@ -45,7 +43,7 @@ export async function getUpcomingShifts(groupId) {
       .maybeSingle()
     if (!schedule) return []
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select(`
         id,
@@ -79,7 +77,7 @@ export async function getUpcomingShifts(groupId) {
  */
 export async function wasWarned(assignmentId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('noshow_warnings')
       .select('id')
       .eq('assignment_id', assignmentId)
@@ -97,7 +95,7 @@ export async function wasWarned(assignmentId) {
  */
 export async function markWarned(assignmentId, groupId) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('noshow_warnings')
       .upsert({ assignment_id: assignmentId, group_id: groupId }, { onConflict: 'assignment_id' })
     if (error) throw error

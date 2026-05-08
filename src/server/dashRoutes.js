@@ -1,5 +1,5 @@
 import express from 'express'
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { requireAuth } from './middleware.js'
 import { calculateTipSplit } from '../operations/tipPool.js'
 import { generateWeeklySchedule } from '../schedule/generateSchedule.js'
@@ -8,11 +8,7 @@ import { manualClockOut, manualClockIn } from '../timeclock/clockOverride.js'
 const router = express.Router()
 router.use(requireAuth)
 
-let _supabase
-function supabase() {
-  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  return _supabase
-}
+function supabase() { return getDb() }
 
 function getCurrentWeekStart() {
   const now = new Date()
@@ -1048,6 +1044,16 @@ router.post('/schedule/approve', async (req, res) => {
     } catch (pubErr) {
       console.error('[/schedule/approve publish-state]', pubErr.message)
       // non-fatal: schedule was sent, status write best-effort
+    }
+
+    // Clear existing receipts so staff must re-confirm the updated schedule
+    try {
+      await db.from('schedule_receipts')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('week_start', weekStart)
+    } catch (rcptErr) {
+      console.error('[/schedule/approve receipt-clear]', rcptErr.message)
     }
 
     res.json({ success: true, staffNotified: Object.keys(byStaff).length })

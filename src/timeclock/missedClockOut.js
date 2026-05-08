@@ -1,7 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const getSupabase = () =>
-  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+import { getDb } from '../db.js'
 
 // ── Time parsing ──────────────────────────────────────────────────────────────
 
@@ -48,7 +45,7 @@ function buildShiftEndDatetime(endTimeStr, now) {
  */
 async function _fetchOpenEntries(groupId) {
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     // Supabase JS doesn't support multi-table JOINs in a single .from() call,
     // so we use PostgREST's embedded resource syntax via rpc or a view.
     // Here we use a plain select with embedded relationships (PostgREST syntax).
@@ -151,7 +148,7 @@ export async function sendMissedClockOutAlert(bot, entry, db = null) {
       await db.markAlerted(entry.clockEntryId)
     } else {
       try {
-        const supabase = getSupabase()
+        const supabase = getDb()
         const { error } = await supabase
           .from('time_entries')
           .update({ alerted_at: new Date().toISOString() })
@@ -175,7 +172,7 @@ export async function sendMissedClockOutAlert(bot, entry, db = null) {
 async function _getManagerDmChatId(groupId, db = null) {
   if (db?.getManagerDmChatId) return db.getManagerDmChatId(groupId)
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('setup_sessions')
       .select('dm_chat_id')

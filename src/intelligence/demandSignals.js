@@ -1,8 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 const HIGH_KEYWORDS = [
   'big event', 'full house', 'packed', 'large party', 'reservation',
@@ -119,7 +115,7 @@ export function extractDemandSignal(text) {
 
 export async function saveDemandSignal(groupId, weekStart, signal, sourceMessage, sourceUserId, db = null) {
   if (db?.saveDemandSignal) return db.saveDemandSignal(groupId, weekStart, signal, sourceMessage, sourceUserId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('demand_signals')
     .upsert({
       group_id: groupId,
@@ -139,7 +135,7 @@ export async function saveDemandSignal(groupId, weekStart, signal, sourceMessage
 
 export async function getDemandSignals(groupId, weekStart, db = null) {
   if (db?.getDemandSignals) return db.getDemandSignals(groupId, weekStart)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('demand_signals')
     .select('*')
     .eq('group_id', groupId)

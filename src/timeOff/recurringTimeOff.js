@@ -1,9 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { llmCreate, llmWithRetry } from '../parsers/llm.js'
 import { saveRecurringConstraint as liveSaveRecurringConstraint } from './recurringTimeOffDb.js'
 import { logger } from '../logger.js'
-
-const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 const SYSTEM_PROMPT = `Detect permanent recurring availability constraints from staff messages.
 Return JSON: { isRecurring: bool, type: 'day_off'|'time_constraint'|null, dayOfWeek: string|null, beforeTime: 'HH:MM'|null, afterTime: 'HH:MM'|null }
@@ -87,7 +85,7 @@ async function getStaffDmByUserId(userId, db) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('staff_dms')
       .select('*')
@@ -112,7 +110,7 @@ async function getStaffByName(name, groupId, db) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('staff')
       .select('*')
@@ -138,7 +136,7 @@ async function getSetupSession(groupId, db) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('setup_sessions')
       .select('*')
@@ -194,9 +192,9 @@ export async function handleRecurringConstraint(bot, msg, db = null) {
       // For now, use the most recent setup_session for manager's group
       // A more robust approach would store group_id in staff_dms
       try {
-        const supabase = db ? null : getSupabase()
-        if (supabase) {
-          const { data } = await supabase
+        const _db = db ? null : getDb()
+        if (_db) {
+          const { data } = await _db
             .from('staff')
             .select('id, group_id, name')
             .ilike('name', firstName)

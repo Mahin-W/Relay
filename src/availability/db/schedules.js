@@ -1,17 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveGeneratedSchedule(groupId, weekStart, assignments, gaps) {
   try {
-    await supabase
+    await getDb()
       .from('generated_schedules')
       .update({ status: 'rejected' })
       .eq('group_id', groupId)
       .eq('status', 'draft')
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('generated_schedules')
       .insert({
         group_id: groupId,
@@ -33,7 +31,7 @@ export async function saveGeneratedSchedule(groupId, weekStart, assignments, gap
 
 export async function getPublishedSchedule(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('generated_schedules')
       .select('*')
       .eq('group_id', groupId)
@@ -51,7 +49,7 @@ export async function getPublishedSchedule(groupId) {
 
 export async function getPendingSchedule(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('generated_schedules')
       .select('*')
       .eq('group_id', groupId)
@@ -69,7 +67,7 @@ export async function getPendingSchedule(groupId) {
 
 export async function swapPublishedScheduleAssignment(groupId, shiftId, fromStaffId, toStaffName, toStaffId) {
   try {
-    const { data: schedule, error: fetchErr } = await supabase
+    const { data: schedule, error: fetchErr } = await getDb()
       .from('generated_schedules')
       .select('id, assignments')
       .eq('group_id', groupId)
@@ -87,7 +85,7 @@ export async function swapPublishedScheduleAssignment(groupId, shiftId, fromStaf
       return a
     })
 
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('generated_schedules')
       .update({ assignments: updated })
       .eq('id', schedule.id)
@@ -103,7 +101,7 @@ export async function updateScheduleStatus(scheduleId, status) {
     const updates = { status }
     if (status === 'published') updates.published_at = new Date().toISOString()
     if (status === 'approved') updates.approved_at = new Date().toISOString()
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('generated_schedules')
       .update(updates)
       .eq('id', scheduleId)

@@ -10,20 +10,15 @@
  *   ALTER TABLE coverage_requests ADD COLUMN IF NOT EXISTS initiated_by TEXT DEFAULT 'staff';
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { llmCreate, llmWithRetry } from '../parsers/llm.js'
 import { logger } from '../logger.js'
-
-// ── Supabase client (lazy) ────────────────────────────────────────────────────
-
-const getSupabase = () =>
-  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 // ── Live DB functions ─────────────────────────────────────────────────────────
 
 async function getShiftsForGroup(groupId) {
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('shifts')
       .select('*')
@@ -40,7 +35,7 @@ async function getShiftsForGroup(groupId) {
 
 async function saveCoverageRequest(groupId, groupName, shiftDescription, initiatedBy = 'manager') {
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('coverage_requests')
       .insert({
@@ -62,7 +57,7 @@ async function saveCoverageRequest(groupId, groupName, shiftDescription, initiat
 
 async function getGroupMembersWithDm(groupId) {
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('group_members')
       .select('user_id, first_name, staff_dms!inner(dm_chat_id)')

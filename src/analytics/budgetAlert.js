@@ -1,9 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -271,7 +267,7 @@ export function formatBudgetAlert(projected, budget, weekStart) {
 export async function getBudget(groupId, db = null) {
   if (db?.getBudget) return db.getBudget(groupId)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('labor_budgets')
     .select('weekly_budget, currency')
     .eq('group_id', groupId)
@@ -293,7 +289,7 @@ export async function getBudget(groupId, db = null) {
 export async function saveBudget(groupId, weeklyBudget, db = null) {
   if (db?.saveBudget) return db.saveBudget(groupId, weeklyBudget)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('labor_budgets')
     .upsert({ group_id: groupId, weekly_budget: weeklyBudget }, { onConflict: 'group_id' })
     .select()

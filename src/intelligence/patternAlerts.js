@@ -1,8 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 /**
  * Analyze coverage request patterns for a group over the last N weeks.
@@ -17,7 +13,7 @@ export async function analyzeCoveragePatterns(groupId, weeksBack = 6, db = null)
     const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
     // coverage_requests doesn't have `day_of_week` or `shift_name` columns of its own;
     // pull them from the joined `shifts` row instead.
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .select('requested_by, requester_telegram_id, matched_shift_id, shift_description, created_at, status, shifts:matched_shift_id(name, day_of_week)')
       .eq('group_id', groupId)
@@ -41,7 +37,7 @@ export async function analyzeCoveragePatterns(groupId, weeksBack = 6, db = null)
     const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
     // schedule_assignments only stores foreign keys; pull staff name + shift
     // metadata via join.
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select('staff_id, shift_id, staff:staff_id(name), shifts:shift_id(name, day_of_week)')
       .eq('group_id', groupId)
@@ -149,7 +145,7 @@ export async function analyzeOnCallCandidates(groupId, db = null) {
   if (db?.getOnCallHistory) {
     rows = await db.getOnCallHistory(groupId)
   } else {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_confirmations')
       .select('covered_by, staff_id, response_minutes, created_at')
       .eq('group_id', groupId)

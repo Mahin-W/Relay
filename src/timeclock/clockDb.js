@@ -1,12 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function clockIn(groupId, userId, staffId, shiftId, rawText, db = null) {
   if (db?.clockIn) return db.clockIn(groupId, userId, staffId, shiftId, rawText)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_entries')
       .insert({
         group_id: groupId,
@@ -31,7 +29,7 @@ export async function clockOut(entryId, rawText, db = null) {
   if (db?.clockOut) return db.clockOut(entryId, rawText)
   try {
     // D.02: only update if clock_out is currently null — prevents silent overwrite
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_entries')
       .update({
         clock_out: new Date().toISOString(),
@@ -58,7 +56,7 @@ export async function clockOut(entryId, rawText, db = null) {
 export async function getOpenEntry(userId, groupId, db = null) {
   if (db?.getOpenEntry) return db.getOpenEntry(userId, groupId)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_entries')
       .select('*')
       .eq('user_id', userId)
@@ -82,7 +80,7 @@ export async function getTimeEntriesForWeek(groupId, weekStart, db = null) {
     const end = new Date(start)
     end.setDate(end.getDate() + 7)
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_entries')
       .select('*')
       .eq('group_id', groupId)
@@ -100,7 +98,7 @@ export async function getTimeEntriesForWeek(groupId, weekStart, db = null) {
 export async function getClockedInNow(groupId, db = null) {
   if (db?.getClockedInNow) return db.getClockedInNow(groupId)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_entries')
       .select('user_id, staff_id, shift_id, clock_in')
       .eq('group_id', groupId)
@@ -116,7 +114,7 @@ export async function getClockedInNow(groupId, db = null) {
 export async function getRecentEntries(userId, groupId, limit = 10, db = null) {
   if (db?.getRecentEntries) return db.getRecentEntries(userId, groupId, limit)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_entries')
       .select('*')
       .eq('user_id', userId)

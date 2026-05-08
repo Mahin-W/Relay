@@ -5,6 +5,15 @@ import path from 'path'
 import authRoutes from './authRoutes.js'
 import dashRoutes from './dashRoutes.js'
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+  : [
+      'https://getrelay-app.netlify.app',
+      'https://relay-68a.pages.dev',
+      'http://localhost:3000',
+      'http://localhost:8888',
+    ]
+
 export function startWebServer(bot, db) {
   const app = express()
   const port = process.env.PORT || 10000
@@ -12,11 +21,7 @@ export function startWebServer(bot, db) {
   app.use(express.json())
   app.use(cookieParser())
   app.use(cors({
-    origin: [
-      'https://getrelay-app.netlify.app',
-      'http://localhost:3000',
-      'http://localhost:8888',
-    ],
+    origin: ALLOWED_ORIGINS,
     credentials: true,
   }))
 

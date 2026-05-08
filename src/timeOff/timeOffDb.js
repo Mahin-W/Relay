@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveTimeOffRequest(groupId, staffTelegramId, staffName, requestedDate, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_off_requests')
       .insert({
         group_id: groupId,
@@ -28,7 +26,7 @@ export async function saveTimeOffRequest(groupId, staffTelegramId, staffName, re
 
 export async function getPendingTimeOffByName(groupId, staffName) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_off_requests')
       .select('*')
       .eq('group_id', groupId)
@@ -47,7 +45,7 @@ export async function getPendingTimeOffByName(groupId, staffName) {
 
 export async function updateTimeOffStatus(requestId, status) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_off_requests')
       .update({ status })
       .eq('id', requestId)
@@ -63,7 +61,7 @@ export async function updateTimeOffStatus(requestId, status) {
 
 export async function getStaffDmChatId(telegramUserId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff_dms')
       .select('dm_chat_id, first_name')
       .eq('user_id', telegramUserId)

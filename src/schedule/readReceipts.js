@@ -1,14 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { formatWeekLabel } from './generateSchedule.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 // ── Live DB functions ─────────────────────────────────────────────────────────
 
 async function _liveSaveReceipt(groupId, staffId, weekStart, dmChatId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_receipts')
       .upsert(
         { group_id: groupId, staff_id: staffId, week_start: weekStart, dm_chat_id: String(dmChatId ?? ''), status: 'sent' },
@@ -28,7 +26,7 @@ async function _liveUpdateReceiptStatus(staffId, weekStart, status) {
   try {
     const updates = { status }
     if (status === 'confirmed') updates.confirmed_at = new Date().toISOString()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_receipts')
       .update(updates)
       .eq('staff_id', staffId)
@@ -46,7 +44,7 @@ async function _liveUpdateReceiptStatus(staffId, weekStart, status) {
 
 async function _liveGetPendingReceipt(chatId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_receipts')
       .select('*')
       .eq('dm_chat_id', String(chatId))
@@ -64,7 +62,7 @@ async function _liveGetPendingReceipt(chatId) {
 
 async function _liveGetUnconfirmedStaff(groupId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_receipts')
       .select('staff_id, dm_chat_id, staff:staff(name)')
       .eq('group_id', groupId)

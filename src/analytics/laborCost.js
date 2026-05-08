@@ -1,8 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
+import { logDailyRevenue } from './revenueDb.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -186,7 +183,7 @@ export function formatRevenueHistory(history) {
 export async function saveWeeklyRevenue(groupId, weekStart, revenue, totalLaborCost, laborPercent, db = null) {
   if (db?.saveWeeklyRevenue) return db.saveWeeklyRevenue(groupId, weekStart, revenue, totalLaborCost, laborPercent)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('weekly_revenue')
     .upsert(
       { group_id: groupId, week_start: weekStart, revenue, total_labor_cost: totalLaborCost, labor_percent: laborPercent },
@@ -202,7 +199,7 @@ export async function saveWeeklyRevenue(groupId, weekStart, revenue, totalLaborC
 export async function getRevenueHistory(groupId, weeksBack = 8, db = null) {
   if (db?.getRevenueHistory) return db.getRevenueHistory(groupId, weeksBack)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('weekly_revenue')
     .select('week_start, revenue, total_labor_cost, labor_percent')
     .eq('group_id', groupId)
@@ -264,7 +261,15 @@ export async function handleRevenueInput(bot, msg, revenue, db = null) {
 
   const { percent, status } = calculateLaborCostPercent(totalLaborCost, revenue)
 
-  // Save to DB
+  // Save to DB — write to daily_revenue first so dashboard rollup includes this entry
+  const today = new Date().toISOString().split('T')[0]
+  try {
+    await logDailyRevenue(groupId, today, revenue, null, null, db)
+  } catch (dailyErr) {
+    // Fall back to direct weekly write if daily insert fails (e.g. duplicate)
+    await saveWeeklyRevenue(groupId, weekStart, revenue, totalLaborCost, percent, db)
+  }
+  // Always update weekly_revenue with the computed labor data
   await saveWeeklyRevenue(groupId, weekStart, revenue, totalLaborCost, percent, db)
 
   // Format and send report

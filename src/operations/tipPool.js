@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 // ── FOH / BOH role classification ─────────────────────────────────────────────
 
@@ -159,7 +157,7 @@ export async function getTipEligibleStaff(groupId, shiftId, shiftDate, bohInclud
 // Supabase fallback for roster lookup
 async function getShiftRosterWithHours(shiftId, shiftDate) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select('staff_id, staff:staff_id(id, name, role)')
       .eq('shift_id', shiftId)
@@ -184,7 +182,7 @@ const TIP_DEFAULTS = { mode: 'pool', splitMethod: 'hours', bohIncluded: false }
 export async function saveTipSettings(groupId, settings, db = null) {
   if (db?.saveTipSettings) return db.saveTipSettings(groupId, settings)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('restaurant_tip_settings')
       .upsert(
         {
@@ -213,7 +211,7 @@ export async function getTipSettings(groupId, db = null) {
     return result ?? { ...TIP_DEFAULTS }
   }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('restaurant_tip_settings')
       .select('*')
       .eq('group_id', groupId)
@@ -236,7 +234,7 @@ export async function getTipSettings(groupId, db = null) {
 export async function saveTipRecord(groupId, shiftId, shiftDate, totalTips, splits, splitMethod, mode, db = null) {
   if (db?.saveTipRecord) return db.saveTipRecord(groupId, shiftId, shiftDate, totalTips, splits, splitMethod, mode)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('tip_records')
       .insert({
         group_id: groupId,
@@ -264,7 +262,7 @@ export async function getTipHistory(groupId, weeksBack = 4, db = null) {
   try {
     const since = new Date()
     since.setDate(since.getDate() - weeksBack * 7)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('tip_records')
       .select('*')
       .eq('group_id', groupId)
@@ -311,7 +309,7 @@ export function formatTipSplit(totalTips, splits, tipSettings) {
 async function getManagerGroup(userId, db = null) {
   if (db?.getManagerGroup) return db.getManagerGroup(userId)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('group_id, group_name')
       .eq('manager_id', userId)

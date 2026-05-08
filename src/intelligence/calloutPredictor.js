@@ -1,10 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { calculateMoraleScore } from './moraleTracker.js'
 import { getMoraleEvents } from './moraleDb.js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
 
 /**
  * Get callout history for a specific staff member.
@@ -18,7 +14,7 @@ export async function getCalloutHistory(groupId, staffId, weeksBack = 8, db = nu
     const cutoff = new Date(Date.now() - weeksBack * 7 * 24 * 60 * 60 * 1000).toISOString()
     // coverage_requests has neither day_of_week nor shift_name — they live on
     // the joined shifts row.
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .select('matched_shift_id, created_at, shifts:matched_shift_id(name, day_of_week)')
       .eq('group_id', groupId)

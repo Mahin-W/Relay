@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function createAvailabilitySession(userId, groupId, dmChatId, weekStart, shiftMap) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability_sessions')
       .upsert(
         {
@@ -31,7 +29,7 @@ export async function createAvailabilitySession(userId, groupId, dmChatId, weekS
 export async function getAvailabilitySessionByDm(dmChatId) {
   try {
     const today = new Date().toISOString().split('T')[0]
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability_sessions')
       .select('*')
       .eq('dm_chat_id', dmChatId)
@@ -50,7 +48,7 @@ export async function getAvailabilitySessionByDm(dmChatId) {
 
 export async function getAvailabilitySessionForUserWeek(userId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability_sessions')
       .select('*')
       .eq('user_id', userId)
@@ -66,7 +64,7 @@ export async function getAvailabilitySessionForUserWeek(userId, weekStart) {
 
 export async function updateAvailabilitySessionStatus(userId, weekStart, status) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('availability_sessions')
       .update({ status })
       .eq('user_id', userId)
@@ -79,7 +77,7 @@ export async function updateAvailabilitySessionStatus(userId, weekStart, status)
 
 export async function getPendingSessionsForGroup(groupId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability_sessions')
       .select('*')
       .eq('group_id', groupId)
@@ -95,7 +93,7 @@ export async function getPendingSessionsForGroup(groupId, weekStart) {
 
 export async function getAllSessionsForGroup(groupId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('availability_sessions')
       .select('*')
       .eq('group_id', groupId)
@@ -110,8 +108,8 @@ export async function getAllSessionsForGroup(groupId, weekStart) {
 
 export async function resetAvailabilityForGroup(groupId, weekStart) {
   try {
-    await supabase.from('availability_sessions').delete().eq('group_id', groupId).eq('week_start', weekStart)
-    await supabase.from('availability').delete().eq('group_id', groupId).eq('week_start', weekStart)
+    await getDb().from('availability_sessions').delete().eq('group_id', groupId).eq('week_start', weekStart)
+    await getDb().from('availability').delete().eq('group_id', groupId).eq('week_start', weekStart)
     logger.db(`Reset availability for group ${groupId} week ${weekStart}`)
   } catch (err) {
     logger.error(`resetAvailabilityForGroup failed: ${err.message}`)

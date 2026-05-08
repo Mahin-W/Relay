@@ -1,8 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -292,7 +288,7 @@ export function generateDiscoveryPrompts(patterns) {
 export async function saveDiscoveredPattern(groupId, pattern, db = null) {
   if (db?.saveDiscoveredPattern) return db.saveDiscoveredPattern(groupId, pattern)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('discovered_patterns')
     .insert({
       group_id: groupId,
@@ -314,7 +310,7 @@ export async function saveDiscoveredPattern(groupId, pattern, db = null) {
 export async function dismissPattern(patternId, db = null) {
   if (db?.dismissPattern) return db.dismissPattern(patternId)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('discovered_patterns')
     .update({ status: 'dismissed', responded_at: new Date().toISOString() })
     .eq('id', patternId)
@@ -327,7 +323,7 @@ export async function dismissPattern(patternId, db = null) {
 export async function getDismissedPatterns(groupId, db = null) {
   if (db?.getDismissedPatterns) return db.getDismissedPatterns(groupId)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('discovered_patterns')
     .select('*')
     .eq('group_id', groupId)
@@ -367,7 +363,7 @@ export async function shouldRunDiscovery(groupId, weekStart, db = null) {
 async function fetchAssignments(groupId, weeksBack) {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - weeksBack * 7)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('schedule_assignments')
     .select('*')
     .eq('group_id', groupId)
@@ -378,7 +374,7 @@ async function fetchAssignments(groupId, weeksBack) {
 }
 
 async function fetchStaff(groupId) {
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('staff')
     .select('*')
     .eq('group_id', groupId)
@@ -387,7 +383,7 @@ async function fetchStaff(groupId) {
 }
 
 async function fetchShifts(groupId) {
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('shifts')
     .select('*')
     .eq('group_id', groupId)
@@ -396,7 +392,7 @@ async function fetchShifts(groupId) {
 }
 
 async function fetchAvailability(groupId) {
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('availability')
     .select('*')
     .eq('group_id', groupId)
@@ -407,7 +403,7 @@ async function fetchAvailability(groupId) {
 async function fetchDiscoveredPatternsThisWeek(groupId, weekStart) {
   const weekEnd = new Date(weekStart + 'T00:00:00Z')
   weekEnd.setDate(weekEnd.getDate() + 7)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('discovered_patterns')
     .select('*')
     .eq('group_id', groupId)

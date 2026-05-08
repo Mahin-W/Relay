@@ -1,8 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { computeScore, getReliabilityLabel } from './reliabilityScore.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 /**
  * Records a reliability event for a staff member.
@@ -10,7 +8,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
  */
 export async function recordEvent(staffId, groupId, eventType, metadata = {}) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('staff_reliability_events')
       .insert({ staff_id: staffId, group_id: groupId, event_type: eventType, metadata })
     if (error) throw error
@@ -25,7 +23,7 @@ export async function recordEvent(staffId, groupId, eventType, metadata = {}) {
 export async function getReliabilityEvents(staffId, groupId, dayLimit = 90) {
   try {
     const since = new Date(Date.now() - dayLimit * 24 * 60 * 60 * 1000).toISOString()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff_reliability_events')
       .select('event_type, recorded_at')
       .eq('staff_id', staffId)
@@ -46,7 +44,7 @@ export async function getReliabilityEvents(staffId, groupId, dayLimit = 90) {
  */
 export async function getReliabilityScores(groupId) {
   try {
-    const { data: staffRows, error } = await supabase
+    const { data: staffRows, error } = await getDb()
       .from('staff')
       .select('id, name')
       .eq('group_id', groupId)

@@ -1,11 +1,7 @@
 // Current Shift Awareness — who's on shift right now, upcoming, ended today.
 // Pure functions (no DB, no LLM) except getCurrentShifts which uses DB injection.
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -178,7 +174,7 @@ export async function getCurrentShifts(groupId, now = new Date(), db = null) {
   } else {
     // Real Supabase query
     const todayDay = DAY_NAMES[now.getDay()]
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select(`
         shift_id,

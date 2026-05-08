@@ -145,18 +145,16 @@ function calcHours(startTime, endTime) {
 
 // Production DB function — looks up staff by DM chat ID via group_members + staff_dms
 async function getStaffByDmChatIdReal(chatId) {
-  // Import lazily to avoid circular deps and allow test injection
-  const { createClient } = await import('@supabase/supabase-js')
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  const { getDb } = await import('../db.js')
   try {
-    const { data: dmRow } = await supabase
+    const { data: dmRow } = await getDb()
       .from('staff_dms')
       .select('user_id, first_name, dm_chat_id')
       .eq('dm_chat_id', chatId)
       .maybeSingle()
     if (!dmRow) return null
 
-    const { data: memberRow } = await supabase
+    const { data: memberRow } = await getDb()
       .from('group_members')
       .select('group_id')
       .eq('user_id', dmRow.user_id)

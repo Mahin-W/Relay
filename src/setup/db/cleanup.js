@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 /**
  * Clear configuration data for a group before a fresh /setup run.
@@ -14,10 +12,10 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 export async function clearGroupSetupData(groupId, db = null) {
   if (db?.runCleanup) return db.runCleanup(groupId)
   try {
-    await supabase.from('schedule_assignments').delete().eq('group_id', groupId)
-    await supabase.from('availability').delete().eq('group_id', groupId)
-    await supabase.from('staff').delete().eq('group_id', groupId)
-    await supabase.from('shifts').delete().eq('group_id', groupId)
+    await getDb().from('schedule_assignments').delete().eq('group_id', groupId)
+    await getDb().from('availability').delete().eq('group_id', groupId)
+    await getDb().from('staff').delete().eq('group_id', groupId)
+    await getDb().from('shifts').delete().eq('group_id', groupId)
     logger.db(`Cleared setup data for group ${groupId} (assignments, availability, staff, shifts)`)
     return true
   } catch (err) {

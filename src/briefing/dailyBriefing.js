@@ -1,10 +1,8 @@
 import cron from 'node-cron'
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { getSetupSession as liveGetSetupSession } from '../setup/setupDb.js'
 import { getClockComplianceReport, formatComplianceSection } from '../timeclock/clockAlerts.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 // ── DB helpers (live implementations) ────────────────────────────────────
 
@@ -17,7 +15,7 @@ async function getTodaysAssignments(groupId) {
     monday.setDate(now.getDate() + diff)
     const weekStart = monday.toISOString().split('T')[0]
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select('staff:staff(name), shift:shifts(name, start_time, day_of_week)')
       .eq('group_id', groupId)
@@ -32,7 +30,7 @@ async function getTodaysAssignments(groupId) {
 
 async function getOpenCoverageRequests(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .select('shift_description, requested_by, status, created_at')
       .eq('group_id', groupId)
@@ -48,7 +46,7 @@ async function getOpenCoverageRequests(groupId) {
 
 async function getPendingTimeOff(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('time_off_requests')
       .select('staff_name, requested_date, status')
       .eq('group_id', groupId)
@@ -71,7 +69,7 @@ async function getUnconfirmedSchedule(groupId) {
     monday.setDate(now.getDate() + diff)
     const weekStart = monday.toISOString().split('T')[0]
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_receipts')
       .select('staff:staff(name), status')
       .eq('group_id', groupId)
@@ -90,7 +88,7 @@ async function getUnconfirmedSchedule(groupId) {
 
 async function getOpenTrades(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('trade_requests')
       .select('shift_description, requester_name, status')
       .eq('group_id', groupId)
@@ -105,7 +103,7 @@ async function getOpenTrades(groupId) {
 
 async function getConfiguredGroups() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('setup_sessions')
       .select('group_id')
       .eq('setup_complete', true)
@@ -353,8 +351,7 @@ export function startSundayBriefingCron(bot) {
           // Record availability outcomes for the completed week
           try {
             const { saveAvailabilityOutcome } = await import('../intelligence/availabilityLearningDb.js')
-            const { createClient } = await import('@supabase/supabase-js')
-            const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+            const sb = getDb()
             // Get assignments for this week
             const { data: assignments } = await sb
               .from('schedule_assignments').select('staff_id, shift_id')

@@ -1,16 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
-
-function getDb(db) {
-  if (db) return db
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-}
+import { getDb as _getDb } from '../db.js'
 
 /**
  * Save an availability outcome record (INSERT only, never update).
  * All historical records are kept for trend analysis.
  */
 export async function saveAvailabilityOutcome(groupId, staffId, weekStart, dayOfWeek, statedAvailable, actualOutcome, db = null) {
-  const client = getDb(db)
+  const client = db ?? _getDb()
   const { data, error } = await client
     .from('availability_outcomes')
     .insert({
@@ -30,7 +25,7 @@ export async function saveAvailabilityOutcome(groupId, staffId, weekStart, dayOf
  * Returns [{weekStart, dayOfWeek, statedAvailable, actualOutcome, createdAt}]
  */
 export async function getAvailabilityHistory(groupId, staffId, weeksBack = 8, db = null) {
-  const client = getDb(db)
+  const client = db ?? _getDb()
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - weeksBack * 7)
   const cutoffStr = cutoff.toISOString().split('T')[0]

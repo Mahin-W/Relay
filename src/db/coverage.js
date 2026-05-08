@@ -1,12 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from './client.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveRequest(groupId, groupName, shiftDescription, requestedBy, requesterTelegramId = null) {
   try {
     logger.db(`Saving coverage request for group ${groupId}: "${shiftDescription}"`)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .insert({ group_id: groupId, group_name: groupName, shift_description: shiftDescription, requested_by: requestedBy, requester_telegram_id: requesterTelegramId })
       .select()
@@ -25,7 +23,7 @@ export async function getOpenRequest(groupId) {
   try {
     logger.db(`Looking for open request in group ${groupId}`)
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .select('*')
       .eq('group_id', groupId)
@@ -48,7 +46,7 @@ export async function getOpenRequest(groupId) {
 export async function markCovered(requestId, coveredBy) {
   try {
     logger.db(`Marking request id=${requestId} as covered by ${coveredBy}`)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .update({ status: 'covered', covered_by: coveredBy, covered_at: new Date().toISOString() })
       .eq('id', requestId)
@@ -74,7 +72,7 @@ export async function markCovered(requestId, coveredBy) {
 export async function getMostRecentRequest(groupId) {
   try {
     const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .select('*')
       .eq('group_id', groupId)
@@ -93,7 +91,7 @@ export async function getMostRecentRequest(groupId) {
 // If requesterName provided, only cancels that person's request. Null = cancel any (manager).
 export async function cancelRequest(groupId, requesterName = null) {
   try {
-    let query = supabase
+    let query = getDb()
       .from('coverage_requests')
       .update({ status: 'cancelled' })
       .eq('group_id', groupId)
@@ -111,7 +109,7 @@ export async function cancelRequest(groupId, requesterName = null) {
 export async function getRecentRequests(groupId, limit = 5) {
   try {
     logger.db(`Fetching last ${limit} requests for group ${groupId}`)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .select('*')
       .eq('group_id', groupId)
@@ -128,7 +126,7 @@ export async function getRecentRequests(groupId, limit = 5) {
 
 export async function updateCoverageRequestShift(requestId, shiftId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_requests')
       .update({ matched_shift_id: shiftId, week_start: weekStart })
       .eq('id', requestId)

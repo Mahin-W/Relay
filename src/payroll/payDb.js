@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function savePeriodPayroll(groupId, weekStart, staffPaySummaries, db = null) {
   if (db?.savePeriodPayroll) return db.savePeriodPayroll(groupId, weekStart, staffPaySummaries)
@@ -16,7 +14,7 @@ export async function savePeriodPayroll(groupId, weekStart, staffPaySummaries, d
       total_gross_pay: s.totalGrossPay,
       shift_breakdown: s.shifts,
     }))
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('payroll_records')
       .upsert(rows, { onConflict: 'staff_id,week_start,group_id' })
     if (error) throw error
@@ -31,7 +29,7 @@ export async function savePeriodPayroll(groupId, weekStart, staffPaySummaries, d
 export async function getPayrollForWeek(groupId, weekStart, db = null) {
   if (db?.getPayrollForWeek) return db.getPayrollForWeek(groupId, weekStart)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('payroll_records')
       .select('*, staff(name, role)')
       .eq('group_id', groupId)
@@ -47,7 +45,7 @@ export async function getPayrollForWeek(groupId, weekStart, db = null) {
 export async function getPayrollHistory(staffId, groupId, weeksBack = 8, db = null) {
   if (db?.getPayrollHistory) return db.getPayrollHistory(staffId, groupId, weeksBack)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('payroll_records')
       .select('week_start, total_hours, total_gross_pay, total_late_minutes, total_late_deduction')
       .eq('staff_id', staffId)
@@ -68,7 +66,7 @@ export async function getLateEventsForWeek(groupId, weekStart, db = null) {
     // weekStart is a YYYY-MM-DD string (Monday); week runs Mon–Sun
     const weekEnd = new Date(weekStart)
     weekEnd.setDate(weekEnd.getDate() + 7)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff_reliability_events')
       .select('staff_id, metadata, recorded_at')
       .eq('group_id', groupId)

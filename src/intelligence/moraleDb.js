@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 export async function saveMoraleEvent(groupId, staffId, event, db = null) {
   if (db?.saveMoraleEvent) return db.saveMoraleEvent(groupId, staffId, event)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('morale_events')
     .insert({
       group_id: groupId,
@@ -26,7 +22,7 @@ export async function getMoraleEvents(groupId, staffId, weeksBack = 8, db = null
   if (db?.getMoraleEvents) return db.getMoraleEvents(groupId, staffId)
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - weeksBack * 7)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('morale_events')
     .select('*')
     .eq('group_id', groupId)
@@ -41,7 +37,7 @@ export async function getMoraleSnapshot(groupId, db = null) {
   if (db?.getMoraleSnapshot) return db.getMoraleSnapshot(groupId)
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 8 * 7)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('morale_events')
     .select('*')
     .eq('group_id', groupId)

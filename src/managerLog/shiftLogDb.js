@@ -1,9 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
 
 /**
  * Save a shift log entry.
@@ -17,7 +13,7 @@ const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
 export async function saveLogEntry(groupId, managerId, text, shiftReference, db = null) {
   if (db?.saveLogEntry) return db.saveLogEntry(groupId, managerId, text, shiftReference)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('manager_log_entries')
       .insert([{
         group_id: groupId,
@@ -47,7 +43,7 @@ export async function saveLogEntry(groupId, managerId, text, shiftReference, db 
 export async function getLogEntries(groupId, limit = 14, db = null) {
   if (db?.getLogEntries) return db.getLogEntries(groupId, limit)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('manager_log_entries')
       .select('*')
       .eq('group_id', groupId)
@@ -71,7 +67,7 @@ export async function getLogEntries(groupId, limit = 14, db = null) {
 export async function searchLogEntries(groupId, query, db = null) {
   if (db?.searchLogEntries) return db.searchLogEntries(groupId, query)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('manager_log_entries')
       .select('*')
       .eq('group_id', groupId)

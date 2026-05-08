@@ -1,8 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 // ── Trigger phrases (case-insensitive, phrase-based matching) ────────────────
 
@@ -202,7 +198,7 @@ export function detectRecognition(text, staff = []) {
 export async function saveRecognitionEvent(groupId, managerId, recognition, db = null) {
   if (db?.saveRecognitionEvent) return db.saveRecognitionEvent(groupId, managerId, recognition)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('recognition_events')
     .insert({
       group_id: groupId,
@@ -226,7 +222,7 @@ export async function getRecognitionHistory(groupId, staffId = null, weeksBack =
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - weeksBack * 7)
 
-  let query = supabase
+  let query = getDb()
     .from('recognition_events')
     .select('*')
     .eq('group_id', groupId)
@@ -248,7 +244,7 @@ export async function getRecognitionLeaderboard(groupId, weeksBack = 4, db = nul
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - weeksBack * 7)
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('recognition_events')
     .select('*')
     .eq('group_id', groupId)
@@ -343,8 +339,8 @@ export async function handleRecognition(bot, msg, groupId, db = null) {
 }
 
 async function getStaffForGroup(groupId) {
-  if (!supabase) return []
-  const { data, error } = await supabase
+  if (!getDb()) return []
+  const { data, error } = await getDb()
     .from('staff')
     .select('id, name')
     .eq('group_id', groupId)

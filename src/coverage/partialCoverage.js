@@ -1,8 +1,5 @@
-import { getOpenRequest as liveGetOpenRequest, markCovered as liveMarkCovered } from '../db.js'
+import { getOpenRequest as liveGetOpenRequest, markCovered as liveMarkCovered, getDb } from '../db.js'
 import { logger } from '../logger.js'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -152,7 +149,7 @@ export function formatPartialCoverageMessage(shiftName, volunteer, coverFrom, co
 
 async function liveGetShiftById(shiftId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts').select('*').eq('id', shiftId).maybeSingle()
     if (error) throw error
     return data
@@ -164,7 +161,7 @@ async function liveGetShiftById(shiftId) {
 
 async function liveGetPartialCoverages(requestId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('partial_coverage').select('*').eq('coverage_request_id', requestId)
     if (error) throw error
     return data ?? []
@@ -176,7 +173,7 @@ async function liveGetPartialCoverages(requestId) {
 
 async function liveSavePartialCoverage(data) {
   try {
-    const { data: row, error } = await supabase
+    const { data: row, error } = await getDb()
       .from('partial_coverage').insert(data).select().single()
     if (error) throw error
     return row

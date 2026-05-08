@@ -1,12 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 // Returns { id, name } if user is registered (has a DM with the bot), null otherwise.
 export async function getStaffMember(userId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff_dms')
       .select('user_id, first_name')
       .eq('user_id', userId)
@@ -23,7 +21,7 @@ export async function getStaffMember(userId) {
 // Upsert an on-call record for a staff member.
 export async function saveOnCall(staffId, groupId, weekStart, days = [], allWeek = true) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('on_call')
       .upsert(
         { staff_id: staffId, group_id: groupId, week_start: weekStart, days, all_week: allWeek },
@@ -42,7 +40,7 @@ export async function saveOnCall(staffId, groupId, weekStart, days = [], allWeek
 // Returns array of on-call records for this group/week.
 export async function getOnCallStaff(groupId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('on_call')
       .select('staff_id, all_week, days')
       .eq('group_id', groupId)
@@ -57,7 +55,7 @@ export async function getOnCallStaff(groupId, weekStart) {
 
 export async function removeOnCall(staffId, groupId) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('on_call')
       .delete()
       .eq('staff_id', staffId)
@@ -70,7 +68,7 @@ export async function removeOnCall(staffId, groupId) {
 
 export async function clearWeekOnCall(groupId, weekStart) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('on_call')
       .delete()
       .eq('group_id', groupId)

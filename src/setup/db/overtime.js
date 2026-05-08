@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 const DEFAULTS = {
   overtime_enabled: false,
@@ -15,7 +13,7 @@ const DEFAULTS = {
 export async function saveOvertimeSettings(groupId, settings, db = null) {
   if (db?.saveOvertimeSettings) return db.saveOvertimeSettings(groupId, settings)
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('overtime_settings')
       .upsert(
         { group_id: groupId, ...settings, updated_at: new Date().toISOString() },
@@ -38,7 +36,7 @@ export async function getOvertimeSettings(groupId, db = null) {
     return result ?? { ...DEFAULTS }
   }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('overtime_settings')
       .select('*')
       .eq('group_id', groupId)

@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveStaff(groupId, name, role) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff')
       .insert({ group_id: groupId, name, role: role ?? 'Staff' })
       .select()
@@ -21,7 +19,7 @@ export async function saveStaff(groupId, name, role) {
 
 export async function deleteStaffForGroup(groupId) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('staff')
       .delete()
       .eq('group_id', groupId)
@@ -36,7 +34,7 @@ export async function deleteStaffForGroup(groupId) {
 
 export async function getStaffForGroup(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff')
       .select('*')
       .eq('group_id', groupId)

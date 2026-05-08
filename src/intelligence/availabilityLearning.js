@@ -1,10 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb as _getDb } from '../db.js'
 import { getAvailabilityHistory } from './availabilityLearningDb.js'
-
-function getDb(db) {
-  if (db) return db
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-}
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -13,7 +8,7 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
  * Recent weeks (last 3) are weighted 2x vs older weeks.
  */
 export async function calculateReliableAvailability(staffId, groupId, weeksBack = 8, db = null) {
-  const client = getDb(db)
+  const client = db ?? _getDb()
   const history = await getAvailabilityHistory(groupId, staffId, weeksBack, client)
 
   // Determine unique weeks for weeksAnalyzed
@@ -167,7 +162,7 @@ export function formatAvailabilityInsight(staffName, reliability) {
  * Returns staff where ANY day has status='avoid' AND weeksAnalyzed >= 4.
  */
 export async function detectStatedVsActualGap(groupId, db = null) {
-  const client = getDb(db)
+  const client = db ?? _getDb()
 
   // Get all staff for group
   let staffMembers

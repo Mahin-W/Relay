@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from './client.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveTradeRequest(groupId, groupName, requesterId, requesterName, shiftId, shiftDescription, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('trade_requests')
       .insert({ group_id: groupId, group_name: groupName, requester_id: requesterId, requester_name: requesterName, shift_id: shiftId, shift_description: shiftDescription, week_start: weekStart })
       .select()
@@ -22,7 +20,7 @@ export async function saveTradeRequest(groupId, groupName, requesterId, requeste
 export async function getOpenTradeRequest(groupId) {
   try {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('trade_requests')
       .select('*')
       .eq('group_id', groupId)
@@ -41,7 +39,7 @@ export async function getOpenTradeRequest(groupId) {
 
 export async function markTradeCompleted(tradeId, acceptedById, acceptedByName, acceptedShiftId, acceptedShiftDescription) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('trade_requests')
       .update({ status: 'completed', accepted_by_id: acceptedById, accepted_by_name: acceptedByName, accepted_shift_id: acceptedShiftId, accepted_shift_description: acceptedShiftDescription })
       .eq('id', tradeId)
@@ -53,7 +51,7 @@ export async function markTradeCompleted(tradeId, acceptedById, acceptedByName, 
 
 export async function getGroupMemberName(userId, groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('group_members')
       .select('first_name')
       .eq('user_id', userId)

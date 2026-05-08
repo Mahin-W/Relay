@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function getScheduleAssignments(shiftId, weekStart) {
   try {
-    const { data: assignments, error: aErr } = await supabase
+    const { data: assignments, error: aErr } = await getDb()
       .from('schedule_assignments')
       .select('id, staff_id, status')
       .eq('shift_id', shiftId)
@@ -14,7 +12,7 @@ export async function getScheduleAssignments(shiftId, weekStart) {
     if (!assignments || assignments.length === 0) return []
 
     const staffIds = assignments.map(a => a.staff_id)
-    const { data: staffRows, error: sErr } = await supabase
+    const { data: staffRows, error: sErr } = await getDb()
       .from('staff')
       .select('id, name, role')
       .in('id', staffIds)
@@ -35,7 +33,7 @@ export async function getScheduleAssignments(shiftId, weekStart) {
 
 export async function clearScheduleAssignments(groupId, weekStart) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('schedule_assignments')
       .delete()
       .eq('group_id', groupId)
@@ -49,7 +47,7 @@ export async function clearScheduleAssignments(groupId, weekStart) {
 
 export async function addScheduleAssignment(groupId, shiftId, staffId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .insert({ group_id: groupId, shift_id: shiftId, staff_id: staffId, week_start: weekStart })
       .select()
@@ -69,7 +67,7 @@ export async function findPersonShiftForDay(groupId, requesterId, staffName, day
     const dayLower = dayOfWeek.toLowerCase()
 
     // 1. Published schedule JSONB
-    const { data: schedule } = await supabase
+    const { data: schedule } = await getDb()
       .from('generated_schedules')
       .select('assignments, week_start')
       .eq('group_id', groupId)
@@ -88,20 +86,20 @@ export async function findPersonShiftForDay(groupId, requesterId, staffName, day
 
       if (jsonMatches.length) {
         const shiftIds = [...new Set(jsonMatches.map(a => a.shiftId).filter(Boolean))]
-        const { data: shifts } = await supabase.from('shifts').select('*').in('id', shiftIds)
+        const { data: shifts } = await getDb().from('shifts').select('*').in('id', shiftIds)
         const matches = (shifts ?? []).map(shift => ({ shift, weekStart: schedule.week_start }))
         if (matches.length) return { matches }
       }
     }
 
     // 2. schedule_assignments fallback
-    const { data: staffRows } = await supabase
+    const { data: staffRows } = await getDb()
       .from('staff').select('id').eq('group_id', groupId).ilike('name', staffName).limit(1)
 
     if (staffRows?.length) {
       const staffId = staffRows[0].id
       const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-      const { data: assignments } = await supabase
+      const { data: assignments } = await getDb()
         .from('schedule_assignments')
         .select('id, shift_id, week_start, status')
         .eq('staff_id', staffId)
@@ -110,7 +108,7 @@ export async function findPersonShiftForDay(groupId, requesterId, staffName, day
 
       if (assignments?.length) {
         const shiftIds = [...new Set(assignments.map(a => a.shift_id))]
-        const { data: shifts } = await supabase
+        const { data: shifts } = await getDb()
           .from('shifts').select('*').in('id', shiftIds).eq('day_of_week', dayOfWeek)
 
         if (shifts?.length) {
@@ -132,12 +130,12 @@ export async function findPersonShiftForDay(groupId, requesterId, staffName, day
 
 export async function getScheduledShiftForPerson(groupId, staffName, dayOfWeek, weekStart) {
   try {
-    const { data: staffRows } = await supabase
+    const { data: staffRows } = await getDb()
       .from('staff').select('id').eq('group_id', groupId).ilike('name', staffName).limit(1)
     if (!staffRows?.length) return null
     const staffId = staffRows[0].id
 
-    const { data: assignments } = await supabase
+    const { data: assignments } = await getDb()
       .from('schedule_assignments')
       .select('id, shift_id, status')
       .eq('staff_id', staffId)
@@ -145,7 +143,7 @@ export async function getScheduledShiftForPerson(groupId, staffName, dayOfWeek, 
     if (!assignments?.length) return null
 
     const shiftIds = assignments.map(a => a.shift_id)
-    const { data: shifts } = await supabase
+    const { data: shifts } = await getDb()
       .from('shifts').select('*').in('id', shiftIds).eq('day_of_week', dayOfWeek)
     if (!shifts?.length) return null
 
@@ -159,7 +157,7 @@ export async function getScheduledShiftForPerson(groupId, staffName, dayOfWeek, 
 }
 
 export async function swapScheduleAssignment(groupId, shiftId, weekStart, fromStaffId, toStaffId) {
-  const { error } = await supabase
+  const { error } = await getDb()
     .from('schedule_assignments')
     .update({ staff_id: toStaffId })
     .eq('group_id', groupId)
@@ -172,7 +170,7 @@ export async function swapScheduleAssignment(groupId, shiftId, weekStart, fromSt
 
 export async function updateAssignmentStatus(assignmentId, status) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .update({ status })
       .eq('id', assignmentId)

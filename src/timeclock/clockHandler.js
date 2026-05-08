@@ -2,7 +2,7 @@ import { clockIn, clockOut, getOpenEntry } from './clockDb.js'
 import { findPersonShiftForDay } from '../setup/db/assignments.js'
 import { getManagerGroup } from '../setup/setupDb.js'
 import { getStaffForGroup } from '../setup/setupDb.js'
-import { getGroupMembersWithDm } from '../db.js'
+import { getGroupMembersWithDm, getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { checkOvertimeAlert } from './clockAlerts.js'
 
@@ -60,6 +60,13 @@ export async function handleClockIn(bot, msg, db = null) {
     await bot.sendMessage(msg.chat.id, "I don't have you linked to a group yet. Send /start in your group first.")
     return true
   }
+
+  // Check timeclock enabled
+  try {
+    const { getSetupSession } = await import('../setup/setupDb.js')
+    const session = await getSetupSession(groupId)
+    if (session?.setup_data?.timeclockEnabled === false) return true
+  } catch (_) {}
 
   // Check for existing open entry
   const existing = await getOpenEntry(userId, groupId, db)
@@ -128,6 +135,13 @@ export async function handleClockOut(bot, msg, db = null) {
     await bot.sendMessage(msg.chat.id, "I don't have you linked to a group yet. Send /start in your group first.")
     return true
   }
+
+  // Check timeclock enabled
+  try {
+    const { getSetupSession } = await import('../setup/setupDb.js')
+    const session = await getSetupSession(groupId)
+    if (session?.setup_data?.timeclockEnabled === false) return true
+  } catch (_) {}
 
   const entry = await getOpenEntry(userId, groupId, db)
   if (!entry) {
@@ -206,8 +220,7 @@ async function resolveGroupId(userId, db = null) {
 
     // Fall back to direct supabase only when no db was provided
     if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+      const supabase = getDb()
       const { data } = await supabase
         .from('group_members')
         .select('group_id')

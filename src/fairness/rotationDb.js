@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function getRotationScores(groupId, shiftId, weeksBack = 4) {
   try {
@@ -9,7 +7,7 @@ export async function getRotationScores(groupId, shiftId, weeksBack = 4) {
     cutoff.setDate(cutoff.getDate() - weeksBack * 7)
     const cutoffStr = cutoff.toISOString().split('T')[0]
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('schedule_assignments')
       .select('staff_id')
       .eq('group_id', groupId)
@@ -24,7 +22,7 @@ export async function getRotationScores(groupId, shiftId, weeksBack = 4) {
     const staffIds = Object.keys(counts).map(Number)
     if (!staffIds.length) return []
 
-    const { data: staffRows, error: sErr } = await supabase
+    const { data: staffRows, error: sErr } = await getDb()
       .from('staff').select('id, name').in('id', staffIds)
     if (sErr) throw sErr
 
@@ -44,7 +42,7 @@ export async function getGroupShiftHistory(groupId, weeksBack = 4) {
     cutoff.setDate(cutoff.getDate() - weeksBack * 7)
     const cutoffStr = cutoff.toISOString().split('T')[0]
 
-    const { data: assignments, error } = await supabase
+    const { data: assignments, error } = await getDb()
       .from('schedule_assignments')
       .select('staff_id, shift_id, week_start')
       .eq('group_id', groupId)
@@ -56,8 +54,8 @@ export async function getGroupShiftHistory(groupId, weeksBack = 4) {
     const staffIds = [...new Set(assignments.map(a => a.staff_id))]
 
     const [{ data: shifts }, { data: staffRows }] = await Promise.all([
-      supabase.from('shifts').select('id, name, day_of_week, end_time').in('id', shiftIds),
-      supabase.from('staff').select('id, name').in('id', staffIds),
+      getDb().from('shifts').select('id, name, day_of_week, end_time').in('id', shiftIds),
+      getDb().from('staff').select('id, name').in('id', staffIds),
     ])
 
     const shiftMap = Object.fromEntries((shifts ?? []).map(s => [String(s.id), s]))

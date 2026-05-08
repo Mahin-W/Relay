@@ -1,11 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-let _supabase
-function supabase() {
-  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  return _supabase
-}
 
 /**
  * Upserts weekly quality score on (group_id, week_start).
@@ -13,7 +7,7 @@ function supabase() {
  * a `saveQualityScore(groupId, weekStart, scoreData)` named method.
  */
 export async function saveWeeklyQualityScore(groupId, weekStart, scoreData, db = null) {
-  const _db = db ?? supabase()
+  const _db = db ?? getDb()
   try {
     if (typeof _db?.saveQualityScore === 'function') {
       return await _db.saveQualityScore(String(groupId), weekStart, scoreData)
@@ -52,7 +46,7 @@ export async function saveWeeklyQualityScore(groupId, weekStart, scoreData, db =
  * Tolerates SimulationDb-style stubs that expose `getQualityHistory`.
  */
 export async function getQualityHistory(groupId, weeksBack = 12, db = null) {
-  const _db = db ?? supabase()
+  const _db = db ?? getDb()
   try {
     if (typeof _db?.getQualityHistory === 'function') {
       return await _db.getQualityHistory(String(groupId), weeksBack)

@@ -36,6 +36,7 @@ import { handleShiftsCommand, handleEditShift, handleAddShift, handleRemoveShift
 import { handleViewStaff, handleRemoveStaff } from './setup/staffManager.js'
 import { handleCoverageCommand } from './coverage/managerCoverage.js'
 import { handleMissedClockOutCheck } from './timeclock/missedClockOut.js'
+import { getDb } from './db.js'
 import cron from 'node-cron'
 
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
@@ -574,8 +575,7 @@ function startPreferenceCron(bot) {
   // Sunday at midnight — analyze edit patterns and save preferences
   cron.schedule('0 0 * * 0', async () => {
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+      const supabase = getDb()
       const { data: groups } = await supabase.from('setup_sessions').select('group_id, dm_chat_id').eq('setup_complete', true)
       if (!groups) return
 
@@ -655,8 +655,7 @@ bot.onText(/^\/coverage(.*)/, async (msg, match) => {
 
 cron.schedule('*/15 * * * *', async () => {
   try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    const supabase = getDb()
     const { data: groups } = await supabase.from('setup_sessions').select('group_id, setup_data').eq('setup_complete', true)
     for (const g of groups || []) {
       // Skip groups that have disabled the time clock

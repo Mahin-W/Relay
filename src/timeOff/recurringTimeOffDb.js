@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-
-const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 /**
  * Upsert a recurring constraint for a staff member.
@@ -15,7 +13,7 @@ export async function saveRecurringConstraint(staffId, groupId, constraint, db =
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('recurring_constraints')
       .upsert(
@@ -57,7 +55,7 @@ export async function getRecurringConstraints(staffId, groupId, db = null) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('recurring_constraints')
       .select('*')
@@ -85,7 +83,7 @@ export async function getGroupRecurringConstraints(groupId, db = null) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('recurring_constraints')
       .select('*')
@@ -118,7 +116,7 @@ export async function deactivateConstraint(constraintId, groupId, db = null) {
   }
 
   try {
-    const supabase = getSupabase()
+    const supabase = getDb()
     const { data, error } = await supabase
       .from('recurring_constraints')
       .update({ active: false })

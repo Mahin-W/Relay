@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 export async function saveRule(groupId, rule, db = null) {
   if (db?.saveRule) return db.saveRule(groupId, rule)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('business_rules')
     .insert({
       group_id: groupId,
@@ -28,7 +24,7 @@ export async function saveRule(groupId, rule, db = null) {
 
 export async function getRules(groupId, db = null) {
   if (db?.getRules) return db.getRules(groupId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('business_rules')
     .select('*')
     .eq('group_id', groupId)
@@ -40,7 +36,7 @@ export async function getRules(groupId, db = null) {
 
 export async function getRulesForStaff(groupId, staffId, db = null) {
   if (db?.getRulesForStaff) return db.getRulesForStaff(groupId, staffId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('business_rules')
     .select('*')
     .eq('group_id', groupId)
@@ -53,7 +49,7 @@ export async function getRulesForStaff(groupId, staffId, db = null) {
 
 export async function deactivateRule(ruleId, groupId, db = null) {
   if (db?.deactivateRule) return db.deactivateRule(ruleId, groupId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('business_rules')
     .update({ active: false })
     .eq('id', ruleId)

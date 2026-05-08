@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function saveShift(groupId, name, dayOfWeek, startTime, endTime) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .insert({ group_id: groupId, name, day_of_week: dayOfWeek, start_time: startTime, end_time: endTime })
       .select()
@@ -21,7 +19,7 @@ export async function saveShift(groupId, name, dayOfWeek, startTime, endTime) {
 
 export async function deleteShiftsForGroup(groupId) {
   try {
-    const { error } = await supabase.from('shifts').delete().eq('group_id', groupId)
+    const { error } = await getDb().from('shifts').delete().eq('group_id', groupId)
     if (error) throw error
     logger.db(`Deleted all shifts for group ${groupId}`)
     return true
@@ -33,12 +31,12 @@ export async function deleteShiftsForGroup(groupId) {
 
 export async function deleteShiftRequirementsForGroup(groupId) {
   try {
-    const { data: shifts, error: sErr } = await supabase
+    const { data: shifts, error: sErr } = await getDb()
       .from('shifts').select('id').eq('group_id', groupId)
     if (sErr) throw sErr
     if (!shifts || shifts.length === 0) return true
     const shiftIds = shifts.map(s => s.id)
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('shift_requirements').delete().in('shift_id', shiftIds)
     if (error) throw error
     logger.db(`Deleted all shift requirements for group ${groupId}`)
@@ -51,7 +49,7 @@ export async function deleteShiftRequirementsForGroup(groupId) {
 
 export async function getShiftsForGroup(groupId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .select('*')
       .eq('group_id', groupId)
@@ -66,7 +64,7 @@ export async function getShiftsForGroup(groupId) {
 
 export async function getShiftById(shiftId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shifts')
       .select('*')
       .eq('id', shiftId)
@@ -81,7 +79,7 @@ export async function getShiftById(shiftId) {
 
 export async function saveShiftRequirement(shiftId, role, count) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shift_requirements')
       .insert({ shift_id: shiftId, role, count })
       .select()
@@ -96,7 +94,7 @@ export async function saveShiftRequirement(shiftId, role, count) {
 
 export async function getShiftRequirements(shiftId) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('shift_requirements')
       .select('role, count')
       .eq('shift_id', shiftId)

@@ -1,4 +1,4 @@
-import { upsertStaffDm, upsertGroupMember } from '../db.js'
+import { upsertStaffDm, upsertGroupMember, getDb } from '../db.js'
 import { getSetupSessionByManager, getManagerGroup } from '../setup/setupDb.js'
 import { startSetupDM, handleSetupMessage } from '../setup/setupFlow.js'
 import { getAvailabilitySessionByDm } from '../availability/availabilityDb.js'
@@ -55,8 +55,7 @@ function clearPendingRemoval(managerId) {
 // ── Helper: look up staff record by Telegram user_id via staff_dms → staff ──
 async function getStaffRecordForUser(userId) {
   try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    const supabase = getDb()
 
     const { data: dmRow } = await supabase
       .from('staff_dms')
@@ -149,8 +148,7 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
 
   // ── F2: Unregistered user — no staff record AND no setup/manager session ──
   try {
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    const supabase = getDb()
 
     // Check staff_dms (registered staff have a row here)
     const { data: dmRow } = await supabase
@@ -288,8 +286,7 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
         )
         if (target) {
           try {
-            const { createClient } = await import('@supabase/supabase-js')
-            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+            const supabase = getDb()
             const monthStart = new Date()
             monthStart.setDate(1)
             monthStart.setHours(0, 0, 0, 0)

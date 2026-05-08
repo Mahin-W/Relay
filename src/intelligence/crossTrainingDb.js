@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-  : null
+import { getDb } from '../db.js'
 
 export async function saveCrossTraining(groupId, staffId, roleId, proficiency, db = null) {
   if (db?.saveCrossTraining) return db.saveCrossTraining(groupId, staffId, roleId, proficiency)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('cross_training')
     .upsert({
       group_id: groupId,
@@ -23,7 +19,7 @@ export async function saveCrossTraining(groupId, staffId, roleId, proficiency, d
 
 export async function removeCrossTraining(groupId, staffId, roleId, db = null) {
   if (db?.removeCrossTraining) return db.removeCrossTraining(groupId, staffId, roleId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('cross_training')
     .update({ active: false })
     .eq('group_id', groupId)
@@ -37,7 +33,7 @@ export async function removeCrossTraining(groupId, staffId, roleId, db = null) {
 
 export async function getCrossTrainingForStaff(staffId, groupId, includeTraining = false, db = null) {
   if (db?.getCrossTrainingForStaff) return db.getCrossTrainingForStaff(staffId, groupId, includeTraining)
-  let query = supabase
+  let query = getDb()
     .from('cross_training')
     .select('role_id, proficiency')
     .eq('staff_id', staffId)
@@ -57,7 +53,7 @@ export async function getCrossTrainingForStaff(staffId, groupId, includeTraining
 
 export async function getCrossTrainedForRole(groupId, roleId, db = null) {
   if (db?.getCrossTrainedForRole) return db.getCrossTrainedForRole(groupId, roleId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('cross_training')
     .select('staff_id, proficiency, staff(name)')
     .eq('group_id', groupId)
@@ -78,7 +74,7 @@ export async function getCrossTrainedForRole(groupId, roleId, db = null) {
 
 export async function getAllCrossTraining(groupId, db = null) {
   if (db?.getAllCrossTraining) return db.getAllCrossTraining(groupId)
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('cross_training')
     .select('staff_id, role_id, proficiency, staff(name)')
     .eq('group_id', groupId)

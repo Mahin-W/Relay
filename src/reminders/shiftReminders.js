@@ -1,5 +1,5 @@
 import cron from 'node-cron'
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 
 // Tracks sent reminders to avoid double-sending within a day
@@ -36,9 +36,7 @@ function getDayName(date) {
 
 async function fetchScheduledShiftsForReminder() {
   try {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-
-    const { data: schedules } = await supabase
+    const { data: schedules } = await getDb()
       .from('generated_schedules')
       .select('assignments, week_start, group_id, status')
       .eq('status', 'published')
@@ -57,10 +55,10 @@ async function fetchScheduledShiftsForReminder() {
     const shiftIds = [...new Set(allAssignments.map(a => a.shiftId).filter(Boolean))]
     if (!shiftIds.length) return []
 
-    const { data: shifts } = await supabase.from('shifts').select('*').in('id', shiftIds)
+    const { data: shifts } = await getDb().from('shifts').select('*').in('id', shiftIds)
     const shiftMap = Object.fromEntries((shifts ?? []).map(s => [s.id, s]))
 
-    const { data: staffDms } = await supabase.from('staff_dms').select('user_id, first_name, dm_chat_id')
+    const { data: staffDms } = await getDb().from('staff_dms').select('user_id, first_name, dm_chat_id')
     const dmByName = Object.fromEntries(
       (staffDms ?? []).map(d => [d.first_name?.toLowerCase(), d.dm_chat_id])
     )

@@ -1,12 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from './client.js'
 import { logger } from '../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function upsertStaffDm(userId, firstName, username, dmChatId) {
   try {
     logger.db(`Registering DM for user ${userId} (${firstName})`)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('staff_dms')
       .upsert({ user_id: userId, first_name: firstName, username: username ?? null, dm_chat_id: dmChatId })
       .select()
@@ -23,7 +21,7 @@ export async function upsertStaffDm(userId, firstName, username, dmChatId) {
 
 export async function upsertGroupMember(userId, groupId, firstName, username) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('group_members')
       .upsert({ user_id: userId, group_id: groupId, first_name: firstName, username: username ?? null, last_seen: new Date().toISOString() })
 
@@ -37,14 +35,14 @@ export async function getGroupMembersWithDm(groupId) {
   try {
     logger.db(`Fetching registered staff for group ${groupId}`)
 
-    const { data: members, error: membersError } = await supabase
+    const { data: members, error: membersError } = await getDb()
       .from('group_members')
       .select('user_id, first_name')
       .eq('group_id', groupId)
 
     if (membersError) throw membersError
 
-    const { data: dms, error: dmsError } = await supabase
+    const { data: dms, error: dmsError } = await getDb()
       .from('staff_dms')
       .select('user_id, first_name, dm_chat_id')
 
@@ -73,7 +71,7 @@ export async function getGroupMembersWithDm(groupId) {
 
 export async function saveOutreach(requestId, userId) {
   try {
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('coverage_outreach')
       .insert({ request_id: requestId, user_id: userId })
 
@@ -86,7 +84,7 @@ export async function saveOutreach(requestId, userId) {
 export async function getOutreachByUser(userId) {
   try {
     logger.db(`Looking for pending outreach for user ${userId}`)
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('coverage_outreach')
       .select('request_id, coverage_requests(id, group_id, group_name, shift_description, status)')
       .eq('user_id', userId)

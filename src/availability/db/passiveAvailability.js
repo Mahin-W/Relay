@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../../db.js'
 import { logger } from '../../logger.js'
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
 export async function savePassiveAvailability(userId, groupId, weekStart, day, status, rawText = null) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('passive_availability')
       .upsert(
         {
@@ -32,7 +30,7 @@ export async function savePassiveAvailability(userId, groupId, weekStart, day, s
 
 export async function getPassiveAvailabilityForGroup(groupId, weekStart) {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('passive_availability')
       .select('*')
       .eq('group_id', groupId)

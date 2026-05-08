@@ -1,9 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
+import { getDb } from '../db.js'
 import { llmCreate, llmWithRetry } from '../parsers/llm.js'
 import { logger } from '../logger.js'
 
-const getSupabase = () =>
-  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+const getSupabase = () => getDb()
 
 const SYSTEM_PROMPT = `Detect when staff are telling you their general permanent availability window.
 Return JSON: { isWindowUpdate: bool, daysAvailable: string[]|null, beforeTime: "HH:MM"|null, afterTime: "HH:MM"|null }
