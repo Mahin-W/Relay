@@ -79,6 +79,24 @@ bot.getMe().then((me) => {
   startBriefingCron(bot)
   startSundayBriefingCron(bot)
   startPreferenceCron(bot)
+}).catch((err) => {
+  // If Telegram is unreachable at startup, crons must not silently never start.
+  // Exit so the host (Render) restarts the process.
+  logger.error(`bot.getMe() failed at startup: ${err.message}. Exiting so host restarts.`)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? `${reason.message}\n${reason.stack}` : String(reason)
+  logger.error(`unhandledRejection: ${msg}`)
+  // Exit so host restarts; staying alive after an unhandled rejection leaves the bot in
+  // an unknown state (polling may be poisoned).
+  process.exit(1)
+})
+
+process.on('uncaughtException', (err) => {
+  logger.error(`uncaughtException: ${err.message}\n${err.stack}`)
+  process.exit(1)
 })
 
 async function isGroupAdmin(groupId, userId) {
@@ -100,18 +118,26 @@ async function isAuthorizedAdmin(groupId, userId) {
 }
 
 bot.on('message', async (msg) => {
-  const isGroup = ['group', 'supergroup'].includes(msg.chat.type)
-  const isDm = msg.chat.type === 'private'
-  if (!msg.text) return
+  try {
+    const isGroup = ['group', 'supergroup'].includes(msg.chat.type)
+    const isDm = msg.chat.type === 'private'
+    if (!msg.text) return
 
-  if (isDm) {
-    await handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME)
-    return
-  }
+    if (isDm) {
+      await handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME)
+      return
+    }
 
-  if (isGroup) {
-    if (shouldSkip(msg.text)) return
-    await handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin)
+    if (isGroup) {
+      if (shouldSkip(msg.text)) return
+      await handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdmin, isGroupAdmin)
+    }
+  } catch (err) {
+    // Per-message failures must never bring down the bot. Log with enough context
+    // to identify the offending message, then move on.
+    const chatId = msg?.chat?.id
+    const userId = msg?.from?.id
+    logger.error(`message handler crashed (chat=${chatId} user=${userId}): ${err.message}\n${err.stack}`)
   }
 })
 

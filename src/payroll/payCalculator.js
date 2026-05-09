@@ -301,7 +301,18 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
     const roleObj  = roleMap[roleName.toLowerCase()] ?? { roleName, hourlyRate: 0 }
 
     if (!staffMap[staffId]) {
-      staffMap[staffId] = { staffId, staffName, roleName, hourlyRate: roleObj.hourlyRate, rawAssignments: [] }
+      staffMap[staffId] = {
+        staffId,
+        staffName,
+        // Track every distinct role this staff worked this week so multi-role
+        // staff (server $15 + barback $20) get correct totals and displays.
+        // The legacy `roleName`/`hourlyRate` fields below carry the FIRST role
+        // for back-compat; consumers wanting accuracy should use rolesWorked /
+        // weightedRegularRate / roleNameDisplay computed below.
+        roleName,
+        hourlyRate: roleObj.hourlyRate,
+        rawAssignments: [],
+      }
     }
     staffMap[staffId].rawAssignments.push({ shiftObj, shiftId, roleObj })
   }
@@ -334,20 +345,77 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
       shiftResults.push(pr)
     }
 
+    // Multi-role aggregation: build a per-role hours+pay map for this staff so
+    // downstream consumers (spreadsheet, dashboard, audit log) can show accurate
+    // breakdowns instead of pretending the staff only worked one role.
+    const roleAgg = new Map()
+    for (let i = 0; i < entry.rawAssignments.length; i++) {
+      const { roleObj } = entry.rawAssignments[i]
+      const pr = shiftResults[i]
+      const key = (roleObj.roleName || '').toLowerCase()
+      if (!roleAgg.has(key)) {
+        roleAgg.set(key, {
+          roleName: roleObj.roleName || '',
+          hourlyRate: roleObj.hourlyRate ?? 0,
+          regularHours: 0, dailyOTHours: 0, weeklyOTHours: 0,
+          regularPay: 0, dailyOTPay: 0, weeklyOTPay: 0,
+          totalHours: 0, totalGrossPay: 0,
+        })
+      }
+      const a = roleAgg.get(key)
+      a.regularHours  += pr.regularHours
+      a.dailyOTHours  += pr.dailyOTHours
+      a.weeklyOTHours += pr.weeklyOTHours
+      a.regularPay    += pr.regularPay
+      a.dailyOTPay    += pr.dailyOTPay
+      a.weeklyOTPay   += pr.weeklyOTPay
+      a.totalHours    += pr.effectiveHours
+      a.totalGrossPay += pr.grossPay
+    }
+    const rolesWorked = Array.from(roleAgg.values()).map(a => ({
+      roleName: a.roleName,
+      hourlyRate: a.hourlyRate,
+      regularHours: round2(a.regularHours),
+      dailyOTHours: round2(a.dailyOTHours),
+      weeklyOTHours: round2(a.weeklyOTHours),
+      regularPay: round2(a.regularPay),
+      dailyOTPay: round2(a.dailyOTPay),
+      weeklyOTPay: round2(a.weeklyOTPay),
+      totalHours: round2(a.totalHours),
+      totalGrossPay: round2(a.totalGrossPay),
+    }))
+
+    const totalRegularHours = round2(shiftResults.reduce((s, r) => s + r.regularHours, 0))
+    const totalRegularPay   = round2(shiftResults.reduce((s, r) => s + r.regularPay, 0))
+    // Weighted-average regular rate for cross-trained staff. If they only worked
+    // one role this is the same as their hourly rate; if they worked multiple
+    // roles it's the rate that, multiplied by total regular hours, gives back
+    // the correct total regular pay. Used by the spreadsheet so cell formulas
+    // continue to balance across mixed-rate weeks.
+    const weightedRegularRate = totalRegularHours > 0
+      ? round2(totalRegularPay / totalRegularHours)
+      : (entry.hourlyRate ?? 0)
+    const roleNameDisplay = rolesWorked.length <= 1
+      ? (rolesWorked[0]?.roleName ?? entry.roleName ?? '')
+      : rolesWorked.map(r => r.roleName).filter(Boolean).join(' / ')
+
     result.push({
       staffId:             entry.staffId,
       staffName:           entry.staffName,
-      roleName:            entry.roleName,
-      hourlyRate:          entry.hourlyRate,
+      roleName:            entry.roleName,        // legacy: first-seen role
+      hourlyRate:          entry.hourlyRate,      // legacy: first-seen rate
+      roleNameDisplay,                            // multi-role aware
+      weightedRegularRate,                        // multi-role aware
+      rolesWorked,                                // per-role breakdown
       shifts:              shiftResults,
       totalHours:          round2(shiftResults.reduce((s, r) => s + r.hoursWorked, 0)),
       totalEffectiveHours: round2(shiftResults.reduce((s, r) => s + r.effectiveHours, 0)),
-      totalRegularHours:   round2(shiftResults.reduce((s, r) => s + r.regularHours, 0)),
+      totalRegularHours,
       totalDailyOTHours:   round2(shiftResults.reduce((s, r) => s + r.dailyOTHours, 0)),
       totalWeeklyOTHours:  round2(shiftResults.reduce((s, r) => s + r.weeklyOTHours, 0)),
       totalLateMinutes:    shiftResults.reduce((s, r) => s + r.lateMinutes, 0),
       totalLateDeduction:  round2(shiftResults.reduce((s, r) => s + r.lateDeduction, 0)),
-      totalRegularPay:     round2(shiftResults.reduce((s, r) => s + r.regularPay, 0)),
+      totalRegularPay,
       totalDailyOTPay:     round2(shiftResults.reduce((s, r) => s + r.dailyOTPay, 0)),
       totalWeeklyOTPay:    round2(shiftResults.reduce((s, r) => s + r.weeklyOTPay, 0)),
       totalGrossPay:       round2(shiftResults.reduce((s, r) => s + r.grossPay, 0)),
@@ -362,8 +430,11 @@ export function calculateWeeklyPayWithOT(assignments, shifts, roles, overtimeSet
  */
 export function formatPayBreakdownWithOT(staffSummary, overtimeSettings) {
   const ot = overtimeSettings != null ? overtimeSettings : { ...DEFAULT_OT_SETTINGS }
-  const { staffName, roleName, hourlyRate, shifts, totalGrossPay, totalEffectiveHours } = staffSummary
-  let text = `${staffName} (${roleName}) — $${hourlyRate}/hr\n\n`
+  const { staffName, shifts, totalGrossPay, totalEffectiveHours } = staffSummary
+  // Prefer multi-role-aware display fields when present.
+  const displayRole = staffSummary.roleNameDisplay ?? staffSummary.roleName ?? ''
+  const displayRate = staffSummary.weightedRegularRate ?? staffSummary.hourlyRate ?? 0
+  let text = `${staffName} (${displayRole}) — $${displayRate}/hr\n\n`
 
   for (const s of (shifts ?? [])) {
     text += `${s.shiftName} (${s.dayOfWeek}, ${s.startTime}–${s.endTime})\n`

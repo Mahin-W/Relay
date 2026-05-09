@@ -162,30 +162,28 @@ function buildPayrollSheet(wb, summaries, weekStart, overtimeSettings) {
 
   summaries.forEach((s, i) => {
     const rowNum = DATA_START + i
+    // Multi-role correctness: prefer the multi-role-aware display fields when
+    // the calculator provides them. Falls back to legacy single-rate fields for
+    // tests/old data. The Rate column is the WEIGHTED regular rate so that
+    // C * D = totalRegularPay even for cross-trained staff with mixed rates.
+    const displayRole = s.roleNameDisplay ?? s.roleName ?? ''
+    const displayRate = s.weightedRegularRate ?? s.hourlyRate ?? 0
     const row = ws.addRow([
       s.staffName,
-      s.roleName ?? '',
-      s.hourlyRate ?? 0,
+      displayRole,
+      displayRate,
       s.totalRegularHours  ?? 0,
-      null, // E — formula
+      s.totalRegularPay    ?? 0,
       s.totalDailyOTHours  ?? 0,
-      null, // G — formula
+      s.totalDailyOTPay    ?? 0,
       s.totalWeeklyOTHours ?? 0,
-      null, // I — formula
+      s.totalWeeklyOTPay   ?? 0,
       s.totalLateMinutes   ?? 0,
       s.totalLateDeduction ?? 0,
       s.totalEffectiveHours ?? s.totalHours ?? 0,
-      null, // M — formula
+      s.totalGrossPay      ?? 0,
     ])
     row.height = 22
-
-    // Formulas — multipliers hardcoded per OT settings (static for this week)
-    const dm = overtimeSettings.daily_multiplier  ?? 1.5
-    const wm = overtimeSettings.weekly_multiplier ?? 1.5
-    row.getCell(5).value  = { formula: `C${rowNum}*D${rowNum}` }
-    row.getCell(7).value  = { formula: `C${rowNum}*F${rowNum}*${dm}` }
-    row.getCell(9).value  = { formula: `C${rowNum}*H${rowNum}*${wm}` }
-    row.getCell(13).value = { formula: `E${rowNum}+G${rowNum}+I${rowNum}-K${rowNum}` }
 
     // Number formats
     row.getCell(3).numFmt = '$#,##0.00'

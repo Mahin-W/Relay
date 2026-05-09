@@ -230,14 +230,26 @@ export async function handleTradeOffer(bot, msg, intent, openTrade, db = null) {
     return
   }
 
+  // Two-way swap, four writes. If any later step fails, undo the earlier ones in
+  // reverse order so we never leave the schedule half-traded.
+  const undo = []
   try {
     await swapScheduleAssignment(groupId, openTrade.shift_id, openTrade.week_start, requesterStaff.id, offererStaff.id)
+    undo.push(() => swapScheduleAssignment(groupId, openTrade.shift_id, openTrade.week_start, offererStaff.id, requesterStaff.id))
+
     await swapPublishedScheduleAssignment(groupId, openTrade.shift_id, requesterStaff.id, offererName, offererStaff.id)
+    undo.push(() => swapPublishedScheduleAssignment(groupId, openTrade.shift_id, offererStaff.id, openTrade.requester_name, requesterStaff.id))
+
     await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id)
+    undo.push(() => swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, requesterStaff.id, offererStaff.id))
+
     await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openTrade.requester_name, requesterStaff.id)
   } catch (swapErr) {
-    logger.error(`Trade swap failed: ${swapErr.message}`)
-    await bot.sendMessage(msg.chat.id, `⚠️ Trade couldn't be completed — please check the schedule and try again.`)
+    logger.error(`Trade swap failed mid-flight: ${swapErr.message} — rolling back ${undo.length} step(s)`)
+    for (const step of undo.reverse()) {
+      try { await step() } catch (rbErr) { logger.error(`trade rollback step failed: ${rbErr.message}`) }
+    }
+    await bot.sendMessage(msg.chat.id, `⚠️ Trade couldn't be completed — schedule reverted, please try again.`)
     return
   }
 
@@ -291,16 +303,26 @@ export async function handleCoverageTradeOffer(bot, msg, intent, openRequest) {
       return
     }
 
+    const undo = []
     try {
       await swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, offererStaff.id, requesterStaff.id)
+      undo.push(() => swapScheduleAssignment(groupId, offeredShift.id, offeredWeekStart, requesterStaff.id, offererStaff.id))
+
       await swapPublishedScheduleAssignment(groupId, offeredShift.id, offererStaff.id, openRequest.requested_by, requesterStaff.id)
+      undo.push(() => swapPublishedScheduleAssignment(groupId, offeredShift.id, requesterStaff.id, offererName, offererStaff.id))
+
       await swapScheduleAssignment(groupId, requestedShift.id, openRequest.week_start, requesterStaff.id, offererStaff.id)
+      undo.push(() => swapScheduleAssignment(groupId, requestedShift.id, openRequest.week_start, offererStaff.id, requesterStaff.id))
+
       await swapPublishedScheduleAssignment(groupId, requestedShift.id, requesterStaff.id, offererName, offererStaff.id)
       logger.bot(`Trade-coverage swap: ${openRequest.requested_by} ↔ ${offererName}`)
     } catch (swapErr) {
-      logger.error(`Coverage trade swap error: ${swapErr.message}`)
+      logger.error(`Coverage trade swap error: ${swapErr.message} — rolling back ${undo.length} step(s)`)
+      for (const step of undo.reverse()) {
+        try { await step() } catch (rbErr) { logger.error(`coverage-trade rollback step failed: ${rbErr.message}`) }
+      }
       await bot.sendMessage(msg.chat.id,
-        `⚠️ Trade couldn't be completed — schedule update failed. The coverage request is still open.`)
+        `⚠️ Trade couldn't be completed — schedule reverted. The coverage request is still open.`)
       return
     }
   }

@@ -68,6 +68,75 @@ export async function markCovered(requestId, coveredBy) {
   }
 }
 
+// Compensation for a failed schedule swap after markCovered succeeded.
+// Reverts a coverage_requests row from 'covered' back to 'open' atomically,
+// gated on the current covered_by matching what we set, so we never undo a
+// later, successful claim by someone else.
+export async function revertCovered(requestId, expectedCoveredBy) {
+  try {
+    const { data, error } = await getDb()
+      .from('coverage_requests')
+      .update({ status: 'open', covered_by: null, covered_at: null })
+      .eq('id', requestId)
+      .eq('status', 'covered')
+      .eq('covered_by', expectedCoveredBy)
+      .select()
+      .single()
+    if (error && error.code === 'PGRST116') {
+      logger.db(`revertCovered no-op for id=${requestId} (state changed)`)
+      return null
+    }
+    if (error) throw error
+    logger.db(`Reverted request id=${requestId} (was covered by ${expectedCoveredBy})`)
+    return data
+  } catch (err) {
+    logger.error(`revertCovered failed: ${err.message}`)
+    return null
+  }
+}
+
+// Find the most recent open OR covered request for cancellation purposes.
+// If requesterName is provided, restricts to requests opened by that person.
+export async function getActiveRequest(groupId, requesterName = null) {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    let query = getDb()
+      .from('coverage_requests')
+      .select('*')
+      .eq('group_id', groupId)
+      .in('status', ['open', 'covered'])
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (requesterName) query = query.ilike('requested_by', requesterName)
+    const { data, error } = await query.maybeSingle()
+    if (error) throw error
+    return data
+  } catch (err) {
+    logger.error(`getActiveRequest failed: ${err.message}`)
+    return null
+  }
+}
+
+// Cancel a coverage request by id regardless of current status (open or covered).
+// Used by cancelHandler after it has performed any reverse-swap work.
+export async function cancelRequestById(requestId) {
+  try {
+    const { data, error } = await getDb()
+      .from('coverage_requests')
+      .update({ status: 'cancelled' })
+      .eq('id', requestId)
+      .neq('status', 'cancelled')
+      .select()
+      .maybeSingle()
+    if (error) throw error
+    return !!data
+  } catch (err) {
+    logger.error(`cancelRequestById failed: ${err.message}`)
+    return false
+  }
+}
+
 // Get most recent request in this group (any status) within the last hour
 export async function getMostRecentRequest(groupId) {
   try {

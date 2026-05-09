@@ -1046,8 +1046,6 @@
     const form    = document.getElementById('signupForm');
     const success = document.getElementById('signupSuccess');
 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzVkj8ClaVkwrj5EFeWRskg9DxPW12DLzljJ7ABFOJva2286sFyJ_cy_o6Qmd6UlM1QNw/exec';
-
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const email = document.getElementById('emailInput').value;
@@ -1057,15 +1055,13 @@
       submitBtn.textContent = 'Saving…';
       submitBtn.disabled = true;
 
-      // Fire-and-forget — no-cors means we can't read the response
-      fetch(GAS_URL, {
+      // Server-side proxy — keeps the GAS URL out of the page source.
+      fetch('/api/waitlist', {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
-      }).catch(() => {}); // swallow network errors — show success regardless
+      }).catch(() => {}); // show success regardless of network result
 
-      // Show thank you after short delay (no-cors = opaque response, can't check status)
       setTimeout(() => {
         form.style.opacity = '0';
         form.style.transform = 'scale(0.97)';

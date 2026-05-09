@@ -12,11 +12,21 @@ services:
         sync: false
       - key: CEREBRAS_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
+      # Required after migration 008 (RLS lockdown). Server uses this to bypass
+      # per-tenant RLS and rely on app-layer auth. Supabase → Project Settings
+      # → API → service_role key.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: JWT_SECRET
+        sync: false
+      # Optional — proxy target for the landing-page waitlist form.
+      - key: WAITLIST_GAS_URL
         sync: false
       - key: ALLOWED_ORIGINS
         value: https://getrelay-app.netlify.app

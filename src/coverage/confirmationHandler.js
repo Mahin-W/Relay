@@ -1,4 +1,4 @@
-import { getOpenRequest, markCovered, getOutreachByUser } from '../db.js'
+import { getOpenRequest, markCovered, getOutreachByUser, revertCovered } from '../db.js'
 import { getPublishedSchedule, swapPublishedScheduleAssignment } from '../availability/availabilityDb.js'
 import { formatScheduleMessage } from '../schedule/generateSchedule.js'
 import { getShiftById, swapScheduleAssignment, getStaffForGroup, getShiftRequirements } from '../setup/setupDb.js'
@@ -7,21 +7,41 @@ import { recordEvent as liveRecordEvent } from '../reliability/reliabilityDb.js'
 import { saveMoraleEvent } from '../intelligence/moraleDb.js'
 import { classifySentiment } from '../intelligence/moraleTracker.js'
 
+// Returns { ok: true } when the swap (or no-op) succeeded, or { ok: false, reason }
+// when the schedule write failed and the caller should compensate by reverting
+// the coverage_requests row back to 'open'. We treat "staff not found" as ok:true
+// because there is no schedule row to update — the cover is bot-side only.
 async function swapIfPossible(openRequest, volunteer, groupId) {
-  if (!openRequest.matched_shift_id || !openRequest.week_start) return
+  if (!openRequest.matched_shift_id || !openRequest.week_start) return { ok: true }
   try {
     const allStaff = await getStaffForGroup(groupId)
     const volunteerStaff = allStaff.find(s => s.name?.toLowerCase() === volunteer.toLowerCase())
     const requesterStaff = allStaff.find(s => s.name?.toLowerCase() === openRequest.requested_by?.toLowerCase())
-    if (volunteerStaff && requesterStaff) {
-      await swapScheduleAssignment(groupId, openRequest.matched_shift_id, openRequest.week_start, requesterStaff.id, volunteerStaff.id)
-      await swapPublishedScheduleAssignment(groupId, openRequest.matched_shift_id, requesterStaff.id, volunteerStaff.name, volunteerStaff.id)
-      logger.bot(`Schedule updated: ${requesterStaff.name} → ${volunteerStaff.name}`)
-    } else {
+    if (!volunteerStaff || !requesterStaff) {
       logger.bot(`Could not swap — staff not found (volunteer: ${volunteer}, requester: ${openRequest.requested_by})`)
+      return { ok: true }
     }
+    // Sequential writes — both must succeed. If the published-schedule write
+    // fails after the assignments write, the assignments table is still the
+    // authoritative source for payroll/timeclock; we then return ok:false so
+    // the caller reverts the coverage_requests row.
+    await swapScheduleAssignment(groupId, openRequest.matched_shift_id, openRequest.week_start, requesterStaff.id, volunteerStaff.id)
+    try {
+      await swapPublishedScheduleAssignment(groupId, openRequest.matched_shift_id, requesterStaff.id, volunteerStaff.name, volunteerStaff.id)
+    } catch (publishErr) {
+      // Roll the assignments swap back so both tables stay consistent.
+      try {
+        await swapScheduleAssignment(groupId, openRequest.matched_shift_id, openRequest.week_start, volunteerStaff.id, requesterStaff.id)
+      } catch (rollbackErr) {
+        logger.error(`swap rollback also failed: ${rollbackErr.message}`)
+      }
+      throw publishErr
+    }
+    logger.bot(`Schedule updated: ${requesterStaff.name} → ${volunteerStaff.name}`)
+    return { ok: true }
   } catch (err) {
     logger.error(`swapIfPossible failed: ${err.message}`)
+    return { ok: false, reason: err.message }
   }
 }
 
@@ -220,14 +240,25 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
     return
   }
 
-  // Record reliability event — fire-and-forget, never crashes handler
+  // Atomic with markCovered: if the schedule swap fails, undo the coverage row
+  // so we never end up "covered in DB but original requester still on the schedule".
+  const swap = await swapIfPossible(openRequest, volunteer, groupId)
+  if (!swap.ok) {
+    await revertCovered(openRequest.id, volunteer)
+    await bot.sendMessage(
+      msg.chat.id,
+      `⚠️ Couldn't update the schedule for that coverage — the request is still open. Please try again or ask a manager to swap manually.`
+    )
+    return
+  }
+
+  // Record reliability event — fire-and-forget, never crashes handler.
+  // Moved AFTER swap so we don't credit a volunteer for a coverage that was reverted.
   if (msg.from?.id) {
     _recordEvent(msg.from.id, groupId, 'covered_someone').catch(err =>
       logger.error(`recordEvent covered_someone failed: ${err.message}`)
     )
   }
-
-  await swapIfPossible(openRequest, volunteer, groupId)
 
   // Track morale event — fire-and-forget
   try {
@@ -282,7 +313,15 @@ export async function handleDmConfirmation(bot, msg) {
     return
   }
 
-  await swapIfPossible(openRequest, volunteer, request.group_id)
+  const swap = await swapIfPossible(openRequest, volunteer, request.group_id)
+  if (!swap.ok) {
+    await revertCovered(openRequest.id, volunteer)
+    await bot.sendMessage(
+      msg.chat.id,
+      `⚠️ Couldn't update the schedule for that coverage — the request is still open. Please try again.`
+    )
+    return
+  }
 
   // Track morale event — fire-and-forget
   try {
