@@ -117,6 +117,38 @@ async function isAuthorizedAdmin(groupId, userId) {
   return telegramAdmin || botAdmin
 }
 
+// Resolve the manager context for a command message, working in both group and DM.
+//
+// In group: looks up the setup_session by msg.chat.id and confirms the sender is
+// the original manager (manager_id === msg.from.id). Returns null otherwise.
+//
+// In DM: looks up the session keyed on this user's manager_id (getManagerGroup).
+// Only the original manager can use commands in DMs — bot admins still have to
+// run things in the group. (We can't verify Telegram admin status in DM context.)
+//
+// Returns { groupId, session, isDm } on success, null on auth failure.
+async function resolveManagerContext(msg) {
+  const userId = msg?.from?.id
+  if (!userId) return null
+  const isGroup = ['group', 'supergroup'].includes(msg.chat?.type)
+  const isDm = msg.chat?.type === 'private'
+  if (!isGroup && !isDm) return null
+
+  const { getSetupSession } = await import('./setup/setupDb.js')
+
+  if (isGroup) {
+    const groupId = String(msg.chat.id)
+    const session = await getSetupSession(groupId)
+    if (!session || String(session.manager_id) !== String(userId)) return null
+    return { groupId, session, isDm: false }
+  }
+
+  // DM
+  const session = await getManagerGroup(userId)
+  if (!session) return null
+  return { groupId: session.group_id, session, isDm: true }
+}
+
 bot.on('message', async (msg) => {
   try {
     const isGroup = ['group', 'supergroup'].includes(msg.chat.type)
@@ -146,48 +178,37 @@ bot.on('polling_error', (err) => {
 })
 
 bot.onText(/^\/briefing/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const isAdmin = await isAuthorizedAdmin(groupId, userId)
-  if (!isAdmin) return
-  await sendDailyBriefing(bot, groupId)
-  await bot.sendMessage(groupId, '📨 Briefing sent to your DM.')
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  await sendDailyBriefing(bot, ctx.groupId)
+  if (!ctx.isDm) await bot.sendMessage(ctx.groupId, '📨 Briefing sent to your DM.')
 })
 
 bot.onText(/^\/pay/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const { getSetupSession } = await import('./setup/setupDb.js')
-  const session = await getSetupSession(groupId)
-  if (!session || String(session.manager_id) !== String(userId)) return // silent
-
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
   const parts = msg.text.trim().split(/\s+/)
-  const weekArg = parts[1] ?? null // e.g. /pay 2025-01-06
+  const weekArg = parts[1] ?? null
   if (!session.dm_chat_id) {
-    await bot.sendMessage(groupId, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
     return
   }
-  await bot.sendMessage(groupId, `📨 Pay summary sent to your DM.`)
+  if (!isDm) await bot.sendMessage(groupId, `📨 Pay summary sent to your DM.`)
   await sendPayReport(bot, groupId, weekArg)
 })
 
 bot.onText(/^\/staffpay/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const { getSetupSession, getStaffForGroup } = await import('./setup/setupDb.js')
-  const session = await getSetupSession(groupId)
-  if (!session || String(session.manager_id) !== String(userId)) return // silent
-
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
+  const { getStaffForGroup } = await import('./setup/setupDb.js')
   const parts = msg.text.trim().split(/\s+/)
   const rawName = parts.slice(1).join(' ').replace(/^@/, '')
   if (!rawName) {
-    await bot.sendMessage(groupId, `Usage: /staffpay @username or /staffpay FirstName`)
+    await bot.sendMessage(msg.chat.id, `Usage: /staffpay @username or /staffpay FirstName`)
     return
   }
-
   const allStaff = await getStaffForGroup(groupId)
   const matched = allStaff.find(s =>
     s.name?.toLowerCase() === rawName.toLowerCase() ||
@@ -195,17 +216,18 @@ bot.onText(/^\/staffpay/, async (msg) => {
     s.name?.toLowerCase().includes(rawName.toLowerCase())
   )
   if (!matched) {
-    await bot.sendMessage(groupId, `Could not find staff member "${rawName}".`)
+    await bot.sendMessage(msg.chat.id, `Could not find staff member "${rawName}".`)
     return
   }
-
   const history = await getPayrollHistory(matched.id, groupId)
   const report = formatStaffPayHistory(matched.name, history)
-  if (session.dm_chat_id) {
-    await bot.sendMessage(groupId, `📨 Pay history for ${matched.name} sent to your DM.`)
+  if (isDm) {
+    await bot.sendMessage(msg.chat.id, report, { parse_mode: 'Markdown' })
+  } else if (session.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, `📨 Pay history for ${matched.name} sent to your DM.`)
     await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
   } else {
-    await bot.sendMessage(groupId, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
   }
 })
 
@@ -234,24 +256,24 @@ bot.onText(/^\/setrate/, async (msg) => {
 })
 
 bot.onText(/^\/reliability/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const { getSetupSession } = await import('./setup/setupDb.js')
-  const session = await getSetupSession(groupId)
-  if (!session || String(session.manager_id) !== String(userId)) return // silent — don't reveal command
-
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
   const scores = await getReliabilityScores(groupId)
   const report = formatReliabilityReport(scores)
-  if (session.dm_chat_id) {
-    await bot.sendMessage(groupId, '📨 Reliability report sent to your DM.')
+  if (isDm) {
+    await bot.sendMessage(msg.chat.id, report, { parse_mode: 'Markdown' })
+  } else if (session.dm_chat_id) {
+    await bot.sendMessage(msg.chat.id, '📨 Reliability report sent to your DM.')
     await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
   } else {
-    await bot.sendMessage(groupId, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
+    await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
   }
 })
 
 bot.onText(/^\/rotation/, async (msg) => {
+  // Group only — handler internally uses bot.getChatMember which doesn't work in DM.
+  // Tracked as DM-followup in FUTURE_WORK.md.
   if (!['group', 'supergroup'].includes(msg.chat.type)) return
   await handleRotationCommand(bot, msg)
 })
@@ -275,11 +297,12 @@ bot.onText(/^\/setovertime/, async (msg) => {
 })
 
 bot.onText(/^\/spreadsheet(.*)/, async (msg, match) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  if (!(await isBotAdmin(String(msg.chat.id), msg.from.id))) return
-  const weekStart = match[1].trim() || null
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const weekStart = (match[1] || '').trim() || null
   await bot.sendMessage(msg.chat.id, '📊 Generating payroll spreadsheet...')
-  await sendPayrollSpreadsheet(bot, String(msg.chat.id), weekStart, null)
+  // sendPayrollSpreadsheet routes via session.dm_chat_id — same as msg.chat.id when in DM.
+  await sendPayrollSpreadsheet(bot, ctx.groupId, weekStart, null)
 })
 
 bot.onText(/^\/revenue(.*)/, async (msg, match) => {
@@ -292,14 +315,14 @@ bot.onText(/^\/revenue(.*)/, async (msg, match) => {
 })
 
 bot.onText(/^\/labortrend/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const { getSetupSession } = await import('./setup/setupDb.js')
-  const session = await getSetupSession(groupId)
-  if (!session || String(session.manager_id) !== String(msg.from?.id)) return
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
   const history = await getRevenueHistory(groupId)
   const formatted = formatRevenueHistory(history)
-  if (session.dm_chat_id) {
+  if (isDm) {
+    await bot.sendMessage(msg.chat.id, formatted, { parse_mode: 'Markdown' })
+  } else if (session.dm_chat_id) {
     await bot.sendMessage(msg.chat.id, '📨 Labor trend sent to your DM.')
     await bot.sendMessage(session.dm_chat_id, formatted, { parse_mode: 'Markdown' })
   }
@@ -321,8 +344,9 @@ bot.onText(/^\/setbudget(.*)/, async (msg, match) => {
 })
 
 bot.onText(/^\/budget$/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const b = await getBudget(String(msg.chat.id))
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const b = await getBudget(ctx.groupId)
   if (!b) return await bot.sendMessage(msg.chat.id, 'No budget set. Use /setbudget [amount]')
   await bot.sendMessage(msg.chat.id, `💰 Weekly labor budget: $${b.weeklyBudget}`)
 })
@@ -379,12 +403,10 @@ bot.onText(/^\/timesheet(.*)/, async (msg, match) => {
 })
 
 bot.onText(/^\/rules/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const isAdmin = await isAuthorizedAdmin(groupId, userId)
-  if (!isAdmin) return
-  await handleListRules(bot, msg, groupId)
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  // handleListRules takes an explicit groupId — works in DM.
+  await handleListRules(bot, msg, ctx.groupId)
 })
 
 bot.onText(/^\/delrule(.*)/, async (msg, match) => {
@@ -402,16 +424,16 @@ bot.onText(/^\/delrule(.*)/, async (msg, match) => {
 })
 
 bot.onText(/^\/morale/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const { getSetupSession, getStaffForGroup } = await import('./setup/setupDb.js')
-  const session = await getSetupSession(groupId)
-  if (!session || String(session.manager_id) !== String(userId)) return
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
+  const { getStaffForGroup } = await import('./setup/setupDb.js')
   const allStaff = await getStaffForGroup(groupId)
   const report = await generateMoraleReport(groupId, allStaff)
   const formatted = formatMoraleReport(report)
-  if (session.dm_chat_id) {
+  if (isDm) {
+    await bot.sendMessage(msg.chat.id, formatted, { parse_mode: 'Markdown' })
+  } else if (session.dm_chat_id) {
     await bot.sendMessage(msg.chat.id, '📨 Morale report sent to your DM.')
     await bot.sendMessage(session.dm_chat_id, formatted, { parse_mode: 'Markdown' })
   } else {
@@ -490,31 +512,29 @@ bot.onText(/^\/kudos(.*)/, async (msg, match) => {
 })
 
 bot.onText(/^\/crosstraining/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const isAdmin = await isAuthorizedAdmin(groupId, userId)
-  if (!isAdmin) return
-  const roster = await formatCrossTrainingRoster(groupId)
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const roster = await formatCrossTrainingRoster(ctx.groupId)
   await bot.sendMessage(msg.chat.id, roster, { parse_mode: 'Markdown' })
 })
 
 bot.onText(/^\/retention/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const isAdmin = await isAuthorizedAdmin(groupId, userId)
-  if (!isAdmin) return
-  const managerDm = await getManagerGroup(userId)
-  if (!managerDm?.dm_chat_id) {
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
+  if (!isDm && !session.dm_chat_id) {
     await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
     return
   }
   try {
     const report = await generateTurnoverRiskReport(groupId)
     const formatted = formatTurnoverRiskCommand(report)
-    await bot.sendMessage(managerDm.dm_chat_id, formatted, { parse_mode: 'Markdown' })
-    await bot.sendMessage(msg.chat.id, '📨 Retention report sent to your DM.')
+    if (isDm) {
+      await bot.sendMessage(msg.chat.id, formatted, { parse_mode: 'Markdown' })
+    } else {
+      await bot.sendMessage(session.dm_chat_id, formatted, { parse_mode: 'Markdown' })
+      await bot.sendMessage(msg.chat.id, '📨 Retention report sent to your DM.')
+    }
   } catch (err) {
     logger.error(`/retention failed: ${err.message}`)
     await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
@@ -536,13 +556,10 @@ bot.onText(/^\/quality/, async (msg) => {
 })
 
 bot.onText(/^\/patterns/, async (msg) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const isAdmin = await isAuthorizedAdmin(groupId, userId)
-  if (!isAdmin) return
-  const managerDm = await getManagerGroup(userId)
-  if (!managerDm?.dm_chat_id) {
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
+  if (!isDm && !session.dm_chat_id) {
     await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports. Message @${BOT_USERNAME} to get started.`)
     return
   }
@@ -554,8 +571,12 @@ bot.onText(/^\/patterns/, async (msg) => {
     const seasonal = await detectSeasonalPatterns(groupId)
     const seasonalText = formatSeasonalInsight(seasonal, new Date().getMonth())
     if (seasonalText) report += '\n\n' + seasonalText
-    await bot.sendMessage(managerDm.dm_chat_id, report, { parse_mode: 'Markdown' })
-    await bot.sendMessage(msg.chat.id, '📨 Staffing patterns report sent to your DM.')
+    if (isDm) {
+      await bot.sendMessage(msg.chat.id, report, { parse_mode: 'Markdown' })
+    } else {
+      await bot.sendMessage(session.dm_chat_id, report, { parse_mode: 'Markdown' })
+      await bot.sendMessage(msg.chat.id, '📨 Staffing patterns report sent to your DM.')
+    }
   } catch (err) {
     logger.error(`/patterns failed: ${err.message}`)
     await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
@@ -563,13 +584,10 @@ bot.onText(/^\/patterns/, async (msg) => {
 })
 
 bot.onText(/^\/staffinsight(.*)/, async (msg, match) => {
-  if (!['group', 'supergroup'].includes(msg.chat.type)) return
-  const groupId = String(msg.chat.id)
-  const userId = msg.from?.id
-  const isAdmin = await isAuthorizedAdmin(groupId, userId)
-  if (!isAdmin) return
-  const managerDm = await getManagerGroup(userId)
-  if (!managerDm?.dm_chat_id) {
+  const ctx = await resolveManagerContext(msg)
+  if (!ctx) return
+  const { groupId, session, isDm } = ctx
+  if (!isDm && !session.dm_chat_id) {
     await bot.sendMessage(msg.chat.id, `⚠️ DM me first so I can send you reports.`)
     return
   }
@@ -589,8 +607,12 @@ bot.onText(/^\/staffinsight(.*)/, async (msg, match) => {
     const { calculateReliableAvailability, formatAvailabilityInsight } = await import('./intelligence/availabilityLearning.js')
     const reliability = await calculateReliableAvailability(matched.id, groupId, 8)
     const text = formatAvailabilityInsight(matched.name, reliability)
-    await bot.sendMessage(managerDm.dm_chat_id, text, { parse_mode: 'Markdown' })
-    await bot.sendMessage(msg.chat.id, `📨 Staff insight for ${matched.name} sent to your DM.`)
+    if (isDm) {
+      await bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' })
+    } else {
+      await bot.sendMessage(session.dm_chat_id, text, { parse_mode: 'Markdown' })
+      await bot.sendMessage(msg.chat.id, `📨 Staff insight for ${matched.name} sent to your DM.`)
+    }
   } catch (err) {
     logger.error(`/staffinsight failed: ${err.message}`)
     await bot.sendMessage(msg.chat.id, 'Something went wrong — try again.')
@@ -670,6 +692,90 @@ bot.onText(/^\/removestaff(.*)/, async (msg, match) => {
   const isAdmin = await isAuthorizedAdmin(String(msg.chat.id), msg.from?.id)
   if (!isAdmin) return
   await handleRemoveStaff(bot, msg, (match[1] || '').trim())
+})
+
+bot.onText(/^\/(help|commands)(\b|$)/, async (msg) => {
+  const isDm = msg.chat?.type === 'private'
+  const isGroup = ['group', 'supergroup'].includes(msg.chat?.type)
+  if (!isDm && !isGroup) return
+
+  if (isGroup) {
+    await bot.sendMessage(msg.chat.id,
+      `📋 DM me directly for the full command list, or open the dashboard.`)
+    return
+  }
+
+  // DM — full reference. Sectioned for readability.
+  const dashboardUrl = process.env.DASHBOARD_URL || 'https://getrelay-app.netlify.app/dashboard'
+  const lines = [
+    `*Relay — Manager Commands*`,
+    ``,
+    `Most commands work right here in DM. Some still require the group (marked GC).`,
+    ``,
+    `*Scheduling*`,
+    `/availability — collect staff availability (GC)`,
+    `/makeschedule — generate weekly schedule (GC)`,
+    `/copyschedule — copy last week's schedule (GC)`,
+    `/schedule — show published schedule (GC)`,
+    `/receipts — see who confirmed their schedule (GC)`,
+    `/rotation — fairness report (GC)`,
+    ``,
+    `*Pay & Reports*`,
+    `/pay [week?] — payroll summary`,
+    `/staffpay [name] — one staff's pay history`,
+    `/spreadsheet [week?] — Excel payroll export`,
+    `/setrate [role] [amount] — set role pay rate (GC)`,
+    `/setovertime — overtime configuration (GC)`,
+    `/reliability — staff reliability scores`,
+    `/morale — team morale report`,
+    `/briefing — daily summary`,
+    ``,
+    `*Coverage & Trades*`,
+    `In group: post "can anyone cover [shift]?"`,
+    `In DM: just talk normally — "approve", "regenerate", etc.`,
+    ``,
+    `*Tips*`,
+    `/tipmode — view/change tip settings (GC)`,
+    `/tips — recent tip records (GC)`,
+    `In group: "tips were $840 tonight" — calculates split`,
+    ``,
+    `*Staff & Intelligence*`,
+    `/staff — list active staff (GC)`,
+    `/removestaff [name] — deactivate staff (GC)`,
+    `/crosstraining — cross-training matrix`,
+    `/retention — turnover risk`,
+    `/quality — schedule quality score (GC)`,
+    `/patterns — staffing patterns`,
+    `/staffinsight [name] — per-staff deep-dive`,
+    `/kudos [name?] — recognition history (GC)`,
+    ``,
+    `*Time Clock*`,
+    `/clockstatus — who's clocked in now (GC)`,
+    `/timesheet [name?] — staff time entries (GC)`,
+    ``,
+    `*Financial*`,
+    `/revenue [amount] — log weekly revenue (GC)`,
+    `/labortrend — labor % trend`,
+    `/setbudget [amount] — set weekly budget (GC)`,
+    `/budget — show current budget`,
+    ``,
+    `*Settings*`,
+    `/setmaxshifts [1-5] — shifts per day limit (GC)`,
+    `/rules — list scheduling rules`,
+    `/delrule [n] — delete a rule (GC)`,
+    `/log [text] — manager shift log (GC)`,
+    `/shifts /addshift /editshift /removeshift (GC)`,
+    ``,
+    `*Setup*`,
+    `/setup — start fresh (GC)`,
+    `/setphone +1234567890 — link phone for dashboard login`,
+    ``,
+    `*Dashboard*`,
+    `${dashboardUrl}`,
+    ``,
+    `Stuck or hit a bug? Email mahinwaghray@gmail.com`,
+  ]
+  await bot.sendMessage(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' })
 })
 
 bot.onText(/^\/coverage(.*)/, async (msg, match) => {
