@@ -1,11 +1,11 @@
 # Relay — Capabilities & Status
-Last updated: 2026-04-09
+Last updated: 2026-05-09
 
 ## Feature Status
 
 | Feature | Status | File(s) | Notes |
 |---------|--------|---------|-------|
-| Setup wizard | ✅ WIRED | src/setup/setupFlow.js, src/setup/shiftSteps.js, src/setup/staffSteps.js | 6-step state machine: welcome → add_shifts → shift_roles → role_rates → add_staff → overtime_setup → complete |
+| Setup wizard | ✅ WIRED | src/setup/setupFlow.js, src/setup/shiftSteps.js, src/setup/staffSteps.js | 6-step state machine: welcome → add_shifts → shift_roles → role_rates → add_staff → overtime_setup → complete. Re-running `/setup` on a populated group requires explicit "yes wipe" confirmation. |
 | Admin management | ✅ WIRED | src/setup/db/admins.js | /addadmin, /removeadmin, /admins. Manager-only grant/revoke. |
 | Pre-filter | ✅ WIRED | src/preFilter.js | shouldSkip() — 4-layer noise filter: triggers whitelist, laugh regex, pure emoji regex, 42 known fillers. Saves ~40-50% LLM calls. |
 | NLP intent parsing | ✅ WIRED | src/parsers/messageParsers.js | parseMessage() via Cerebras (llama-3.3-70b). 14 intent types. Slang/AAVE-aware. |
@@ -14,7 +14,9 @@ Last updated: 2026-04-09
 | Command routing | ✅ WIRED | src/routing/commandRouter.js | 12 commands: /register, /availability, /resetavailability, /makeschedule, /schedule, /receipts, /hours, /addadmin, /removeadmin, /admins, /setup, /help |
 | Coverage requests | ✅ WIRED | src/coverage/requestHandler.js | Group message → DB record → group post → DM outreach to all staff. On-call staff get priority. |
 | Coverage confirmation | ✅ WIRED | src/coverage/confirmationHandler.js | Group or DM confirmation → marks covered → schedule swap → group notification |
-| Coverage cancellation | ✅ WIRED | src/coverage/cancelHandler.js | Managers can cancel any; staff can cancel own only |
+| Coverage cancellation | ✅ WIRED | src/coverage/cancelHandler.js, src/db/coverage.js | Managers can cancel any; staff can cancel own. Cancels open OR covered: if covered, reverse-swaps schedule_assignments back to original requester and DMs the volunteer. |
+| Coverage atomicity | ✅ WIRED | src/coverage/confirmationHandler.js, src/db/coverage.js (markCovered, revertCovered) | `markCovered` is CAS-atomic (`.eq('status','open')`). On schedule-write failure, `revertCovered` rolls the request back to 'open' so we never end up "covered" with the wrong staff still on the schedule. |
+| Trade swap atomicity | ✅ WIRED | src/coverage/tradeHandler.js | Four-step trade swap records undo callbacks; on mid-flight failure runs them in reverse, then reports failure to the user. |
 | Partial coverage | ✅ WIRED | src/coverage/partialCoverage.js | Partial time ranges, tracks portions until fully covered |
 | Shift resolution | ✅ WIRED | src/coverage/shiftResolver.js | Day matching + fuzzy matching. 5-min TTL pending clarification in-memory. |
 | Shift trading | ✅ WIRED | src/coverage/tradeHandler.js | Trade requests, trade offers, coverage-trade hybrid, DM trade offers |
@@ -30,8 +32,9 @@ Last updated: 2026-04-09
 | Read receipts | ✅ WIRED | src/schedule/readReceipts.js | Personal schedule DMs → staff reply "got it" → marked confirmed. /receipts shows unconfirmed. |
 | Receipt reminders | ⚠️ NOT WIRED | src/schedule/readReceipts.js | sendReceiptReminders() exported but never called from any cron or command |
 | Self-service schedule/hours | ✅ WIRED | src/schedule/selfService.js | Staff DM "my schedule"/"my hours" → personal lookup and response |
-| Payroll calculation (basic) | ✅ WIRED | src/payroll/payCalculator.js | calculateWeeklyPay() — shift duration × role rate − late deductions. Called on schedule publish. |
-| Payroll with overtime | ⚠️ NOT WIRED | src/payroll/payCalculator.js | calculateWeeklyPayWithOT() exists with daily+weekly OT thresholds, fully tested, but production still uses basic calculateWeeklyPay() |
+| Payroll calculation (basic) | ✅ WIRED | src/payroll/payCalculator.js | calculateWeeklyPay() — shift duration × role rate − late deductions. Legacy entry point. |
+| Payroll with overtime | ✅ WIRED | src/payroll/payCalculator.js, src/schedule/reviewSchedule.js:151 | `calculateWeeklyPayWithOT()` is the production path on schedule publish. Daily + weekly OT thresholds, multi-rate aware (returns `rolesWorked` + `weightedRegularRate`). |
+| Multi-role payroll | ✅ WIRED | src/payroll/payCalculator.js, src/payroll/spreadsheetGenerator.js | Cross-trained staff get correct totals: per-shift rate, per-role hours, weighted-average display rate. Spreadsheet writes literal computed values (no formula drift). |
 | Payroll DB | ✅ WIRED | src/payroll/payDb.js | savePeriodPayroll, getPayrollForWeek, getPayrollHistory, getLateEventsForWeek — all called |
 | Pay reports | ✅ WIRED | src/payroll/payReport.js | formatWeeklyPayReport, sendPayReport — called on publish. /pay command. |
 | Payroll spreadsheet | ✅ WIRED | src/payroll/spreadsheetGenerator.js | 3-sheet Excel: Schedule, Payroll, Late Arrivals. ExcelJS. Sent on publish + /spreadsheet command. |
