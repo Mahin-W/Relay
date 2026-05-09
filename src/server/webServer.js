@@ -5,6 +5,7 @@ import path from 'path'
 import authRoutes from './authRoutes.js'
 import dashRoutes from './dashRoutes.js'
 import marketingRoutes from './marketingRoutes.js'
+import exportRoutes from './exportRoutes.js'
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
@@ -34,6 +35,7 @@ export function startWebServer(bot, db) {
 
   app.use('/api/auth', authRoutes)
   app.use('/api', marketingRoutes)       // POST /api/waitlist — public, no auth
+  app.use('/api', exportRoutes)          // GET  /api/export    — JWT-gated, group-scoped
   app.use('/api/dashboard', dashRoutes)  // legacy — dashboard.html uses these paths
   app.use('/api', dashRoutes)            // new — clean paths for updated clients
 

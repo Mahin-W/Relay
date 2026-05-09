@@ -11,6 +11,11 @@ import { handleTipSettingsStep } from './tipSettingsSteps.js'
 // Intentionally narrow — a casual "yes" should not destroy a manager's data.
 const WIPE_CONFIRM_RE = /^(yes\s*wipe|wipe\s*everything|wipe|confirm\s*wipe|start\s*over\s*and\s*wipe|reset\s*everything)$/i
 
+// Bottom-of-message footer shown to managers in setup so they always know how
+// to reach support. Staff-facing messages don't include it — they go to their
+// manager, not us.
+const MANAGER_SUPPORT_FOOTER = `\n\n_Stuck or hit a bug? Email mahinwaghray@gmail.com — usually replies within a day._`
+
 async function performWipeAndStart(bot, dmChatId, groupId, groupName, managerId, managerName) {
   await clearGroupSetupData(groupId)
   await createSetupSession(groupId, groupName, managerId, dmChatId)
@@ -18,7 +23,8 @@ async function performWipeAndStart(bot, dmChatId, groupId, groupName, managerId,
     `👋 Hey ${managerName}! Let's set up Relay for *${groupName}*.\n` +
     `_(Previous setup cleared — payroll and time clock history preserved.)_\n\n` +
     `First — what's your business called?\n` +
-    `_(Press send to use *"${groupName}"*)_`,
+    `_(Press send to use *"${groupName}"*)_` +
+    MANAGER_SUPPORT_FOOTER,
     { parse_mode: 'Markdown' })
   logger.bot(`Setup DM started for group ${groupId} (${groupName}) by ${managerName} — data cleared after explicit confirm`)
 }
@@ -67,7 +73,8 @@ export async function startSetupDM(bot, msg, groupId) {
         `Running /setup again will *delete all staff, shifts, schedule assignments, and availability* ` +
         `(payroll and time-clock history are preserved).\n\n` +
         `If that's what you want, reply with *yes wipe* to confirm.\n` +
-        `Anything else cancels — your data stays untouched.`,
+        `Anything else cancels — your data stays untouched.` +
+        MANAGER_SUPPORT_FOOTER,
         { parse_mode: 'Markdown' })
       logger.bot(`Setup wipe confirmation requested for group ${groupId} (${staff?.length ?? 0} staff, ${shifts?.length ?? 0} shifts)`)
       return
@@ -88,7 +95,8 @@ export async function startSetupDM(bot, msg, groupId) {
   await bot.sendMessage(dmChatId,
     `👋 Hey ${managerName}! Let's set up Relay for *${groupName}*.\n${resetNote}\n` +
     `First — what's your business called?\n` +
-    `_(Press send to use *"${groupName}"*)_`,
+    `_(Press send to use *"${groupName}"*)_` +
+    MANAGER_SUPPORT_FOOTER,
     { parse_mode: 'Markdown' })
 
   logger.bot(`Setup DM started for group ${groupId} (${groupName}) by ${managerName}${hadData ? ' — data cleared' : ''}`)

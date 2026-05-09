@@ -2151,6 +2151,19 @@
       </header>
 
       <div class="content-area" id="page-content"></div>
+
+      <footer class="dashboard-footer" style="
+        padding: 16px 24px 24px;
+        margin-top: 24px;
+        border-top: 1px solid var(--color-border);
+        color: var(--color-text-muted);
+        font-size: 12px;
+        text-align: center;
+        line-height: 1.5;
+      ">
+        Need help? Email <a href="mailto:mahinwaghray@gmail.com" style="color: inherit; text-decoration: underline;">mahinwaghray@gmail.com</a>.
+        Bot down? Same email — usually replies within a day.
+      </footer>
     </main>
   </div>
 
@@ -5182,6 +5195,7 @@
           <button data-target="shifts"      onclick="scrollToSection(this)">Shifts</button>
           <button data-target="shift-reqs"  onclick="scrollToSection(this)">Requirements</button>
           <button data-target="rules"       onclick="scrollToSection(this)">Rules</button>
+          <button data-target="account"     onclick="scrollToSection(this)">Account</button>
         </div>
 
         <div class="settings-section" id="appearance">
@@ -5388,7 +5402,50 @@
           `).join('')}
           <button class="setting-save-btn ghost" onclick="openAddRule()">+ Add Rule</button>
         </div>
+
+        <div class="settings-section" id="account">
+          <div class="settings-section-title">Account</div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Export your data</div>
+              <div class="setting-desc">Download an Excel file with every staff member, shift, schedule assignment, payroll record, time entry, revenue entry, tip record, coverage request, and manager log entry for your restaurant.</div>
+            </div>
+            <button class="setting-save-btn" onclick="downloadExport(this)">Download .xlsx</button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Support</div>
+              <div class="setting-desc">Questions, problems, or "the bot is down" — email <a href="mailto:mahinwaghray@gmail.com">mahinwaghray@gmail.com</a>. Replies are usually within a day.</div>
+            </div>
+          </div>
+        </div>
       `);
+    }
+
+    async function downloadExport(btn) {
+      const original = btn?.innerHTML;
+      if (btn) { btn.innerHTML = 'Preparing…'; btn.disabled = true; }
+      try {
+        const res = await fetch('/api/export', { credentials: 'include' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Export failed (${res.status})`);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `relay-export-${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        showToast('Export downloaded', 'success');
+      } catch (e) {
+        showToast(e.message, 'error');
+      } finally {
+        if (btn) { btn.innerHTML = original; btn.disabled = false; }
+      }
     }
 
     function scrollToSection(btn) {
