@@ -1,11 +1,128 @@
-# Future Work — Phases B & C
+# Future Work — Next Session Handoff + Phases B & C
 
-Phase A (this turn, commit `<TBD>`) shipped the highest-leverage items: `/help`, 13 read-only commands DM-enabled, full README rewrite. This doc tracks what's deferred and the order to do it in.
+> **If you are starting a new session: read this top section first. It tells you exactly what state the project is in, what to verify, and what to do next.**
 
-Sister docs:
-- `PRODUCTION_READINESS_REPORT.md` — P0/P1 audit
-- `LAUNCH_AUDIT_BUGS.md` — file:line bug list
-- `LAUNCH_OPERATOR_TASKS.md` — non-code launch checklist
+---
+
+## START HERE — Session Handoff (last update: 2026-05-09)
+
+### 1. Where things stand right now
+
+**Deployed and live:**
+- Render backend at `https://relay-v5ne.onrender.com` (verified `/health` returns 200 multiple times during the 2026-05-09 session)
+- Netlify frontend at `https://getrelay-app.netlify.app/dashboard`
+- Supabase project `khfyiapeoiatnxbhcbto`
+
+**Code state:** working tree clean. Latest commits (`git log --oneline -8`):
+1. `d226938` — 13 manager commands work in DMs; `/help`; full README rewrite
+2. `cf22017` — data export, support contact, operator launch checklist
+3. `1b4ad6b` — launch readiness report + audit bug list
+4. `264afa2` — drop dead files (audit cleanup)
+5. `a5c1177` — RLS lockdown + cascade-soften migrations (008/009)
+6. `4cb69c9` — P0 launch-blocker fixes
+7. `c62e882` — pre-session: BUILDNEXT split-brain doc (now deleted)
+8. `8eab76f` — pre-session: bot+dashboard split-brain fix
+
+**SQL migrations applied to prod Supabase:** 008 (RLS lockdown — anon now has zero DB access) and 009 (cascade-delete soften + unique constraint on `schedule_assignments`).
+
+**Render env vars set by the operator on 2026-05-09:** `JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY` (in addition to the originals: `TELEGRAM_BOT_TOKEN`, `CEREBRAS_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ALLOWED_ORIGINS`).
+
+### 2. Smoke tests to run first (5 min)
+
+Run these in order. If any fails, fix before adding more surface area.
+
+```bash
+# 1) Backend health
+curl -sm 6 https://relay-v5ne.onrender.com/health
+
+# 2) Local boot still works (Cerebras + Groq + JWT_SECRET should be in .env)
+PORT=10099 node src/index.js > /tmp/relay-boot.log 2>&1 &
+PID=$!
+until curl -s -m 1 localhost:10099/health >/dev/null 2>&1; do sleep 0.5; done
+curl -s localhost:10099/health
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -m 2 localhost:10099/api/export   # expect 401
+kill $PID; wait $PID 2>/dev/null
+```
+
+Then in the operator's Telegram (manual — can't be done from a coding session):
+- DM the bot `/help` → should reply with the full sectioned reference
+- DM the bot `/pay` → should send the payroll summary directly in the DM (not "Sent to your DM")
+- DM the bot `/morale`, `/reliability`, `/budget` — all should answer in DM
+- In the test group, `/setup` on a populated group → should ask for "yes wipe" instead of nuking
+- Log in to dashboard → Settings → Account → Download .xlsx → file should open in Excel
+
+### 3. What is NOT verified end-to-end
+
+The 13 DM-enabled commands compile and the server boots, but no Telegram interaction has actually been simulated. The operator should walk through the DM smoke tests above before trusting them.
+
+LLM tests have been skipped because Groq's daily token quota was exhausted in the last test run (the operator now has CEREBRAS_API_KEY locally so re-running tests should hit Cerebras).
+
+### 4. Order of operations for the next session
+
+In priority order. Each item links to the doc that has the detail.
+
+| Priority | Block | Doc | Effort |
+|---|---|---|---|
+| 1 | Operator items: pay for Render Starter, sign up UptimeRobot, decide billing, set up ToS, smoke test the live deploy | `LAUNCH_OPERATOR_TASKS.md` | 2 hr (mostly the operator's time, not code) |
+| 2 | Top P1s from the audit: Cerebras JSON-mode workaround, polling auto-recovery, `dashRoutes.js` error-message leaks, LLM client timeout | `LAUNCH_AUDIT_BUGS.md` (P1-1 / P1-3 / P1-12 / P1-28) | ~3 hr |
+| 3 | Phase B1 + B2 below (more commands in DM, write commands in DM) | this file | ~3 hr (originally estimated 6-8 hr — the pattern is mechanical, see calibration note below) |
+| 4 | Phase C1 + C5 below (read receipts panel, time-off approvals UI) | this file | ~2-3 hr |
+| 5 | Phase B3, then C2/C4/C6, then C3 last | this file | spread across several sessions |
+
+### 5. Estimate calibration (Phase A retrospective)
+
+The Phase A work in this session (13 DM commands + `/help` + README rewrite) was estimated at 3-4 hr; actual was ~15 min. Reasons:
+- Refactor pattern was mechanical once `resolveManagerContext` existed.
+- README "rewrite" was mostly restructuring existing tables.
+- I padded estimates because the prompt said "ultrathink scope" — overestimating felt safer.
+
+**For future estimates:** the mechanical phases (B1, B2, C1, C5, C6) will probably be 30-50% of the bands listed below. The genuinely novel UX work (C3 insights panel, possibly C2 cross-training matrix) won't compress as much.
+
+### 6. Known gotchas
+
+- **Cerebras silently strips `response_format: { type: "json_object" }`** (`src/parsers/llm.js:50-56`). Setup parsers that need strict JSON can return garbage and the wizard moves on. **This is the highest-stakes hidden bug.** Workaround: route JSON-mode calls through `groqCreate(...)` directly instead of `llmCreate(...)`. This is `LAUNCH_AUDIT_BUGS.md` P1-28.
+- **Groq daily token quota** (~100k tokens/day on free tier) gets exhausted by `npm test` runs. Use `npm run test:fast` (skip-llm) or upgrade Groq if testing frequently.
+- **Render free tier sleeps after 15 min idle.** Operator decision pending in `LAUNCH_OPERATOR_TASKS.md` item 4.
+- **Cron jobs run in UTC, not restaurant local time.** Sunday rollups, no-show alerts, missed-clock-out alerts all fire at UTC offsets (`LAUNCH_AUDIT_BUGS.md` P1-8).
+- **22 commands in `src/index.js` still have the `if (!['group','supergroup']...) return` guard** — Phase B1+B2 below covers them.
+- **Support email everywhere is `mahinwaghray@gmail.com`** — hardcoded in `public/dashboard.html` footer, `src/setup/setupFlow.js` welcome footer, `src/server/exportRoutes.js` cover sheet. Search for it if you need to change it.
+
+### 7. Key files to know
+
+| File | What |
+|---|---|
+| `src/index.js` | All bot.onText handlers. The new `resolveManagerContext(msg)` helper at line ~94 is the single source of truth for group/DM auth. |
+| `src/server/dashRoutes.js` | 55 dashboard API routes. All gated by `requireAuth`. Group scoping via `req.manager.groupId`. |
+| `src/server/exportRoutes.js` | New `/api/export` endpoint — XLSX dump of tenant tables. |
+| `src/server/marketingRoutes.js` | New `/api/waitlist` proxy — replaces the hardcoded GAS URL. |
+| `src/coverage/confirmationHandler.js` | Coverage swap with compensation pattern (P0-5 fix). Reverts `markCovered` if schedule write fails. |
+| `src/coverage/cancelHandler.js` | Cancel-after-fill: reverse-swaps the schedule and DMs the volunteer (P0-6 fix). |
+| `src/coverage/tradeHandler.js` | Trade swap with undo-stack rollback (P0-7 fix). |
+| `src/payroll/payCalculator.js` | Multi-role payroll (P0-9 fix): `rolesWorked`, `weightedRegularRate`, `roleNameDisplay`. |
+| `src/db/client.js` | Prefers `SUPABASE_SERVICE_ROLE_KEY`; falls back to anon for dev. |
+| `scripts/migrations/008_lock_down_rls.sql` | Already applied. RLS lockdown. |
+| `scripts/migrations/009_soften_cascades.sql` | Already applied. Cascade soften + unique constraint. |
+| `public/dashboard.html` | Single 6,250-line SPA. Settings → Account section has the export button + support email. Persistent footer on every page. |
+| `public/index.html` | Marketing landing. Now POSTs to `/api/waitlist` instead of GAS direct. |
+
+### 8. Sister docs to read
+
+- `README.md` — user-facing. Brand intro, dashboard pages, command tables, deployment.
+- `PRODUCTION_READINESS_REPORT.md` — narrative pre-launch audit. All 13 P0s marked FIXED.
+- `LAUNCH_AUDIT_BUGS.md` — file:line bug list. 13 P0 (✅ all fixed), 32 P1 (open), ~25 P2.
+- `LAUNCH_OPERATOR_TASKS.md` — non-code launch items only the operator can do.
+- `CAPABILITIES.md` — per-feature wired/not-wired status.
+- `CLAUDE.md` — coding rules + stack invariants for AI sessions.
+
+---
+
+## Phase A — Already shipped (commit `d226938`)
+
+- `resolveManagerContext(msg)` helper in `src/index.js` for unified group/DM auth
+- 13 commands DM-enabled: `/briefing /pay /staffpay /reliability /spreadsheet /labortrend /budget /morale /retention /patterns /staffinsight /rules /crosstraining`
+- `/help` (and `/commands`) — full sectioned reference in DMs, short pointer in groups
+- README rewrite per launch spec
+- This doc
 
 ---
 
