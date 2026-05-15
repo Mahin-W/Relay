@@ -1,8 +1,8 @@
 # Relay — Production Readiness Report
 
-**Date:** 2026-05-08 (P0 status updated 2026-05-09)
+**Date:** 2026-05-08 (P0 status updated 2026-05-09; first P1 batch shipped 2026-05-15)
 **Auditor:** Claude Opus 4.7 (12-agent parallel codebase audit)
-**Verdict:** ⚠️ **All 13 P0 blockers fixed in code 2026-05-09. SQL migrations 008/009 applied to Supabase. Operator must verify Render env (`SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, `GROQ_API_KEY`) and deploy. 32 P1s still open — see `LAUNCH_AUDIT_BUGS.md`.**
+**Verdict:** ✅ **All 13 P0 blockers fixed and deployed. SQL migrations 008/009 applied to Supabase. Render boot is green as of 2026-05-15 (`JWT_SECRET` env set). 4 P1s fixed (P1-1, P1-3, P1-12, P1-28); 28 P1s still open — see `LAUNCH_AUDIT_BUGS.md`.**
 
 ## P0 status (2026-05-09)
 

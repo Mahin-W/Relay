@@ -135,10 +135,12 @@ If they're a stranger paying full price: knock down at least the top-3 P1s from 
 
 ---
 
-## Already-done as of 2026-05-09
+## Already-done as of 2026-05-15
 
 - ✅ Support contact email visible in dashboard footer (every page) and bot DMs during setup
 - ✅ Data export at Settings → Account → Download .xlsx
 - ✅ All 13 P0 launch blockers fixed and pushed (commits `4cb69c9`, `a5c1177`, `264afa2`, `1b4ad6b`)
 - ✅ SQL migrations 008 + 009 applied to Supabase
 - ✅ `LAUNCH_AUDIT_BUGS.md` lists the 32 P1s for week-1 followup
+- ✅ **4 P1s fixed and deployed 2026-05-15:** dashRoutes error-message leaks (P1-1), polling auto-recovery (P1-3), LLM client timeout (P1-12), Cerebras JSON-mode routing (P1-28). Commits: `7383008`, `7b3075e`, `35727d1`
+- ✅ **Render deploy green 2026-05-15** — `JWT_SECRET` set to ≥32-char value, container booting cleanly past the P0-1 fail-fast guard

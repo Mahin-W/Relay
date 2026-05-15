@@ -1,5 +1,7 @@
 # Relay — Capabilities & Status
-Last updated: 2026-05-09
+Last updated: 2026-05-15
+
+> **2026-05-15 deploy state:** Render `relay-v5ne` is live and healthy. `JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TELEGRAM_BOT_TOKEN`, `ALLOWED_ORIGINS` all set. RLS migrations 008/009 applied. 4 P1s shipped (P1-1, P1-3, P1-12, P1-28).
 
 ## Feature Status
 

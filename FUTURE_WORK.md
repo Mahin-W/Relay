@@ -8,12 +8,12 @@
 
 ### 0. 2026-05-15 session delta
 
-- ✅ 4 P1 audit bugs fixed and committed:
+- ✅ 4 P1 audit bugs fixed, committed, and pushed:
   - `7383008` fix: LLM client timeout + route JSON-mode through Groq (P1-12, P1-28)
   - `7b3075e` fix: self-healing polling recovery (P1-3)
   - `35727d1` fix: sanitize 500 error responses on dashboard routes (P1-1, plus a sibling leak at line 1521)
-- ⏳ Render deploy currently failing with `JWT_SECRET must be set to a value of at least 32 characters`. Operator action: set `JWT_SECRET` env var on Render to a ≥32-char value, then redeploy. Code is correct (P0-1 fail-fast, intentional).
-- Remaining top P1s from the audit (priority order, ~3-4 hr): P1-2 (OTP brute-force + IP rate limit), P1-4 (deep `/health`), P1-15 (graceful HTTP shutdown), P1-16 (`"latest"` deps → pinned), P1-29 (in-memory reminder dedup). Then move on to Phase B1+B2 below.
+- ✅ Render deploy back to green after a `JWT_SECRET must be ≥32 characters` boot failure. Operator rotated `JWT_SECRET` on Render to a fresh 64-char URL-safe value (the P0-1 fail-fast guard at `src/server/middleware.js:4-6` was doing its job — code did not change). Note: that rotation invalidated any existing dashboard JWTs — staff/managers logged in before the rotation will need to OTP-login again.
+- **Next session, start here:** the next P1 batch (in priority order, ~3-4 hr): P1-2 (OTP brute-force + IP rate limit), P1-4 (deep `/health`), P1-15 (graceful HTTP shutdown), P1-16 (`"latest"` deps → pinned), P1-29 (in-memory reminder dedup). After that, Phase B1+B2 below.
 
 ### 1. Where things stand right now
 
@@ -72,7 +72,7 @@ In priority order. Each item links to the doc that has the detail.
 
 | Priority | Block | Doc | Effort |
 |---|---|---|---|
-| 1 | Operator items: set `JWT_SECRET` on Render (deploy currently failing), pay for Render Starter, sign up UptimeRobot, decide billing, set up ToS, smoke test the live deploy | `LAUNCH_OPERATOR_TASKS.md` | 2 hr (mostly the operator's time, not code) |
+| 1 | Operator items: pay for Render Starter, sign up UptimeRobot, decide billing, set up ToS, generate onboarding Loom, smoke test the live deploy | `LAUNCH_OPERATOR_TASKS.md` | 2 hr (mostly the operator's time, not code) |
 | 2 | ~~Top P1s: Cerebras JSON-mode, polling auto-recovery, dashRoutes leaks, LLM timeout~~ ✅ **DONE 2026-05-15** (commits `7383008`, `7b3075e`, `35727d1`) | `LAUNCH_AUDIT_BUGS.md` | — |
 | 2b | Next P1 batch: P1-2 (OTP IP rate limit), P1-4 (deep `/health`), P1-15 (graceful HTTP shutdown), P1-16 (pin `"latest"` deps), P1-29 (persist reminder dedup) | `LAUNCH_AUDIT_BUGS.md` | ~3-4 hr |
 | 3 | Phase B1 + B2 below (more commands in DM, write commands in DM) | this file | ~3 hr (originally estimated 6-8 hr — the pattern is mechanical, see calibration note below) |
