@@ -4,7 +4,16 @@
 
 ---
 
-## START HERE — Session Handoff (last update: 2026-05-09)
+## START HERE — Session Handoff (last update: 2026-05-15)
+
+### 0. 2026-05-15 session delta
+
+- ✅ 4 P1 audit bugs fixed and committed:
+  - `7383008` fix: LLM client timeout + route JSON-mode through Groq (P1-12, P1-28)
+  - `7b3075e` fix: self-healing polling recovery (P1-3)
+  - `35727d1` fix: sanitize 500 error responses on dashboard routes (P1-1, plus a sibling leak at line 1521)
+- ⏳ Render deploy currently failing with `JWT_SECRET must be set to a value of at least 32 characters`. Operator action: set `JWT_SECRET` env var on Render to a ≥32-char value, then redeploy. Code is correct (P0-1 fail-fast, intentional).
+- Remaining top P1s from the audit (priority order, ~3-4 hr): P1-2 (OTP brute-force + IP rate limit), P1-4 (deep `/health`), P1-15 (graceful HTTP shutdown), P1-16 (`"latest"` deps → pinned), P1-29 (in-memory reminder dedup). Then move on to Phase B1+B2 below.
 
 ### 1. Where things stand right now
 
@@ -63,8 +72,9 @@ In priority order. Each item links to the doc that has the detail.
 
 | Priority | Block | Doc | Effort |
 |---|---|---|---|
-| 1 | Operator items: pay for Render Starter, sign up UptimeRobot, decide billing, set up ToS, smoke test the live deploy | `LAUNCH_OPERATOR_TASKS.md` | 2 hr (mostly the operator's time, not code) |
-| 2 | Top P1s from the audit: Cerebras JSON-mode workaround, polling auto-recovery, `dashRoutes.js` error-message leaks, LLM client timeout | `LAUNCH_AUDIT_BUGS.md` (P1-1 / P1-3 / P1-12 / P1-28) | ~3 hr |
+| 1 | Operator items: set `JWT_SECRET` on Render (deploy currently failing), pay for Render Starter, sign up UptimeRobot, decide billing, set up ToS, smoke test the live deploy | `LAUNCH_OPERATOR_TASKS.md` | 2 hr (mostly the operator's time, not code) |
+| 2 | ~~Top P1s: Cerebras JSON-mode, polling auto-recovery, dashRoutes leaks, LLM timeout~~ ✅ **DONE 2026-05-15** (commits `7383008`, `7b3075e`, `35727d1`) | `LAUNCH_AUDIT_BUGS.md` | — |
+| 2b | Next P1 batch: P1-2 (OTP IP rate limit), P1-4 (deep `/health`), P1-15 (graceful HTTP shutdown), P1-16 (pin `"latest"` deps), P1-29 (persist reminder dedup) | `LAUNCH_AUDIT_BUGS.md` | ~3-4 hr |
 | 3 | Phase B1 + B2 below (more commands in DM, write commands in DM) | this file | ~3 hr (originally estimated 6-8 hr — the pattern is mechanical, see calibration note below) |
 | 4 | Phase C1 + C5 below (read receipts panel, time-off approvals UI) | this file | ~2-3 hr |
 | 5 | Phase B3, then C2/C4/C6, then C3 last | this file | spread across several sessions |
@@ -80,7 +90,7 @@ The Phase A work in this session (13 DM commands + `/help` + README rewrite) was
 
 ### 6. Known gotchas
 
-- **Cerebras silently strips `response_format: { type: "json_object" }`** (`src/parsers/llm.js:50-56`). Setup parsers that need strict JSON can return garbage and the wizard moves on. **This is the highest-stakes hidden bug.** Workaround: route JSON-mode calls through `groqCreate(...)` directly instead of `llmCreate(...)`. This is `LAUNCH_AUDIT_BUGS.md` P1-28.
+- ~~**Cerebras silently strips `response_format: { type: "json_object" }`**~~ ✅ Fixed 2026-05-15 (commit `7383008`). `llmCreate` now routes JSON-mode requests directly to Groq when configured, bypassing Cerebras. When only Cerebras is available, the strip is logged via `logger.warn` instead of being silent.
 - **Groq daily token quota** (~100k tokens/day on free tier) gets exhausted by `npm test` runs. Use `npm run test:fast` (skip-llm) or upgrade Groq if testing frequently.
 - **Render free tier sleeps after 15 min idle.** Operator decision pending in `LAUNCH_OPERATOR_TASKS.md` item 4.
 - **Cron jobs run in UTC, not restaurant local time.** Sunday rollups, no-show alerts, missed-clock-out alerts all fire at UTC offsets (`LAUNCH_AUDIT_BUGS.md` P1-8).

@@ -5,7 +5,9 @@ Source: 12-agent parallel codebase audit (see `PRODUCTION_READINESS_REPORT.md` f
 
 ## Status as of 2026-05-09
 
-**All 13 P0 blockers fixed in code.** Migrations 008 (RLS lockdown) and 009 (cascade soften + unique constraint) applied to Supabase. Pending: operator deploy. 32 P1s still open.
+**All 13 P0 blockers fixed in code.** Migrations 008 (RLS lockdown) and 009 (cascade soften + unique constraint) applied to Supabase. Pending: operator deploy.
+
+**P1 progress as of 2026-05-15:** 4 P1s fixed (P1-1, P1-3, P1-12, P1-28). 28 P1s still open.
 
 P0 fixes summary (per item below):
 - P0-1 → `src/server/middleware.js` fail-fast
@@ -140,11 +142,11 @@ Each row: severity / file / one-line summary / what breaks / fix sketch.
 
 ## P1 — Fix in week 1
 
-### P1-1 — Stack traces and raw DB errors leak through dashboard responses
-- **File:** `src/server/dashRoutes.js` lines 837, 1100, 1149, 1201, 1304, 1362, 1536, 1588, 1615, 1634 (also `err.stack` logged at 1535)
+### P1-1 — Stack traces and raw DB errors leak through dashboard responses — ✅ FIXED 2026-05-15
+- **File:** `src/server/dashRoutes.js` lines 837, 1100, 1149, 1201, 1304, 1362, 1521, 1536, 1588, 1615, 1634 (also `err.stack` logged at 1535)
 - **Pattern:** `res.status(500).json({ error: err.message })` returns raw Supabase / SQL errors to the client.
 - **What breaks:** Attacker probing the dashboard learns table names, column names, RLS rule fragments. Aids enumeration and crafted payload attacks.
-- **Fix:** Generic error message client-side, full error logged server-side only.
+- **Fix:** All 11 sites now return generic route-specific strings; full errors continue to be logged server-side. Sibling `insertErr.message` leak at line 1521 fixed in the same commit.
 
 ### P1-2 — OTP brute-force protection is in-memory + per-phone only
 - **File:** `src/server/authRoutes.js:7,30-34,99-103`
@@ -152,10 +154,10 @@ Each row: severity / file / one-line summary / what breaks / fix sketch.
 - 5 attempts per code is fine, but **no IP rate limit** lets a botnet multiply attempts.
 - **Fix:** Persist OTP store in Supabase with TTL; add IP-based rate limit (~10 attempts/hour/IP); consider a magic-link backup.
 
-### P1-3 — Polling errors are logged but never recovered
-- **File:** `src/index.js:118-120`
+### P1-3 — Polling errors are logged but never recovered — ✅ FIXED 2026-05-15
+- **File:** `src/index.js:176-246`
 - **What breaks:** If polling stops, web server stays up, `/health` returns 200, but Telegram messages go unanswered.
-- **Fix:** Exponential-backoff `bot.startPolling()` retry; exit after N failures so Render restarts.
+- **Fix:** Self-healing handler — stopPolling/startPolling with exponential backoff (2/4/8/16/30s cap), tracks consecutive failures with a 60s settling-window reset, `process.exit(1)` after `POLLING_MAX_FAILURES` (default 5) so Render restarts.
 
 ### P1-4 — `/health` only confirms the web server is alive
 - **File:** `src/server/webServer.js:38-39`
@@ -197,10 +199,10 @@ Each row: severity / file / one-line summary / what breaks / fix sketch.
 - **What breaks:** Staff who forgets to clock out leaves an open punch indefinitely. If manager misses the alert, payroll is wrong.
 - **Fix:** Auto-close at scheduled end + grace; audit-log row + DM to manager.
 
-### P1-12 — LLM has no client-level timeout
-- **File:** `src/parsers/llm.js:28,38`
+### P1-12 — LLM has no client-level timeout — ✅ FIXED 2026-05-15
+- **File:** `src/parsers/llm.js` (`cerebrasCreate`, `groqCreate`)
 - **What breaks:** Cerebras/Groq client constructed without request timeout. A hung response blocks the message handler.
-- **Fix:** `AbortSignal.timeout(8000)` on each call.
+- **Fix:** `AbortSignal.timeout(LLM_TIMEOUT_MS)` (default 8000ms) injected as the OpenAI SDK's `{ signal }` request option on every call. Callers can override via `params.signal`.
 
 ### P1-13 — Coverage broadcast does not respect Telegram's 30 msg/sec limit
 - **Files:** `src/coverage/managerCoverage.js:253-267`, `src/coverage/escalationCron.js:122-131`
@@ -279,11 +281,11 @@ Each row: severity / file / one-line summary / what breaks / fix sketch.
 - **What breaks:** Replies like "bet", "fasho", "no cap" — used as confirmations by many staff — never reach the parser. Coverage requests can expire uncovered because the confirmation was filtered out as filler.
 - **Fix:** Either move slang confirmations to the parser path or invert the filter (skip only when no shift-signal token is present).
 
-### P1-28 — Cerebras path silently strips `response_format: json_object`
-- **File:** `src/parsers/llm.js:50-56`
+### P1-28 — Cerebras path silently strips `response_format: json_object` — ✅ FIXED 2026-05-15
+- **File:** `src/parsers/llm.js` (`llmCreate`, `cerebrasCreate`)
 - **Code:** `const { response_format, model, ...rest } = params` — `response_format` is destructured out before the call to Cerebras.
 - **What breaks:** CLAUDE.md mandates `response_format: { type: "json_object" }` on every LLM call. Cerebras silently emits free-form text. `extractJSON()` falls back to a regex `{...}` grab, then `JSON.parse` either crashes or returns garbage. Setup parsers can return `[]` shifts and the wizard moves on as if everything saved.
-- **Fix:** If Cerebras doesn't support JSON mode, force the JSON-required calls through Groq or guard them with a stricter parser; never silently drop the directive.
+- **Fix:** `llmCreate` now inspects `params.response_format?.type === 'json_object'` and routes directly to Groq when JSON mode is requested and Groq is configured, bypassing Cerebras entirely. When only Cerebras is available, the strip is now logged via `logger.warn` instead of being silent. `cerebrasCreate` retains its destructure (Cerebras would error on the field) but also logs a warn when it drops the directive.
 
 ### P1-29 — Schedule reminder dedup set is in-memory only
 - **File:** `src/reminders/shiftReminders.js:5-11`
@@ -362,8 +364,8 @@ Each row: severity / file / one-line summary / what breaks / fix sketch.
 
 ## Counts
 
-- **P0:** 13
-- **P1:** 32
+- **P0:** 13 (all fixed)
+- **P1:** 32 (4 fixed: P1-1, P1-3, P1-12, P1-28 — 28 open)
 - **P2:** ~25
 - **P3:** ~6
 
