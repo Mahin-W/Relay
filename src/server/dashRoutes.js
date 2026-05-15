@@ -834,7 +834,7 @@ router.post('/schedule/assign', async (req, res) => {
     ).catch(() => {})
   } catch (err) {
     console.error('POST /schedule/assign error:', err.message)
-    res.status(500).json({ error: err.message || 'Failed to assign schedule' })
+    res.status(500).json({ error: 'Failed to assign schedule' })
   }
 })
 
@@ -1097,7 +1097,7 @@ router.get('/schedule/status', async (req, res) => {
     })
   } catch (err) {
     console.error('[GET /schedule/status]', err.message)
-    return res.status(500).json({ error: err.message || 'Failed to load schedule status' })
+    return res.status(500).json({ error: 'Failed to load schedule status' })
   }
 })
 
@@ -1146,7 +1146,7 @@ router.post('/schedule/move', async (req, res) => {
     return res.json({ success: true, removed: { staffId, shiftId: fromShiftId }, added: newAssignment })
   } catch (err) {
     console.error('[POST /schedule/move]', err.message)
-    return res.status(500).json({ error: err.message || 'Failed to move shift' })
+    return res.status(500).json({ error: 'Failed to move shift' })
   }
 })
 
@@ -1198,7 +1198,7 @@ router.post('/schedule/swap', async (req, res) => {
     return res.json({ success: true, removed: { staffId: fromStaffId, shiftId }, added: newAssignment })
   } catch (err) {
     console.error('[POST /schedule/swap]', err.message)
-    return res.status(500).json({ error: err.message || 'Failed to swap assignments' })
+    return res.status(500).json({ error: 'Failed to swap assignments' })
   }
 })
 
@@ -1301,7 +1301,7 @@ router.get('/payroll/planned', async (req, res) => {
     return res.json({ weekStart: week, rows, totalPlannedHours, totalPlannedCost })
   } catch (err) {
     console.error('[GET /payroll/planned]', err.message)
-    return res.status(500).json({ error: err.message || 'Failed to load planned labor' })
+    return res.status(500).json({ error: 'Failed to load planned labor' })
   }
 })
 
@@ -1359,7 +1359,7 @@ router.patch('/payroll/override', async (req, res) => {
     ).catch(() => {})
   } catch (err) {
     console.error('[PATCH /payroll/override]', err.message)
-    return res.status(500).json({ error: err.message || 'Failed to update payroll' })
+    return res.status(500).json({ error: 'Failed to update payroll' })
   }
 })
 
@@ -1518,7 +1518,7 @@ router.post('/revenue/daily', async (req, res) => {
       .single()
     if (insertErr) {
       console.error('[daily_revenue insert]', insertErr)
-      return res.status(500).json({ error: insertErr.message })
+      return res.status(500).json({ error: 'Failed to save revenue entry' })
     }
 
     const weekStart = mondayOf(date)
@@ -1533,7 +1533,7 @@ router.post('/revenue/daily', async (req, res) => {
     return res.status(201).json({ entry: inserted, dayTotal: weeklyTotal })
   } catch (err) {
     console.error('[POST /revenue/daily]', err.message, err.stack)
-    return res.status(500).json({ error: err.message || 'Failed to save revenue entry' })
+    return res.status(500).json({ error: 'Failed to save revenue entry' })
   }
 })
 
@@ -1585,7 +1585,7 @@ router.get('/revenue/types', async (req, res) => {
     return res.json(data || [])
   } catch (err) {
     console.error('[GET /revenue/types]', err)
-    return res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: 'Failed to load revenue categories' })
   }
 })
 
@@ -1612,7 +1612,7 @@ router.post('/revenue/types', async (req, res) => {
     return res.status(201).json(data)
   } catch (err) {
     console.error('[POST /revenue/types]', err)
-    return res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: 'Failed to create revenue category' })
   }
 })
 
@@ -1631,7 +1631,7 @@ router.delete('/revenue/types/:id', async (req, res) => {
     return res.json({ success: true })
   } catch (err) {
     console.error('[DELETE /revenue/types]', err)
-    return res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: 'Failed to delete revenue category' })
   }
 })
 
