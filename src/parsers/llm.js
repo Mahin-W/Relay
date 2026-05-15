@@ -15,6 +15,10 @@ import { logger } from '../logger.js'
 export const CEREBRAS_MODEL = 'llama-3.3-70b'
 export const GROQ_MODEL     = 'llama-3.3-70b-versatile'
 
+// ── Default per-request timeout (ms) — bot must never hang on LLM ───────────
+// Callers can override by passing their own `signal` in params.
+const LLM_TIMEOUT_MS = 8000
+
 // ── Lazy clients (returns null if no key) ───────────────────────────────────
 let _cerebrasInit = false
 let _cerebras = null
@@ -50,26 +54,38 @@ export function hasAnyLLM()   { return hasCerebras() || hasGroq() }
 export async function cerebrasCreate(params) {
   const c = cerebrasClient()
   if (!c) throw new Error('CEREBRAS_API_KEY not set — cannot call Cerebras')
-  const { response_format, model, ...rest } = params
+  const { response_format, model, signal, ...rest } = params
   const finalParams = { ...rest, model: model || CEREBRAS_MODEL }
+  if (response_format) {
+    logger.warn(`[cerebras] response_format=${response_format?.type ?? 'set'} stripped — Cerebras does not support it; output is free-form text`)
+  }
   logger.bot(`[cerebras] chat.completions.create model=${finalParams.model}`)
-  return c.chat.completions.create(finalParams)
+  const requestOptions = { signal: signal ?? AbortSignal.timeout(LLM_TIMEOUT_MS) }
+  return c.chat.completions.create(finalParams, requestOptions)
 }
 
 // ── Groq-only call (fails if Groq not configured) ───────────────────────────
 export async function groqCreate(params) {
   const g = groqClient()
   if (!g) throw new Error('GROQ_API_KEY not set — cannot call Groq')
-  const { model, ...rest } = params
+  const { model, signal, ...rest } = params
   const finalParams = { ...rest, model: model || GROQ_MODEL }
   logger.bot(`[groq] chat.completions.create model=${finalParams.model}`)
-  return g.chat.completions.create(finalParams)
+  const requestOptions = { signal: signal ?? AbortSignal.timeout(LLM_TIMEOUT_MS) }
+  return g.chat.completions.create(finalParams, requestOptions)
 }
 
 // ── Smart wrapper: Cerebras first, Groq fallback ────────────────────────────
 // This is the default for production callers that don't care about the
 // provider, only that they get an LLM response.
 export async function llmCreate(params) {
+  const needsJsonMode = params?.response_format?.type === 'json_object'
+  if (needsJsonMode && hasGroq()) {
+    return groqCreate(params)
+  }
+  if (needsJsonMode && !hasGroq() && hasCerebras()) {
+    logger.warn('[llm] json_object requested but Groq not configured; falling back to Cerebras which strips response_format — JSON mode is unenforceable')
+  }
   if (hasCerebras()) {
     try {
       return await cerebrasCreate(params)
