@@ -173,8 +173,76 @@ bot.on('message', async (msg) => {
   }
 })
 
-bot.on('polling_error', (err) => {
-  logger.error(`Polling error: ${err.message}`)
+// Self-healing polling-error handler.
+//
+// node-telegram-bot-api emits 'polling_error' on every failed long-poll tick.
+// The previous handler just logged — if Telegram dropped permanently
+// (network glitch, token revoked, Telegram outage), the web server stayed
+// up and /health returned 200 while the bot was silently dead.
+//
+// Strategy:
+//  - On each error: log, then attempt stopPolling() + startPolling() with
+//    exponential backoff (2s, 4s, 8s, 16s, 30s cap).
+//  - Track CONSECUTIVE failures. We reset the counter on a debounce timer
+//    (60s of no errors = healthy) because node-telegram-bot-api does not
+//    emit a "polling ok" signal we can subscribe to here.
+//  - After N consecutive failures (POLLING_MAX_FAILURES, default 5), log
+//    fatal and process.exit(1) so Render restarts the whole container.
+const POLLING_MAX_FAILURES = parseInt(process.env.POLLING_MAX_FAILURES || '5', 10)
+const POLLING_BACKOFFS_MS = [2000, 4000, 8000, 16000, 30000]
+const POLLING_HEALTH_RESET_MS = 60000
+let _pollingFailures = 0
+let _pollingRestartInFlight = false
+let _pollingHealthTimer = null
+
+function _schedulePollingHealthReset() {
+  if (_pollingHealthTimer) clearTimeout(_pollingHealthTimer)
+  _pollingHealthTimer = setTimeout(() => {
+    if (_pollingFailures > 0) {
+      logger.info(`Polling healthy for ${POLLING_HEALTH_RESET_MS / 1000}s — resetting failure counter (was ${_pollingFailures})`)
+      _pollingFailures = 0
+    }
+  }, POLLING_HEALTH_RESET_MS)
+}
+
+bot.on('polling_error', async (err) => {
+  try {
+    _pollingFailures += 1
+    logger.error(`Polling error (${_pollingFailures}/${POLLING_MAX_FAILURES}): ${err?.message ?? String(err)}`)
+
+    if (_pollingFailures >= POLLING_MAX_FAILURES) {
+      logger.error(`FATAL: ${_pollingFailures} consecutive polling failures — exiting so host restarts the container.`)
+      process.exit(1)
+    }
+
+    if (_pollingRestartInFlight) return
+    _pollingRestartInFlight = true
+
+    const backoffIdx = Math.min(_pollingFailures - 1, POLLING_BACKOFFS_MS.length - 1)
+    const delay = POLLING_BACKOFFS_MS[backoffIdx]
+    logger.info(`Restarting polling in ${delay}ms (attempt ${_pollingFailures})`)
+    await new Promise((resolve) => setTimeout(resolve, delay))
+
+    try {
+      // stopPolling() before startPolling() is the safer pattern — the
+      // underlying node-telegram-bot-api startPolling is not idempotent
+      // and will throw if polling is already active.
+      try { await bot.stopPolling() } catch (stopErr) {
+        logger.error(`stopPolling during recovery threw (continuing): ${stopErr.message}`)
+      }
+      await bot.startPolling()
+      logger.info('Polling restarted successfully')
+      _schedulePollingHealthReset()
+    } catch (restartErr) {
+      logger.error(`Polling restart failed: ${restartErr.message}`)
+      // Don't exit here — let the next polling_error tick the counter.
+    } finally {
+      _pollingRestartInFlight = false
+    }
+  } catch (handlerErr) {
+    // Last-resort guard: handler itself must never throw uncaught.
+    logger.error(`polling_error handler crashed: ${handlerErr.message}\n${handlerErr.stack}`)
+  }
 })
 
 bot.onText(/^\/briefing/, async (msg) => {
