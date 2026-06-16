@@ -25,6 +25,14 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Account-based dashboard login (Supabase Auth). Supabase → Project
+      # Settings → API → JWT Settings → "JWT Secret".
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # Bot @username (no @) — used to build Telegram deep links, incl. the
+      # account linking code (?start=link_<code>) and add-to-group button.
+      - key: BOT_USERNAME
+        sync: false
       # Optional — proxy target for the landing-page waitlist form.
       - key: WAITLIST_GAS_URL
         sync: false

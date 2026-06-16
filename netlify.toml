@@ -17,6 +17,16 @@
   to = "/dashboard.html"
   status = 200
 
+[[redirects]]
+  from = "/onboarding"
+  to = "/onboarding.html"
+  status = 200
+
+[[redirects]]
+  from = "/signup"
+  to = "/login.html"
+  status = 200
+
 [[headers]]
   for = "/api/*"
   [headers.values]
