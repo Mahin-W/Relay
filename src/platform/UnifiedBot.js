@@ -45,6 +45,14 @@ export class UnifiedBot {
     return this._getDefault().getChat(chatId)
   }
 
+  async createChatInviteLink(chatId, options = {}) {
+    return this._getDefault().createChatInviteLink(chatId, options)
+  }
+
+  async exportChatInviteLink(chatId) {
+    return this._getDefault().exportChatInviteLink(chatId)
+  }
+
   async editMessageText(text, options = {}) {
     return this._getDefault().editMessageText(text, options)
   }

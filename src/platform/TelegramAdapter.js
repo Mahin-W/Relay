@@ -31,6 +31,14 @@ export class TelegramAdapter extends PlatformAdapter {
     return this._bot.getChat(chatId)
   }
 
+  async createChatInviteLink(chatId, options = {}) {
+    return this._bot.createChatInviteLink(chatId, options)
+  }
+
+  async exportChatInviteLink(chatId) {
+    return this._bot.exportChatInviteLink(chatId)
+  }
+
   async editMessageText(text, options = {}) {
     return this._bot.editMessageText(text, options)
   }

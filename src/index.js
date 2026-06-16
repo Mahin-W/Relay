@@ -2,6 +2,8 @@ import 'dotenv/config'
 import TelegramBot from 'node-telegram-bot-api'
 import { logger } from './logger.js'
 import { isBotAdmin } from './setup/setupDb.js'
+import { connectGroupToAccount, announceConnection } from './setup/connectAccount.js'
+import { upsertGroupMember } from './db.js'
 import { handleDmMessage } from './routing/dmRouter.js'
 import { handleGroupMessage } from './routing/groupRouter.js'
 import { startReminderJobs } from './reminders/shiftReminders.js'
@@ -170,6 +172,63 @@ bot.on('message', async (msg) => {
     const chatId = msg?.chat?.id
     const userId = msg?.from?.id
     logger.error(`message handler crashed (chat=${chatId} user=${userId}): ${err.message}\n${err.stack}`)
+  }
+})
+
+// Bot added to (or promoted in) a group → auto-connect it to the adder's web
+// account and finish setup. The manager never types /setup or /connect.
+bot.on('my_chat_member', async (update) => {
+  try {
+    const chat = update?.chat
+    if (!chat || !['group', 'supergroup'].includes(chat.type)) return
+
+    const newStatus = update.new_chat_member?.status
+    const oldStatus = update.old_chat_member?.status
+    const becamePresent = ['member', 'administrator'].includes(newStatus)
+    const wasAbsent = !oldStatus || ['left', 'kicked'].includes(oldStatus)
+    if (!becamePresent || !wasAbsent) return  // ignore demotions/removals
+
+    const groupId = String(chat.id)
+    const groupName = chat.title || `Group ${groupId}`
+    const adderId = update.from?.id
+    if (!adderId) return
+
+    const result = await connectGroupToAccount(bot, { groupId, groupName, managerUserId: adderId })
+    if (!result.ok && result.reason === 'no_account') {
+      await bot.sendMessage(groupId,
+        `👋 Thanks for adding Relay!\n\nIf you signed up on our website, tap the *Connect* button there and I'll finish setup automatically. Otherwise, run /setup to configure here.`,
+        { parse_mode: 'Markdown' })
+      return
+    }
+    await announceConnection(bot, { groupId, result })
+  } catch (err) {
+    logger.error(`my_chat_member handler failed: ${err.message}`)
+  }
+})
+
+// A new person joined the group → greet them and hand them a one-tap link to
+// register with the bot so we can DM them shifts and coverage requests.
+bot.on('new_chat_members', async (msg) => {
+  try {
+    const groupId = String(msg.chat?.id)
+    const members = msg.new_chat_members || []
+    for (const m of members) {
+      if (m.is_bot) continue  // the bot's own add is handled by my_chat_member
+      const name = m.first_name || 'there'
+      await upsertGroupMember(m.id, groupId, name, m.username)
+      await bot.sendMessage(groupId,
+        `👋 Welcome, ${name}! Tap below to set up with Relay so I can send you your shifts and coverage requests.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '✅ Set up with Relay', url: `https://t.me/${BOT_USERNAME}?start=register_${groupId}` },
+            ]],
+          },
+        })
+    }
+  } catch (err) {
+    logger.error(`new_chat_members handler failed: ${err.message}`)
   }
 })
 

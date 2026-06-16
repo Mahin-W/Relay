@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Relay Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="relay-favicon.svg" />
+  <!-- Supabase Auth bootstrap: exposes token getter + sign-out, redirects if no session. -->
+  <script type="module">
+    import { getAccessToken, requireSession, signOut } from './relayAuth.js';
+    window.__relayGetToken = getAccessToken;
+    window.__relaySignOut = () => signOut('/login');
+    window.__relayAuthReady = requireSession('/login');
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -2276,8 +2283,24 @@
     }
 
     // ── API ──
+    // The Supabase Auth bootstrap (module script in <head>) sets window.__relayGetToken.
+    function relayTokenReady() {
+      return new Promise(resolve => {
+        if (window.__relayGetToken) return resolve();
+        const i = setInterval(() => { if (window.__relayGetToken) { clearInterval(i); resolve(); } }, 30);
+      });
+    }
+    async function relayAuthHeaders(base = {}) {
+      await relayTokenReady();
+      const token = window.__relayGetToken ? await window.__relayGetToken() : null;
+      const headers = { ...base };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return headers;
+    }
+
     async function apiFetch(url) {
-      const res = await fetch(url, { credentials: 'include' });
+      const headers = await relayAuthHeaders();
+      const res = await fetch(url, { credentials: 'include', headers });
       if (res.status === 401) {
         window.location.href = '/login';
         throw new Error('Unauthorized');
@@ -2287,7 +2310,8 @@
     }
 
     async function api(path, method = 'GET', body = null) {
-      const opts = { method, credentials: 'include', headers: {} };
+      const headers = await relayAuthHeaders();
+      const opts = { method, credentials: 'include', headers };
       if (body) {
         opts.headers['Content-Type'] = 'application/json';
         opts.body = JSON.stringify(body);
@@ -2424,9 +2448,20 @@
         const data = await apiFetch('/api/auth/me');
         document.getElementById('restaurant-name').textContent = data.restaurantName || 'My Business';
         window._groupId = data.groupId || null;
+        if (!window._groupId) showConnectBanner();
       } catch {
         // redirect handled in apiFetch
       }
+    }
+
+    function showConnectBanner() {
+      if (document.getElementById('connect-banner')) return;
+      const bar = document.createElement('div');
+      bar.id = 'connect-banner';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#D95F2B;color:#fff;padding:10px 16px;text-align:center;font-size:14px;font-weight:600;font-family:inherit';
+      bar.innerHTML = 'Your Telegram team chat isn\'t connected yet — coverage and schedule alerts stay off until it is. ' +
+        '<a href="/onboarding" style="color:#fff;text-decoration:underline">Connect now →</a>';
+      document.body.appendChild(bar);
     }
 
     // ── Avatars ──
@@ -2609,6 +2644,7 @@
     }
 
     async function handleLogout() {
+      if (window.__relaySignOut) { await window.__relaySignOut(); return; }
       try {
         await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       } catch {}

@@ -8,6 +8,21 @@ import { manualClockOut, manualClockIn } from '../timeclock/clockOverride.js'
 const router = express.Router()
 router.use(requireAuth)
 
+// Account-centric gate: an account with no connected Telegram group has a null
+// groupId. Read (GET) requests are allowed — they return empty/zeroed views the
+// dashboard renders behind a "connect your team chat" banner. Mutations and
+// bot-notifying actions are blocked until a group is connected, since they would
+// otherwise write orphaned rows or try to message a group that doesn't exist.
+router.use((req, res, next) => {
+  if (req.method !== 'GET' && !req.manager?.groupId) {
+    return res.status(409).json({
+      error: 'Connect your Telegram team chat first to make changes here.',
+      notConnected: true,
+    })
+  }
+  next()
+})
+
 function supabase() { return getDb() }
 
 function getCurrentWeekStart() {

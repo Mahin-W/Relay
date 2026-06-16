@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import { ensureAccount, getLinkedGroup } from './db/accounts.js'
 
 const JWT_SECRET = process.env.JWT_SECRET
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
@@ -6,8 +7,15 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   process.exit(1)
 }
 
-export function requireAuth(req, res, next) {
-  // Parse cookies manually to avoid needing cookie-parser on every route
+// Supabase Auth signs access tokens (HS256) with the project JWT secret.
+// When set, the dashboard authenticates account-based; the legacy phone-OTP
+// relay_session cookie remains accepted as a fallback during migration.
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
+if (!SUPABASE_JWT_SECRET) {
+  console.warn('⚠️ SUPABASE_JWT_SECRET is not set — account-based login is disabled; only legacy phone-OTP sessions will work.')
+}
+
+function extractToken(req) {
   const cookieStr = req.headers.cookie || ''
   const cookies = Object.fromEntries(
     cookieStr.split(';').map(c => {
@@ -15,17 +23,45 @@ export function requireAuth(req, res, next) {
       return [k, v.join('=')]
     }).filter(([k]) => k)
   )
-  const token = cookies.relay_session
-    || req.headers.authorization?.replace('Bearer ', '')
+  return req.headers.authorization?.replace('Bearer ', '')
+    || cookies.relay_session
+    || cookies['sb-access-token']
+    || null
+}
 
+export async function requireAuth(req, res, next) {
+  const token = extractToken(req)
   if (!token) {
     return res.status(401).json({ error: 'Not authenticated' })
   }
 
+  // 1. Account-based (Supabase Auth) — preferred.
+  if (SUPABASE_JWT_SECRET) {
+    try {
+      const payload = jwt.verify(token, SUPABASE_JWT_SECRET)
+      const authId = payload.sub
+      const email = payload.email || payload.user_metadata?.email || null
+      const account = await ensureAccount(authId, email)
+      const group = account ? await getLinkedGroup(account.id) : null
+      req.manager = {
+        authType: 'account',
+        accountId: authId,
+        userId: authId,
+        email,
+        groupId: group?.group_id ?? null,
+        restaurantName: group?.group_name || account?.business_name || 'Your Restaurant',
+      }
+      return next()
+    } catch (e) {
+      // Not a Supabase token — fall through to legacy verification.
+    }
+  }
+
+  // 2. Legacy phone-OTP session (relay_session cookie, signed with JWT_SECRET).
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    req.manager = payload
-    next()
+    req.manager = { authType: 'legacy', ...payload }
+    return next()
   } catch (e) {
     return res.status(401).json({ error: 'Session expired — please log in again' })
   }

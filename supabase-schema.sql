@@ -5,6 +5,33 @@
 -- SETUP TABLES
 -- ═══════════════════════════════════════════════════════════════
 
+-- Account-centric identity layer (see scripts/migrations/010_accounts.sql).
+-- One row per business owner, keyed to a Supabase Auth user. Holds web-collected
+-- setup as staging JSONB until a Telegram group links to the account.
+CREATE TABLE IF NOT EXISTS accounts (
+  id                  UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email               TEXT,
+  business_name       TEXT,
+  setup_data          JSONB DEFAULT '{}'::jsonb,
+  onboarding_complete BOOLEAN DEFAULT false,
+  created_at          TIMESTAMPTZ DEFAULT now(),
+  updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
+-- One-time deep-link codes that bind a Telegram user ID to an account.
+CREATE TABLE IF NOT EXISTS account_links (
+  id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  account_id       UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  code             TEXT NOT NULL UNIQUE,
+  telegram_user_id BIGINT,
+  used_at          TIMESTAMPTZ,
+  expires_at       TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_account_links_code ON account_links(code);
+CREATE INDEX IF NOT EXISTS idx_account_links_tg_user ON account_links(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_account_links_account ON account_links(account_id);
+
 CREATE TABLE IF NOT EXISTS setup_sessions (
   group_id TEXT PRIMARY KEY,
   group_name TEXT,
@@ -14,9 +41,11 @@ CREATE TABLE IF NOT EXISTS setup_sessions (
   step TEXT NOT NULL DEFAULT 'welcome',
   setup_data JSONB DEFAULT '{}',
   setup_complete BOOLEAN DEFAULT false,
+  account_id UUID REFERENCES accounts(id),  -- account<->group bridge (migration 010)
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_setup_sessions_account ON setup_sessions(account_id);
 
 CREATE TABLE IF NOT EXISTS shifts (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

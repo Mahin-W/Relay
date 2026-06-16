@@ -1,4 +1,5 @@
 import { upsertStaffDm, upsertGroupMember, getDb } from '../db.js'
+import { redeemAccountLink } from '../server/db/accounts.js'
 import { getSetupSessionByManager, getManagerGroup } from '../setup/setupDb.js'
 import { startSetupDM, handleSetupMessage } from '../setup/setupFlow.js'
 import { getAvailabilitySessionByDm } from '../availability/availabilityDb.js'
@@ -125,6 +126,34 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
       await upsertGroupMember(userId, groupId, senderName, msg.from?.username)
       await handleNewHireRegistration(bot, msg, groupId)
       logger.bot(`${senderName} registered via group invite link (group ${groupId})`)
+      return
+    }
+
+    // Account linking: ties this Telegram user to the web account behind the code.
+    if (param.startsWith('link_')) {
+      const code = param.replace('link_', '')
+      await upsertStaffDm(userId, senderName, msg.from?.username, msg.chat.id)
+      const result = await redeemAccountLink(code, userId)
+      if (!result.ok) {
+        const reasons = {
+          not_found: "That linking code isn't valid.",
+          used: 'That linking code was already used.',
+          expired: 'That linking code has expired.',
+        }
+        await bot.sendMessage(msg.chat.id,
+          `⚠️ ${reasons[result.reason] || "I couldn't link that account."}\n\nGenerate a fresh link from your Relay dashboard and tap it again.`)
+        return
+      }
+      const biz = result.account?.business_name || 'your business'
+      const addButton = BOT_USERNAME
+        ? { reply_markup: { inline_keyboard: [[
+            { text: '➕ Add Relay to your group', url: `https://t.me/${BOT_USERNAME}?startgroup=connect` },
+          ]] } }
+        : {}
+      await bot.sendMessage(msg.chat.id,
+        `✅ Linked to *${biz}*!\n\nLast step: tap below, pick your team's group chat, and I'll finish setup automatically — no commands needed.`,
+        { parse_mode: 'Markdown', ...addButton })
+      logger.bot(`Telegram user ${userId} linked to account ${result.account?.id}`)
       return
     }
 

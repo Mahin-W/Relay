@@ -1,4 +1,5 @@
 import { getSetupSession, getBotAdmins, addBotAdmin, removeBotAdmin } from '../setup/setupDb.js'
+import { connectGroupToAccount, announceConnection } from '../setup/connectAccount.js'
 import { startAvailabilityCollection } from '../availability/collectAvailability.js'
 import { resetAvailabilityForGroup, getPublishedSchedule } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWarningsSection, getNextWeekStart, formatWeekLabel } from '../schedule/generateSchedule.js'
@@ -351,12 +352,32 @@ export async function handleGroupCommands(bot, msg, cmd, BOT_USERNAME, isAuthori
     return true
   }
 
+  if (cmd('connect')) {
+    const admin = await isGroupAdmin(groupId, userId)
+    if (!admin) { await bot.sendMessage(msg.chat.id, `⚠️ Only group admins can connect Relay.`); return true }
+
+    const result = await connectGroupToAccount(bot, { groupId, groupName, managerUserId: userId })
+    if (!result.ok && result.reason === 'no_account') {
+      await bot.sendMessage(msg.chat.id,
+        `I don't see a Relay account linked to you yet.\n\nSign up at the Relay dashboard and tap your *Connect* button — I'll finish automatically. (Or run /setup to configure directly in chat.)`,
+        { parse_mode: 'Markdown' })
+      return true
+    }
+    if (result.already) {
+      await bot.sendMessage(msg.chat.id, `✅ Relay is already configured for *${groupName}*.`, { parse_mode: 'Markdown' })
+      return true
+    }
+    await announceConnection(bot, { groupId, result })
+    return true
+  }
+
   if (cmd('commands') || cmd('help')) {
     await bot.sendMessage(msg.chat.id,
       `📋 *Relay — Commands & Features*\n\n` +
 
       `*Setup & Registration*\n` +
       `• /setup — Configure Relay for this group _(group admins only)_\n` +
+      `• /connect — Link this group to your Relay web account _(group admins only)_\n` +
       `• /register — Get a link for staff to register with the bot\n\n` +
 
       `*Scheduling*\n` +

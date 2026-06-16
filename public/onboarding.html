@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Get started - Relay</title>
+  <link rel="icon" type="image/svg+xml" href="relay-favicon.svg" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #FAF7F2; color: #1C1410; min-height: 100vh; display: flex; flex-direction: column; }
+    .nav { padding: 20px 32px; display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+    .nav-left { display: flex; align-items: center; gap: 8px; }
+    .nav-logo-icon { width: 28px; height: 28px; background: #D95F2B; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .nav-logo-text { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+    .link-btn { background:none; border:none; color:#9A8880; font-family:inherit; font-size:14px; cursor:pointer; }
+    .main { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px 64px; }
+    .card { max-width: 560px; width: 100%; background: #FFFFFF; border: 1px solid #E8DFD0; border-radius: 16px; padding: 40px; box-shadow: 0 4px 24px rgba(28,20,16,0.06); }
+    .progress { display:flex; gap:6px; margin-bottom:28px; }
+    .progress div { flex:1; height:5px; border-radius:3px; background:#E8DFD0; }
+    .progress div.done { background:#D95F2B; }
+    h1 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: #4A3F35; margin-bottom: 24px; line-height: 1.5; }
+    .form-input, .form-select { width: 100%; padding: 12px 14px; border: 1.5px solid #E8DFD0; border-radius: 8px; font-size: 15px; font-family: inherit; color: #1C1410; background: #FAF7F2; outline: none; }
+    .form-input:focus, .form-select:focus { border-color: #D95F2B; }
+    .row { display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+    .row .form-input, .row .form-select { flex:1; }
+    .row-del { background:none; border:none; color:#c0392b; font-size:20px; cursor:pointer; padding:0 6px; }
+    .add-row { background:none; border:1.5px dashed #E8DFD0; color:#4A3F35; padding:10px; border-radius:8px; width:100%; font-family:inherit; font-size:14px; cursor:pointer; margin-top:4px; }
+    .add-row:hover { border-color:#D95F2B; color:#D95F2B; }
+    .actions { display:flex; justify-content:space-between; align-items:center; margin-top:28px; }
+    .btn-primary { background:#D95F2B; color:#fff; border:none; padding:13px 28px; border-radius:8px; font-size:15px; font-weight:600; font-family:inherit; cursor:pointer; }
+    .btn-primary:hover { background:#B84D20; }
+    .btn-skip { background:none; border:none; color:#9A8880; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+    .step { display:none; }
+    .step.active { display:block; }
+    .deep-link-box { background:#FDF0E8; border:1px solid #F2C9B0; border-radius:10px; padding:18px; text-align:center; margin:20px 0; }
+    .deep-link-box a { display:inline-block; background:#229ED9; color:#fff; text-decoration:none; padding:12px 22px; border-radius:8px; font-weight:600; margin-top:6px; }
+    .steps-list { list-style:none; margin:16px 0; }
+    .steps-list li { padding:8px 0 8px 30px; position:relative; color:#4A3F35; font-size:14px; line-height:1.5; }
+    .steps-list li::before { content: counter(s); counter-increment:s; position:absolute; left:0; top:7px; width:22px; height:22px; background:#D95F2B; color:#fff; border-radius:50%; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+    .steps-list { counter-reset:s; }
+    .status-line { font-size:14px; color:#9A8880; text-align:center; margin-top:8px; }
+    .status-line.connected { color:#2e7d32; font-weight:600; }
+    .label { font-size:13px; font-weight:600; color:#4A3F35; margin:12px 0 6px; }
+    .error-message { display:none; color:#c0392b; font-size:14px; margin-top:12px; }
+    .error-message.visible { display:block; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-left">
+      <div class="nav-logo-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/></svg>
+      </div>
+      <span class="nav-logo-text">Relay</span>
+    </div>
+    <button class="link-btn" id="logout-btn">Sign out</button>
+  </nav>
+
+  <main class="main">
+    <div class="card">
+      <div class="progress">
+        <div data-p="0"></div><div data-p="1"></div><div data-p="2"></div><div data-p="3"></div><div data-p="4"></div>
+      </div>
+
+      <!-- Step 0: Business name -->
+      <div class="step active" data-step="0">
+        <h1>What's your business called?</h1>
+        <p class="subtitle">We'll use this name across your dashboard and team chat.</p>
+        <input type="text" class="form-input" id="business-name" placeholder="e.g. The Bagel Shop">
+        <div class="actions">
+          <span></span>
+          <button class="btn-primary" data-next>Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 1: Staff -->
+      <div class="step" data-step="1">
+        <h1>Add your team</h1>
+        <p class="subtitle">Who works there and what do they do? You can change this anytime.</p>
+        <div id="staff-rows"></div>
+        <button class="add-row" id="add-staff">+ Add team member</button>
+        <div class="actions">
+          <button class="btn-skip" data-skip="staff">Skip for now</button>
+          <button class="btn-primary" data-next>Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Shifts -->
+      <div class="step" data-step="2">
+        <h1>Set up your shifts</h1>
+        <p class="subtitle">The recurring shifts you schedule each week.</p>
+        <div id="shift-rows"></div>
+        <button class="add-row" id="add-shift">+ Add shift</button>
+        <div class="actions">
+          <button class="btn-skip" data-skip="shifts">Skip for now</button>
+          <button class="btn-primary" data-next>Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Pay rates -->
+      <div class="step" data-step="3">
+        <h1>Pay rates by role</h1>
+        <p class="subtitle">Hourly rates power payroll and labor-cost tracking.</p>
+        <div id="rate-rows"></div>
+        <button class="add-row" id="add-rate">+ Add role rate</button>
+        <div class="actions">
+          <button class="btn-skip" data-skip="role_rates">Skip for now</button>
+          <button class="btn-primary" data-next>Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Connect Telegram -->
+      <div class="step" data-step="4">
+        <h1>Connect your team chat</h1>
+        <p class="subtitle">Relay runs in your Telegram group. Link it to finish — or do this later from your dashboard.</p>
+        <div class="deep-link-box">
+          <div style="font-size:14px;color:#4A3F35;margin-bottom:4px">Tap to open Telegram and link your account:</div>
+          <a id="deep-link" href="#" target="_blank" rel="noopener">Open Telegram →</a>
+        </div>
+        <ol class="steps-list">
+          <li>Tap <strong>Open Telegram</strong> above — it links this account to your Telegram.</li>
+          <li>In the chat with Relay, tap <strong>“Add Relay to your group”</strong> and choose your team's group (add it as an admin).</li>
+          <li>Done — Relay finishes setup automatically. No commands to type.</li>
+        </ol>
+        <p class="status-line" id="conn-status">Not connected yet — this updates automatically once you add Relay…</p>
+
+        <div id="invite-block" style="display:none;margin-top:20px">
+          <div class="label">Share with your team 🎉</div>
+          <p class="subtitle" style="margin-bottom:8px">Send this link to your employees — they'll join the group and get set up automatically.</p>
+          <div class="row">
+            <input class="form-input" id="invite-link" readonly>
+            <button class="btn-skip" id="copy-invite" type="button" style="white-space:nowrap">Copy</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn-skip" id="finish-later">I'll do this later</button>
+          <button class="btn-primary" id="go-dashboard" style="display:none">Go to dashboard →</button>
+        </div>
+      </div>
+
+      <p class="error-message" id="error"></p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { requireSession, authFetch, signOut } from './relayAuth.js';
+
+    const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    let step = 0;
+    const errorEl = document.getElementById('error');
+    function showError(m){ errorEl.textContent = m; errorEl.classList.add('visible'); }
+    function clearError(){ errorEl.classList.remove('visible'); }
+
+    document.getElementById('logout-btn').addEventListener('click', () => signOut());
+
+    function setStep(n) {
+      step = n;
+      document.querySelectorAll('.step').forEach(s => s.classList.toggle('active', +s.dataset.step === n));
+      document.querySelectorAll('.progress div').forEach(d => d.classList.toggle('done', +d.dataset.p <= n));
+      if (n === 4) startConnect();
+    }
+
+    // ── Dynamic rows ──
+    function staffRow(name='', role='') {
+      const div = document.createElement('div'); div.className = 'row';
+      div.innerHTML = `<input class="form-input s-name" placeholder="Name" value="${name}">
+        <input class="form-input s-role" placeholder="Role (e.g. Server)" value="${role}">
+        <button class="row-del" title="Remove">×</button>`;
+      div.querySelector('.row-del').onclick = () => div.remove();
+      return div;
+    }
+    function shiftRow() {
+      const div = document.createElement('div'); div.className = 'row';
+      div.innerHTML = `<input class="form-input sh-name" placeholder="Name (e.g. Lunch)">
+        <select class="form-select sh-day">${DAYS.map(d=>`<option>${d}</option>`).join('')}</select>
+        <input class="form-input sh-start" placeholder="11am" style="max-width:80px">
+        <input class="form-input sh-end" placeholder="3pm" style="max-width:80px">
+        <button class="row-del">×</button>`;
+      div.querySelector('.row-del').onclick = () => div.remove();
+      return div;
+    }
+    function rateRow() {
+      const div = document.createElement('div'); div.className = 'row';
+      div.innerHTML = `<input class="form-input r-role" placeholder="Role (e.g. Server)">
+        <input class="form-input r-rate" placeholder="$/hr (e.g. 16.50)" type="number" step="0.25" style="max-width:140px">
+        <button class="row-del">×</button>`;
+      div.querySelector('.row-del').onclick = () => div.remove();
+      return div;
+    }
+    document.getElementById('add-staff').onclick = () => document.getElementById('staff-rows').appendChild(staffRow());
+    document.getElementById('add-shift').onclick = () => document.getElementById('shift-rows').appendChild(shiftRow());
+    document.getElementById('add-rate').onclick  = () => document.getElementById('rate-rows').appendChild(rateRow());
+
+    // ── Collect + persist a step's data ──
+    async function saveBusinessName() {
+      const v = document.getElementById('business-name').value.trim();
+      if (v) await authFetch('/api/account', { method:'PATCH', body: { businessName: v, setupData: { restaurant_name: v } } });
+    }
+    async function saveStaff() {
+      const staff = [...document.querySelectorAll('#staff-rows .row')].map(r => ({
+        name: r.querySelector('.s-name').value.trim(),
+        role: r.querySelector('.s-role').value.trim() || 'Staff',
+      })).filter(s => s.name);
+      await authFetch('/api/account', { method:'PATCH', body: { setupData: { staff } } });
+    }
+    async function saveShifts() {
+      const shifts = [...document.querySelectorAll('#shift-rows .row')].map(r => ({
+        name: r.querySelector('.sh-name').value.trim(),
+        day_of_week: r.querySelector('.sh-day').value,
+        start_time: r.querySelector('.sh-start').value.trim(),
+        end_time: r.querySelector('.sh-end').value.trim(),
+      })).filter(s => s.name);
+      await authFetch('/api/account', { method:'PATCH', body: { setupData: { shifts } } });
+    }
+    async function saveRates() {
+      const role_rates = [...document.querySelectorAll('#rate-rows .row')].map(r => ({
+        role_name: r.querySelector('.r-role').value.trim(),
+        hourly_rate: Number(r.querySelector('.r-rate').value) || 0,
+      })).filter(r => r.role_name);
+      await authFetch('/api/account', { method:'PATCH', body: { setupData: { role_rates } } });
+    }
+
+    async function markSkipped(key) {
+      try {
+        const acct = await authFetch('/api/account');
+        const skipped = new Set((acct.setupData?.skipped) || []);
+        skipped.add(key);
+        await authFetch('/api/account', { method:'PATCH', body: { setupData: { skipped: [...skipped] } } });
+      } catch {}
+    }
+
+    async function handleNext() {
+      clearError();
+      try {
+        if (step === 0) await saveBusinessName();
+        else if (step === 1) await saveStaff();
+        else if (step === 2) await saveShifts();
+        else if (step === 3) await saveRates();
+        setStep(step + 1);
+      } catch (err) { showError(err.message || 'Could not save — try again.'); }
+    }
+
+    document.querySelectorAll('[data-next]').forEach(b => b.onclick = handleNext);
+    document.querySelectorAll('[data-skip]').forEach(b => b.onclick = async () => {
+      await markSkipped(b.dataset.skip);
+      setStep(step + 1);
+    });
+
+    // ── Connect step ──
+    let pollTimer = null;
+    async function startConnect() {
+      try {
+        const { deepLink } = await authFetch('/api/account/link-code', { method:'POST' });
+        document.getElementById('deep-link').href = deepLink;
+      } catch (err) { showError(err.message || 'Could not generate a linking code.'); }
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(checkConnection, 4000);
+      checkConnection();
+    }
+    async function checkConnection() {
+      try {
+        const s = await authFetch('/api/account/connection-status');
+        const statusEl = document.getElementById('conn-status');
+        if (s.connected) {
+          statusEl.textContent = '✓ Connected to ' + (s.restaurantName || 'your group') + '!';
+          statusEl.classList.add('connected');
+          document.getElementById('go-dashboard').style.display = '';
+          if (s.inviteLink) {
+            document.getElementById('invite-link').value = s.inviteLink;
+            document.getElementById('invite-block').style.display = '';
+          }
+          if (pollTimer) clearInterval(pollTimer);
+        }
+      } catch {}
+    }
+    document.getElementById('copy-invite').onclick = () => {
+      const el = document.getElementById('invite-link');
+      el.select();
+      navigator.clipboard?.writeText(el.value).catch(() => {});
+      const btn = document.getElementById('copy-invite');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    };
+    document.getElementById('go-dashboard').onclick = () => location.href = '/dashboard';
+    document.getElementById('finish-later').onclick = () => location.href = '/dashboard';
+
+    // ── Init: load any saved staging data; skip ahead if already connected ──
+    (async () => {
+      await requireSession();
+      await authFetch('/api/account/bootstrap', { method:'POST' }).catch(()=>{});
+      try {
+        const status = await authFetch('/api/account/connection-status');
+        if (status.connected && status.setupComplete) { location.href = '/dashboard'; return; }
+      } catch {}
+      try {
+        const acct = await authFetch('/api/account');
+        const d = acct.setupData || {};
+        if (acct.businessName) document.getElementById('business-name').value = acct.businessName;
+        else if (d.restaurant_name) document.getElementById('business-name').value = d.restaurant_name;
+        (d.staff || []).forEach(s => document.getElementById('staff-rows').appendChild(staffRow(s.name, s.role)));
+      } catch {}
+      // Seed one empty row in each list for convenience.
+      if (!document.querySelector('#staff-rows .row')) document.getElementById('staff-rows').appendChild(staffRow());
+      document.getElementById('shift-rows').appendChild(shiftRow());
+      document.getElementById('rate-rows').appendChild(rateRow());
+    })();
+  </script>
+</body>
+</html>
