@@ -3,1075 +3,591 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Relay — Shift Scheduling That Lives in Your Group Chat</title>
-  <meta name="description" content="Relay handles shift scheduling and last-minute coverage inside your existing WhatsApp, Telegram, or SMS group chat. No new app. No onboarding. Just a bot that works." />
+  <title>Relay — Scheduling that lives in your group chat</title>
+  <meta name="description" content="Relay handles shift scheduling and last-minute coverage inside your existing Telegram group chat. Slack and WhatsApp coming soon. No new app. Just a bot that works." />
   <link rel="icon" type="image/svg+xml" href="relay-favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    /* ─── Reset ─────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
 
-    /* ─── Design Tokens ──────────────────────────────────────── */
     :root {
-      --bg:              #FAF7F2;
-      --surface:         #FFFFFF;
-      --surface-alt:     #F4EFE6;
-      --surface-border:  #E8DFD0;
-      --text:            #1C1410;
-      --text-secondary:  #4A3F35;
-      --text-muted:      #9A8880;
-      --accent:          #D95F2B;
-      --accent-hover:    #B84D20;
-      --accent-active:   #9A3E18;
-      --accent-light:    #FDF0E8;
-      --accent-text:     #FFFFFF;
-      --success:         #2D7D5A;
-      --success-light:   #E6F4ED;
-      --success-text:    #1A5C3E;
-
-      --font:            'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-
-      --space-xs:  4px;
-      --space-sm:  8px;
-      --space-md:  16px;
-      --space-lg:  24px;
-      --space-xl:  32px;
-      --space-2xl: 48px;
-      --space-3xl: 64px;
-      --space-4xl: 96px;
-
-      --radius-sm:   6px;
-      --radius-md:   12px;
-      --radius-lg:   20px;
-      --radius-full: 9999px;
-
-      --shadow-card:       0 1px 3px rgba(217,95,43,0.06), 0 6px 20px rgba(28,20,16,0.08);
-      --shadow-card-hover: 0 4px 8px rgba(217,95,43,0.10), 0 16px 40px rgba(28,20,16,0.12);
-      --shadow-btn:        0 2px 0px rgba(154,62,24,0.55), 0 6px 20px rgba(217,95,43,0.30);
-      --shadow-btn-hover:  0 1px 0px rgba(154,62,24,0.65), 0 4px 14px rgba(217,95,43,0.40);
-      --shadow-focus:      0 0 0 3px rgba(217,95,43,0.22);
-
-      --ease-out:   cubic-bezier(0.22, 1, 0.36, 1);
-      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --bg:        #0C0907;
+      --text:      #F4EEE6;
+      --muted:     rgba(244,238,230,0.55);
+      --faint:     rgba(244,238,230,0.30);
+      --accent:    #F2722F;
+      --accent-2:  #FF9A5A;
+      --line:      rgba(244,238,230,0.12);
+      --font:      'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --mono:      'DM Mono', ui-monospace, monospace;
+      --serif:     'DM Serif Display', Georgia, serif;
+      --ease:      cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    /* ─── Base ───────────────────────────────────────────────── */
-    body {
-      font-family: var(--font);
-      font-size: 1rem;
-      line-height: 1.65;
-      color: var(--text);
-      background-color: var(--bg);
+    html {
+      -webkit-font-smoothing: antialiased;
+      scroll-behavior: smooth;
+      scroll-snap-type: y mandatory;
+      scroll-padding-top: 0;
     }
-
+    body { font-family: var(--font); color: var(--text); background: var(--bg); line-height: 1.6; overflow-x: hidden; }
+    body.loading { overflow: hidden; height: 100vh; }
     a { color: inherit; text-decoration: none; }
-    img { display: block; max-width: 100%; }
-
-    /* ─── Keyframes ──────────────────────────────────────────── */
-    @keyframes ctaPulse {
-      0%, 100% { box-shadow: var(--shadow-btn); }
-      50%       { box-shadow: 0 2px 0px rgba(154,62,24,0.55), 0 10px 36px rgba(217,95,43,0.45); }
-    }
-
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(28px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes successScale {
-      from { opacity: 0; transform: scale(0.95) translateY(8px); }
-      to   { opacity: 1; transform: scale(1) translateY(0); }
-    }
-
-    @keyframes checkPop {
-      0%   { transform: scale(0); }
-      60%  { transform: scale(1.2); }
-      100% { transform: scale(1); }
-    }
-
-    @keyframes dotPulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.4; }
-    }
-
-    /* ─── Scroll Animation ───────────────────────────────────── */
-    .reveal {
-      opacity: 0;
-      transform: translateY(28px);
-    }
-    .reveal.visible {
-      animation: fadeInUp 0.5s var(--ease-out) forwards;
-    }
-    .reveal.delay-1 { animation-delay: 0.08s; }
-    .reveal.delay-2 { animation-delay: 0.16s; }
-    .reveal.delay-3 { animation-delay: 0.24s; }
-
-    /* ─── Layout ─────────────────────────────────────────────── */
-    .container {
-      width: 100%;
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 0 var(--space-xl);
-    }
-
-    section { padding: var(--space-4xl) 0; }
-
-    /* ─── NAV ────────────────────────────────────────────────── */
-    nav {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: rgba(250, 247, 242, 0.88);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--surface-border);
-    }
-
-    .nav-inner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 60px;
-    }
-
-    .nav-logo {
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: var(--text);
-      letter-spacing: -0.02em;
-      display: flex;
-      align-items: center;
-      gap: var(--space-sm);
-    }
-
-    .nav-logo-icon {
-      width: 28px;
-      height: 28px;
-      background: var(--accent);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.875rem;
-    }
-
-    /* ─── Button ─────────────────────────────────────────────── */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-sm);
-      padding: 11px 22px;
-      font-family: var(--font);
-      font-size: 0.9375rem;
-      font-weight: 700;
-      line-height: 1;
-      border: none;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: background 180ms, box-shadow 180ms, transform 200ms var(--ease-spring);
-      text-decoration: none;
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* Shimmer sweep on hover */
-    .btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
-      transform: translateX(-100%);
-      transition: transform 0ms;
-      border-radius: inherit;
-      pointer-events: none;
-    }
-    .btn:hover::after {
-      transform: translateX(100%);
-      transition: transform 420ms ease;
-    }
-
-    /* Ripple */
-    .btn .ripple {
-      position: absolute;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.30);
-      transform: scale(0);
-      animation: rippleAnim 550ms ease-out forwards;
-      pointer-events: none;
-    }
-    @keyframes rippleAnim {
-      to { transform: scale(4); opacity: 0; }
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: var(--accent-text);
-      box-shadow: var(--shadow-btn);
-      animation: ctaPulse 3s ease-in-out infinite;
-    }
-
-    .btn-primary:hover {
-      background: var(--accent-hover);
-      box-shadow: var(--shadow-btn-hover);
-      transform: translateY(-2px);
-    }
-
-    .btn-primary:active {
-      background: var(--accent-active);
-      transform: translateY(1px);
-      box-shadow: 0 1px 0px rgba(154,62,24,0.70);
-    }
-
-    .btn-arrow {
-      display: inline-block;
-      transition: transform 220ms var(--ease-spring);
-    }
-    .btn:hover .btn-arrow {
-      transform: translateX(4px);
-    }
-
-    .btn-nav {
-      padding: 8px 18px;
-      font-size: 0.875rem;
-    }
-
-    /* ─── HERO ───────────────────────────────────────────────── */
-    .hero {
-      position: relative;
-      padding: 80px 0 88px;
-      overflow: hidden;
-      background:
-        radial-gradient(ellipse 700px 400px at 50% -20%, rgba(217,95,43,0.11) 0%, transparent 70%),
-        var(--bg);
-    }
-
-    /* Dot grid texture */
-    .hero::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background-image: radial-gradient(rgba(217,95,43,0.10) 1px, transparent 1px);
-      background-size: 24px 24px;
-      pointer-events: none;
-    }
-
-    .hero .container {
-      position: relative;
-      text-align: center;
-      max-width: 780px;
-    }
-
-    .hero-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-sm);
-      padding: 6px 16px;
-      background: var(--accent-light);
-      border: 1px solid rgba(217,95,43,0.25);
-      border-radius: var(--radius-full);
-      font-size: 0.8125rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      margin-bottom: var(--space-xl);
-    }
-
-    .eyebrow-dot {
-      width: 6px;
-      height: 6px;
-      background: var(--accent);
-      border-radius: 50%;
-      animation: dotPulse 2s ease-in-out infinite;
-    }
-
-    .hero h1 {
-      font-size: clamp(2.25rem, 5vw + 1rem, 3.75rem);
-      font-weight: 800;
-      line-height: 1.08;
-      letter-spacing: -0.03em;
-      color: var(--text);
-      margin-bottom: var(--space-xl);
-    }
-
-    .hero h1 em {
-      font-style: normal;
-      color: var(--accent);
-    }
-
-    .hero-sub {
-      font-size: clamp(1.0625rem, 1.5vw + 0.5rem, 1.2rem);
-      line-height: 1.65;
-      color: var(--text-secondary);
-      max-width: 580px;
-      margin: 0 auto var(--space-2xl);
-    }
-
-    .hero-platforms {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-sm);
-      margin-top: var(--space-xl);
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .platform-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 12px;
-      background: var(--surface);
-      border: 1px solid var(--surface-border);
-      border-radius: var(--radius-full);
-      font-size: 0.8125rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-    }
-
-    /* ─── SECTION HEADER ─────────────────────────────────────── */
-    .section-header {
-      text-align: center;
-      margin-bottom: var(--space-3xl);
-    }
-
-    .section-label {
-      display: inline-block;
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: var(--space-md);
-    }
-
-    .section-header h2 {
-      font-size: clamp(1.75rem, 3vw + 0.5rem, 2.5rem);
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      line-height: 1.2;
-      color: var(--text);
-      margin-bottom: var(--space-md);
-    }
-
-    .section-header p {
-      font-size: 1.0625rem;
-      color: var(--text-secondary);
-      max-width: 520px;
-      margin: 0 auto;
-    }
-
-    /* ─── PROBLEMS ───────────────────────────────────────────── */
-    .problems { background: var(--bg); }
-
-    .problem-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: var(--space-xl);
-    }
-
-    .problem-card {
-      background: var(--surface);
-      border: 1px solid var(--surface-border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--radius-md);
-      padding: var(--space-xl) var(--space-xl) var(--space-2xl);
-      box-shadow: var(--shadow-card);
-      transition: transform 250ms var(--ease-spring), box-shadow 250ms var(--ease-out);
-    }
-
-    .problem-card:hover {
-      transform: translateY(-4px);
-      box-shadow: var(--shadow-card-hover);
-    }
-
-    .problem-icon {
-      width: 44px;
-      height: 44px;
-      background: var(--accent-light);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.25rem;
-      margin-bottom: var(--space-lg);
-    }
-
-    .problem-card h3 {
-      font-size: 1.0625rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      color: var(--text);
-      margin-bottom: var(--space-sm);
-    }
-
-    .problem-card p {
-      font-size: 0.9375rem;
-      color: var(--text-secondary);
-      line-height: 1.6;
-    }
-
-    /* ─── HOW IT WORKS ───────────────────────────────────────── */
-    .how-it-works { background: var(--surface-alt); }
-
-    .steps {
-      max-width: 640px;
-      margin: 0 auto;
-      position: relative;
-    }
-
-    /* Connector line */
-    .steps::before {
-      content: '';
-      position: absolute;
-      left: 23px;
-      top: 24px;
-      bottom: 48px;
-      width: 2px;
-      background: linear-gradient(to bottom, var(--surface-border), transparent);
-    }
-
-    .step {
-      display: grid;
-      grid-template-columns: 48px 1fr;
-      gap: var(--space-xl);
-      align-items: start;
-      padding-bottom: var(--space-3xl);
-    }
-
-    .step:last-child {
-      padding-bottom: 0;
-    }
-
-    .step-number {
-      width: 48px;
-      height: 48px;
-      background: var(--accent);
-      color: var(--accent-text);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.0625rem;
-      font-weight: 800;
-      flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(217,95,43,0.35);
-      position: relative;
-      z-index: 1;
-    }
-
-    .step-content {
-      padding-top: 10px;
-    }
-
-    .step-content h3 {
-      font-size: 1.125rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      color: var(--text);
-      margin-bottom: var(--space-sm);
-    }
-
-    .step-content p {
-      font-size: 0.9375rem;
-      color: var(--text-secondary);
-      line-height: 1.65;
-    }
-
-
-    /* ─── SIGNUP ─────────────────────────────────────────────── */
-    .signup {
-      background: var(--text);
-      color: var(--bg);
-    }
-
-    .signup-inner {
-      max-width: 560px;
-      margin: 0 auto;
-      text-align: center;
-    }
-
-    .signup h2 {
-      font-size: clamp(1.75rem, 3vw + 0.5rem, 2.25rem);
-      font-weight: 800;
-      letter-spacing: -0.025em;
-      line-height: 1.15;
-      color: var(--bg);
-      margin-bottom: var(--space-md);
-    }
-
-    .signup-sub {
-      font-size: 1rem;
-      color: rgba(250,247,242,0.65);
-      margin-bottom: var(--space-2xl);
-      line-height: 1.6;
-    }
-
-    .signup-form {
-      display: flex;
-      gap: var(--space-md);
-      max-width: 460px;
-      margin: 0 auto;
-    }
-
-    .signup-input {
-      flex: 1;
-      padding: 13px var(--space-md);
-      font-family: var(--font);
-      font-size: 1rem;
-      color: var(--text);
-      background: rgba(250,247,242,0.96);
-      border: 1.5px solid rgba(250,247,242,0.2);
-      border-radius: var(--radius-sm);
-      outline: none;
-      transition: border-color 150ms, box-shadow 150ms;
-    }
-
-    .signup-input::placeholder { color: var(--text-muted); }
-
-    .signup-input:hover { border-color: rgba(217,95,43,0.40); }
-
-    .signup-input:focus {
-      border-color: var(--accent);
-      box-shadow: var(--shadow-focus);
-    }
-
-    .signup-btn {
-      padding: 13px var(--space-xl);
-      font-family: var(--font);
-      font-size: 0.9375rem;
-      font-weight: 700;
-      color: var(--accent-text);
-      background: var(--accent);
-      border: none;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 150ms, transform 150ms var(--ease-spring), box-shadow 150ms;
-      box-shadow: var(--shadow-btn);
-    }
-
-    .signup-btn:hover {
-      background: var(--accent-hover);
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-btn-hover);
-    }
-
-    .signup-btn:active {
-      background: var(--accent-active);
-      transform: translateY(1px);
-    }
-
-    /* Success state */
-    .signup-success {
-      display: none;
-      animation: successScale 0.4s var(--ease-spring) forwards;
-    }
-
-    .signup-success.visible {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--space-md);
-    }
-
-    .success-icon {
-      width: 48px;
-      height: 48px;
-      background: var(--success);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 1.25rem;
-      animation: checkPop 0.5s var(--ease-spring) forwards;
-      animation-delay: 0.1s;
-      transform: scale(0);
-    }
-
-    .success-heading {
-      font-size: 1.375rem;
-      font-weight: 800;
-      color: var(--bg);
-      letter-spacing: -0.02em;
-    }
-
-    .success-body {
-      font-size: 0.9375rem;
-      color: rgba(250,247,242,0.70);
-      line-height: 1.6;
-    }
-
-    /* ─── FOOTER ─────────────────────────────────────────────── */
-    footer {
-      background: var(--text);
-      border-top: 1px solid rgba(250,247,242,0.08);
-      padding: var(--space-2xl) 0;
-    }
-
-    .footer-inner {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--space-sm);
-      text-align: center;
-    }
-
-    .footer-logo {
-      font-size: 1rem;
-      font-weight: 800;
-      color: rgba(250,247,242,0.90);
-      letter-spacing: -0.02em;
-    }
-
-    .footer-tagline {
-      font-size: 0.875rem;
-      color: rgba(250,247,242,0.40);
-      line-height: 1.6;
-    }
-
-    .footer-secondary {
-      font-size: 0.8125rem;
-      color: rgba(250,247,242,0.28);
-      margin-top: var(--space-xs);
-    }
-
-    /* ─── Responsive ─────────────────────────────────────────── */
-    @media (max-width: 900px) {
-      .problem-grid {
-        grid-template-columns: 1fr;
-        max-width: 520px;
-        margin: 0 auto;
-      }
+    ::selection { background: var(--accent); color: #fff; }
+
+    /* ── Loader ──────────────────────────────────────────────── */
+    #loader { position: fixed; inset: 0; z-index: 9000; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; transition: opacity .7s var(--ease), visibility .7s; }
+    #loader.done { opacity: 0; visibility: hidden; }
+    .load-word { font-family: var(--mono); font-size: 11px; letter-spacing: 0.5em; color: var(--faint); text-transform: uppercase; }
+    .load-bar { font-family: var(--mono); font-size: 15px; letter-spacing: 2px; color: var(--text); }
+    .load-num { font-family: var(--mono); font-size: 13px; letter-spacing: 0.3em; color: var(--muted); }
+
+    /* ── Background ──────────────────────────────────────────── */
+    #bg { position: fixed; inset: 0; z-index: 0; display: block; }
+    .atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(60% 50% at 50% 32%, rgba(242,114,47,0.13) 0%, transparent 70%), radial-gradient(80% 60% at 50% 108%, rgba(242,114,47,0.10) 0%, transparent 60%); }
+    .grain { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.05;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+    /* ── Nav + rail ──────────────────────────────────────────── */
+    #nav { position: fixed; top: 0; left: 0; right: 0; z-index: 200; display: flex; align-items: center; justify-content: space-between; padding: 20px clamp(20px, 5vw, 56px); transition: opacity .5s var(--ease), transform .5s var(--ease); opacity: 0; transform: translateY(-12px); pointer-events: none; }
+    #nav.show { opacity: 1; transform: none; pointer-events: auto; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -0.02em; font-size: 1.05rem; }
+    .brand-mark { width: 28px; height: 28px; background: var(--accent); border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+    .nav-right { display: flex; align-items: center; gap: clamp(12px, 2vw, 26px); }
+    .nav-link { font-size: 0.85rem; color: var(--muted); font-weight: 600; transition: color .2s; }
+    .nav-link:hover { color: var(--text); }
+    .nav-cta { font-size: 0.85rem; font-weight: 700; color: #fff; background: var(--accent); padding: 9px 18px; border-radius: 999px; transition: transform .2s var(--ease), background .2s; }
+    .nav-cta:hover { background: var(--accent-2); transform: translateY(-1px); }
+
+    .rail { position: fixed; right: 22px; top: 50%; transform: translateY(-50%); z-index: 180; display: flex; flex-direction: column; gap: 12px; opacity: 0; transition: opacity .5s; }
+    .rail.show { opacity: 1; }
+    .rail b { width: 7px; height: 7px; border-radius: 50%; background: var(--line); transition: background .3s, transform .3s; cursor: pointer; }
+    .rail b.on { background: var(--accent); transform: scale(1.5); }
+    @media (hover: none) { .rail { display: none; } }
+
+    /* ── Slides (snap deck) ──────────────────────────────────── */
+    .slide { position: relative; z-index: 5; min-height: 100vh; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 96px clamp(20px,5vw,40px) 72px; }
+    .slide .inner { width: 100%; max-width: 1000px; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+
+    /* arrival reveal */
+    .s-in { opacity: 0; transform: translateY(26px); transition: opacity .6s var(--ease), transform .6s var(--ease); transition-delay: var(--d, 0s); }
+    .slide.active .s-in { opacity: 1; transform: none; }
+
+    .kicker { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent); }
+    .label-line { display: inline-flex; align-items: center; gap: 12px; }
+    .label-line::before { content: ''; width: 28px; height: 1px; background: var(--accent); display: inline-block; }
+
+    .line { font-weight: 800; letter-spacing: -0.03em; line-height: 1.04; font-size: clamp(2.1rem, 6.5vw, 4.6rem); }
+    .line.sm { font-size: clamp(1.4rem, 4vw, 2.4rem); font-weight: 700; color: var(--muted); }
+    .line em { font-style: normal; color: var(--accent); }
+
+    /* hero */
+    .hero h1 { font-size: clamp(2.6rem, 7.5vw, 6rem); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98; }
+    .hero h1 em { font-style: normal; color: var(--accent); }
+    .hero-sub { max-width: 540px; color: var(--muted); font-size: clamp(1rem, 1.4vw, 1.2rem); }
+    .hero-cta, .nav-cta { cursor: pointer; }
+    .hero-cta { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; font-size: 0.95rem; background: var(--accent); color: #fff; padding: 14px 26px; border-radius: 999px; transition: transform .25s var(--ease), background .25s; }
+    .hero-cta:hover { background: var(--accent-2); transform: translateY(-2px); }
+    .scroll-cue { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--faint); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .scroll-cue i { width: 1px; height: 34px; background: linear-gradient(var(--accent), transparent); display: block; animation: cueDrop 2s var(--ease) infinite; transform-origin: top; }
+    @keyframes cueDrop { 0% { transform: scaleY(0); opacity: 0; } 40% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1) translateY(34px); opacity: 0; } }
+
+    /* steps */
+    .steps-list { display: flex; flex-direction: column; gap: clamp(18px, 3vh, 30px); align-items: flex-start; text-align: left; max-width: 760px; width: 100%; }
+    .stepline { display: grid; grid-template-columns: 56px 1fr; gap: 22px; align-items: baseline; }
+    .stepnum { font-family: var(--serif); font-size: clamp(1.8rem, 4vw, 3rem); color: var(--accent); line-height: 1; }
+    .steptxt h3 { font-size: clamp(1.25rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.02em; }
+    .steptxt p { color: var(--muted); font-size: clamp(0.95rem, 1.3vw, 1.08rem); margin-top: 6px; max-width: 480px; }
+
+    /* dashboard slide */
+    .dash .inner { gap: clamp(24px, 4vh, 44px); }
+    .dash-head { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 640px; }
+    .dash-head h2 { font-size: clamp(1.9rem, 4.6vw, 3.2rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
+    .dash-head p { color: var(--muted); font-size: clamp(0.98rem, 1.3vw, 1.12rem); }
+
+    /* platforms */
+    .plat-row { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: 1px solid var(--line); border-radius: 999px; font-weight: 600; font-size: 0.9rem; background: rgba(255,255,255,0.02); }
+    .badge.soon { opacity: 0.5; }
+    .micro { font-size: 0.8rem; color: var(--faint); }
+
+    /* cta + footer */
+    .cta .inner { gap: 24px; }
+    .cta h2 { font-size: clamp(2.4rem, 7vw, 5rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+    .cta h2 em { font-style: normal; color: var(--accent); }
+    .cta p { color: var(--muted); max-width: 480px; }
+    .signup-form { display: flex; gap: 10px; width: 100%; max-width: 460px; }
+    .signup-input { flex: 1; padding: 14px 16px; font-family: var(--font); font-size: 1rem; color: var(--text); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 10px; outline: none; transition: border-color .2s, background .2s; }
+    .signup-input::placeholder { color: var(--faint); }
+    .signup-input:focus { border-color: var(--accent); background: rgba(255,255,255,0.06); }
+    .signup-btn { padding: 14px 24px; font-family: var(--font); font-weight: 700; font-size: 0.95rem; color: #fff; background: var(--accent); border: none; border-radius: 10px; cursor: pointer; white-space: nowrap; transition: background .2s, transform .2s var(--ease); }
+    .signup-btn:hover { background: var(--accent-2); transform: translateY(-1px); }
+    .signup-ok { display: none; flex-direction: column; align-items: center; gap: 12px; }
+    .signup-ok.show { display: flex; }
+    .ok-mark { width: 46px; height: 46px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+    .foot { position: absolute; bottom: 0; left: 0; right: 0; padding: 22px; text-align: center; border-top: 1px solid var(--line); }
+    .foot-logo { font-weight: 800; letter-spacing: -0.02em; font-size: 0.95rem; }
+    .foot-tag { color: var(--faint); font-size: 0.8rem; margin-top: 4px; }
+
+    /* ═══ Dashboard live demo ═══ */
+    @keyframes dmIn     { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes liveDot  { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.75); } }
+    @keyframes dmFlash  { 0% { box-shadow: 0 0 0 0 rgba(45,125,90,0); } 30% { box-shadow: 0 0 0 3px rgba(45,125,90,.4); } 100% { box-shadow: 0 0 0 0 rgba(45,125,90,0); } }
+    @keyframes barGrow  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .dm-frame { background: #1C1410; border-radius: 18px; overflow: hidden; box-shadow: 0 40px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05); width: 100%; max-width: 980px; margin: 0 auto; font-family: 'DM Sans', system-ui, sans-serif; }
+    .dm-chrome { display: flex; align-items: center; gap: 8px; padding: 11px 16px; background: rgba(250,247,242,0.05); border-bottom: 1px solid rgba(250,247,242,0.07); }
+    .dm-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .dm-url { flex: 1; text-align: center; font-size: 11px; color: rgba(250,247,242,0.45); letter-spacing: 0.01em; transition: color .3s; }
+    .dm-live { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; color: #FF8A80; text-transform: uppercase; letter-spacing: 0.06em; }
+    .dm-live i { width: 6px; height: 6px; border-radius: 50%; background: #FF5F57; animation: liveDot 1.4s ease-in-out infinite; }
+    .dm-body { display: flex; min-height: 432px; }
+    .dm-side { width: 176px; background: #131009; padding: 18px 14px; border-right: 1px solid rgba(250,247,242,0.06); flex-shrink: 0; display: flex; flex-direction: column; color: rgba(250,247,242,0.7); }
+    .dm-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+    .dm-nav-item { padding: 8px 10px; border-radius: 6px; font-size: 12px; color: rgba(250,247,242,0.68); display: flex; align-items: center; gap: 7px; cursor: pointer; border-left: 3px solid transparent; transition: background .35s var(--ease), color .35s, border-color .35s; }
+    .dm-nav-item:hover { color: rgba(250,247,242,0.92); background: rgba(250,247,242,0.05); }
+    .dm-nav-item.active { color: var(--accent); background: rgba(217,95,43,0.12); border-left-color: var(--accent); font-weight: 600; }
+    .dm-nav-item svg { flex-shrink: 0; }
+    .dm-main { flex: 1; background: #FAF7F2; position: relative; overflow: hidden; color: #4A3F35; }
+    .dm-page { position: absolute; inset: 0; padding: 18px; opacity: 0; transform: translateY(8px); pointer-events: none; overflow: auto; transition: opacity .45s var(--ease), transform .45s var(--ease); }
+    .dm-page.active { opacity: 1; transform: none; pointer-events: auto; }
+    .dm-page.run .dm-in { animation: dmIn .5s var(--ease) both; animation-delay: var(--d, 0ms); }
+    .dm-pagehead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .dm-pagehead h4 { font-size: 13px; font-weight: 700; color: #1C1410; letter-spacing: -0.01em; }
+    .dm-pagehead .dm-sub { font-size: 10px; color: #9A8880; font-weight: 500; }
+    .dm-pill { font-size: 9px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: #D95F2B; color: #fff; display: inline-flex; align-items: center; gap: 4px; }
+    .dm-pill.ghost { background: #FDF0E8; color: #D95F2B; }
+    .dm-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; margin-bottom: 12px; }
+    .dm-stat { background: #fff; border-radius: 8px; padding: 13px 14px; border: 1px solid #E8DFD0; transition: box-shadow .4s; }
+    .dm-stat.dm-flash { animation: dmFlash 1s ease-out; }
+    .dm-stat-l { font-size: 9px; color: #9A8880; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; margin-bottom: 5px; }
+    .dm-stat-v { font-family: 'DM Serif Display', Georgia, serif; font-size: 24px; color: #1C1410; line-height: 1.1; }
+    .dm-stat-s { font-size: 9px; margin-top: 3px; font-weight: 500; }
+    .dm-card { background: #fff; border-radius: 8px; padding: 13px 14px; border: 1px solid #E8DFD0; }
+    .dm-ch { font-size: 11px; font-weight: 700; color: #1C1410; margin-bottom: 9px; letter-spacing: -0.01em; }
+    .dm-feed { display: flex; align-items: flex-start; gap: 7px; font-size: 10px; padding: 4px 0; }
+    .dm-fdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .dm-ftext { color: #4A3F35; flex: 1; line-height: 1.4; }
+    .dm-ftime { color: #9A8880; white-space: nowrap; font-size: 9px; }
+    .dm-live-added { animation: dmIn .45s var(--ease) both; }
+    .dm-srow { display: grid; grid-template-columns: 78px repeat(7,1fr); gap: 3px; align-items: center; font-size: 9px; }
+    .dm-srow + .dm-srow { margin-top: 3px; }
+    .dm-sname { font-weight: 600; color: #1C1410; font-size: 10px; }
+    .dm-chip { border-radius: 3px; padding: 3px 4px; text-align: center; font-weight: 600; }
+    .dm-chip.l { background: #FDF0E8; color: #8B3A16; }
+    .dm-chip.d { background: rgba(217,95,43,0.12); color: #8B3A16; }
+    .dm-chip.b { background: #E6F4ED; color: #1A5C3E; }
+    .dm-dayhdr { color: #9A8880; font-weight: 700; text-align: center; }
+    .dm-staff { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #EFE7DA; }
+    .dm-av { width: 30px; height: 30px; border-radius: 50%; background: #FDF0E8; color: #D95F2B; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .dm-staff-name { font-size: 11px; font-weight: 600; color: #1C1410; }
+    .dm-staff-role { font-size: 9px; color: #9A8880; }
+    .dm-bar { height: 5px; border-radius: 3px; background: #EFE7DA; overflow: hidden; }
+    .dm-bar i { display: block; height: 100%; background: #D95F2B; border-radius: 3px; transform-origin: left; }
+    .dm-page.run .dm-bar i { animation: barGrow .7s var(--ease) both; animation-delay: var(--d, 0ms); }
+    .dm-tag { font-size: 8.5px; font-weight: 700; padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
+    .dm-tag.ok { background: #E6F4ED; color: #1A5C3E; }
+    .dm-tag.warn { background: #FBEFD4; color: #8A6300; }
+    .dm-tag.new { background: #FDF0E8; color: #D95F2B; }
+    .dm-prow { display: grid; grid-template-columns: 1.5fr .7fr .8fr .9fr; gap: 6px; align-items: center; font-size: 11px; padding: 7px 0; border-bottom: 1px solid #EFE7DA; }
+    .dm-prow.head { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #9A8880; font-weight: 700; border-bottom: 1.5px solid #E8DFD0; }
+    .dm-prow.total { font-weight: 700; color: #1C1410; border-bottom: none; border-top: 1.5px solid #E8DFD0; margin-top: 2px; }
+    .dm-num { font-variant-numeric: tabular-nums; text-align: right; }
+    .dm-clock { display: flex; align-items: center; gap: 11px; padding: 11px 13px; background: #fff; border: 1px solid #E8DFD0; border-radius: 8px; margin-bottom: 8px; }
+    .dm-onshift { width: 9px; height: 9px; border-radius: 50%; background: #2D7D5A; flex-shrink: 0; animation: liveDot 1.6s ease-in-out infinite; }
+    .dm-onshift.late { background: #E5A100; }
+    .dm-timer { font-family: 'DM Sans', monospace; font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; color: #1C1410; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; scroll-snap-type: none; }
+      .s-in { opacity: 1 !important; transform: none !important; }
+      .scroll-cue i { animation: none; }
     }
 
     @media (max-width: 640px) {
-      .container { padding: 0 var(--space-lg); }
-
-      section { padding: var(--space-3xl) 0; }
-
-      .hero { padding: 56px 0 64px; }
-
-      .nav-inner { height: 54px; }
-
-      .hero-platforms {
-        flex-wrap: wrap;
-        gap: var(--space-sm);
-      }
-
-      .testimonial-card {
-        padding: var(--space-2xl) var(--space-xl);
-      }
-
-      .signup-form {
-        flex-direction: column;
-      }
-
-      .signup-btn {
-        width: 100%;
-      }
+      .dm-body { min-height: 0; }
+      .dm-side { width: 54px; padding: 14px 6px; }
+      .dm-nav-item { justify-content: center; padding: 9px 0; }
+      .dm-nav-label, .dm-brand-text { display: none; }
+      .dm-stats { grid-template-columns: repeat(2,1fr); }
+      .dm-stat-v { font-size: 20px; }
+      .dm-srow { grid-template-columns: 46px repeat(7,1fr); font-size: 7px; }
+      .dm-page { position: relative; }
+      .dm-page:not(.active) { display: none; }
+      .signup-form { flex-direction: column; }
+      .signup-btn { width: 100%; }
+      .stepline { grid-template-columns: 36px 1fr; gap: 12px; }
+      .slide { padding: 84px 18px 60px; }
     }
   </style>
 </head>
-<body>
+<body class="loading">
 
-  <!-- ── NAV ──────────────────────────────────────────────────── -->
-  <nav>
-    <div class="container nav-inner">
-      <a href="/" class="nav-logo">
-        <div class="nav-logo-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20">
-            <path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/>
-            <polyline points="6,9 10,13 6,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.4"/>
-            <polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
-            <polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="1"/>
-          </svg>
-        </div>
-        Relay
-      </a>
-      <div style="display:flex;align-items:center;gap:16px">
-        <a href="/login" style="font-size:0.875rem;font-weight:600;color:var(--text-muted);transition:color 0.15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">Manager Login</a>
-        <a href="#signup" class="btn btn-primary btn-nav">
-          Get Early Access <span class="btn-arrow">→</span>
-        </a>
-      </div>
+  <div id="loader">
+    <div class="load-word">Relay</div>
+    <div class="load-bar" id="loadBar">=---------</div>
+    <div class="load-num" id="loadNum">000</div>
+  </div>
+
+  <canvas id="bg"></canvas>
+  <div class="atmos"></div>
+  <div class="grain"></div>
+
+  <nav id="nav">
+    <a href="#top" class="brand">
+      <span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="18" height="18"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/><polyline points="13,9 17,13 13,17" stroke="#F2722F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/><polyline points="20,9 24,13 20,17" stroke="#F2722F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span>
+      Relay
+    </a>
+    <div class="nav-right">
+      <a href="/login" class="nav-link">Manager Login</a>
+      <a href="#signup" class="nav-cta">Get Started</a>
     </div>
   </nav>
 
-  <!-- ── HERO ─────────────────────────────────────────────────── -->
-  <section class="hero">
-    <div class="container">
-      <div class="hero-eyebrow reveal">
-        <span class="eyebrow-dot"></span>
-        Coming soon
-      </div>
-      <h1 class="reveal delay-1">
-        Your <em>"anyone free?"</em> texts deserve a better answer.
-      </h1>
-      <p class="hero-sub reveal delay-2">
-        Relay lives in the WhatsApp, Telegram, or SMS group chat you already use. It tracks your schedule, handles coverage automatically, and keeps a clean schedule sheet for your whole team — no new app, no onboarding, no convincing anyone to change anything.
-      </p>
-      <a href="#signup" class="btn btn-primary reveal delay-3">
-        Get Early Access <span class="btn-arrow">→</span>
-      </a>
-      <div class="hero-platforms reveal delay-3">
-        <span>Works with</span>
-        <span class="platform-badge">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#25D366"/><path d="M12 4C7.582 4 4 7.582 4 12c0 1.49.39 2.89 1.07 4.1L4 20l4.01-1.05A8 8 0 1 0 12 4Zm4.898 11.268c-.198.557-1.166 1.064-1.6 1.1-.434.038-.447.334-2.813-.682-2.826-1.218-4.555-4.175-4.693-4.365-.138-.19-1.115-1.484-1.061-2.797.054-1.314.73-1.942 1.005-2.204.275-.261.603-.32.8-.32h.573c.19 0 .453-.072.709.541.256.612.87 2.12.946 2.273.076.152.126.33.026.53-.1.2-.15.323-.297.497-.147.174-.31.389-.441.523-.147.15-.3.314-.13.615.17.3.757 1.25 1.628 2.025 1.12 1.002 2.067 1.313 2.37 1.463.302.15.477.126.655-.075.178-.2.76-.887.962-1.19.202-.304.403-.253.678-.152.274.1 1.742.821 2.04.97.299.148.498.222.571.344.073.122.073.706-.125 1.264Z" fill="white"/></svg>
-          WhatsApp
-        </span>
-        <span class="platform-badge">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#229ED9"/><path d="M5.2 11.794c3.793-1.653 6.322-2.742 7.588-3.268 3.614-1.504 4.367-1.765 4.855-1.774.108-.002.349.025.505.152a.55.55 0 0 1 .185.356c.017.103.038.337.021.52-.19 1.998-1.013 6.846-1.432 9.083-.177.946-.526 1.263-.864 1.295-.733.067-1.29-.484-2-.949-1.111-.728-1.739-1.182-2.818-1.892-1.247-.82-.439-1.271.272-2.009.186-.193 3.42-3.134 3.482-3.401.008-.034.015-.158-.059-.224-.074-.065-.183-.043-.262-.025-.112.025-1.892 1.203-5.34 3.53-.505.347-.963.516-1.371.508-.452-.01-1.321-.255-1.968-.465-.793-.257-1.424-.393-1.37-.83.029-.228.341-.46.94-.698Z" fill="white"/></svg>
-          Telegram
-        </span>
-        <span class="platform-badge">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#6B7280"/><path d="M7 7h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-4l-3 2.5V15H7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z" fill="white"/></svg>
-          SMS
-        </span>
-      </div>
-    </div>
-  </section>
+  <div class="rail" id="rail"></div>
 
-  <!-- ── PROBLEMS ──────────────────────────────────────────────── -->
-  <section class="problems">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-label reveal">The problem</span>
-        <h2 class="reveal">Sound familiar?</h2>
-      </div>
-      <div class="problem-grid">
-        <div class="problem-card reveal">
-          <div class="problem-icon">🌊</div>
-          <h3>The 40-message thread</h3>
-          <p>Someone posts "need Friday off" and the group explodes. Three people half-volunteer, two others change the subject, and two hours later nothing is resolved. You end up handling it manually anyway.</p>
-        </div>
-        <div class="problem-card reveal delay-1">
-          <div class="problem-icon">👻</div>
-          <h3>The app nobody opens</h3>
-          <p>You pay for a scheduling tool, do the whole setup, and by week two everyone's back to texting you directly. The app just sits there. You can't blame them — it's one more thing to log into.</p>
-        </div>
-        <div class="problem-card reveal delay-2">
-          <div class="problem-icon">🌙</div>
-          <h3>The midnight scramble</h3>
-          <p>It's 11pm. Someone just cancelled their 7am. You're texting people one by one, half-apologizing for the hour, hoping someone answers before you give up and cover it yourself.</p>
-        </div>
-      </div>
-    </div>
-  </section>
+  <main id="top">
 
-  <!-- ── HOW IT WORKS ──────────────────────────────────────────── -->
-  <section class="how-it-works">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-label reveal">How it works</span>
-        <h2 class="reveal">Set it up once. It handles the rest.</h2>
+    <!-- HERO -->
+    <section class="slide hero" data-rail="Top">
+      <div class="inner">
+        <span class="kicker label-line s-in">Shift ops, handled</span>
+        <h1 class="s-in" style="--d:.08s">Scheduling that lives in your <em>group&nbsp;chat</em>.</h1>
+        <p class="hero-sub s-in" style="--d:.18s">Relay runs inside the Telegram group your team already uses — tracking shifts, chasing coverage, keeping everyone in sync. No new app. No onboarding.</p>
+        <a href="#signup" class="hero-cta s-in" style="--d:.28s">Get Started <span aria-hidden="true">→</span></a>
       </div>
-      <div class="steps">
-        <div class="step reveal">
-          <div class="step-number">1</div>
-          <div class="step-content">
-            <h3>Two-minute setup</h3>
-            <p>Add Relay to the group chat your team already uses — WhatsApp, Telegram, or SMS. That's it. No new accounts for your staff.</p>
-          </div>
-        </div>
-        <div class="step reveal delay-1">
-          <div class="step-number">2</div>
-          <div class="step-content">
-            <h3>Nothing changes for your team</h3>
-            <p>Your staff keeps messaging the way they always have. Relay reads the conversation, tracks the schedule, and stays quiet until it's needed.</p>
-          </div>
-        </div>
-        <div class="step reveal delay-2">
-          <div class="step-number">3</div>
-          <div class="step-content">
-            <h3>Bot does the chasing</h3>
-            <p>When someone needs a shift covered, Relay reaches out to available people, collects responses, and tells you who's taking it — without you touching your phone.</p>
-          </div>
-        </div>
-        <div class="step reveal delay-3">
-          <div class="step-number">4</div>
-          <div class="step-content">
-            <h3>A clean schedule, always up to date</h3>
-            <p>Relay automatically keeps a simple, readable schedule for your whole team — managers and staff always know who's on, no spreadsheet maintenance required.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+      <div class="scroll-cue">Scroll<i></i></div>
+    </section>
 
-  <!-- ── DASHBOARD PREVIEW ────────────────────────────────────── -->
-  <section style="background:var(--bg);padding:var(--space-4xl) 0">
-    <div class="container">
-      <div class="section-header">
-        <span class="section-label reveal">Your dashboard</span>
-        <h2 class="reveal">Everything you need, one screen.</h2>
-        <p class="reveal">Real-time schedule, coverage tracking, labor costs, and team insights — all updating automatically from your group chat.</p>
-      </div>
-      <div class="reveal delay-1" style="background:#1C1410;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card-hover);max-width:960px;margin:0 auto;font-family:'DM Sans',system-ui,sans-serif">
-        <!-- Browser chrome -->
-        <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:rgba(250,247,242,0.05);border-bottom:1px solid rgba(250,247,242,0.07)">
-          <span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span>
-          <span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span>
-          <span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span>
-          <span style="flex:1;text-align:center;font-size:11px;color:rgba(250,247,242,0.35);letter-spacing:0.01em">relay.app/dashboard</span>
+    <!-- PROBLEM (one beat per slide) -->
+    <section class="slide" data-rail="The problem"><div class="inner"><p class="line s-in">It's <em>11&nbsp;PM</em>.</p></div></section>
+    <section class="slide"><div class="inner"><p class="line s-in">Someone just dropped tomorrow's opening shift.</p></div></section>
+    <section class="slide"><div class="inner"><p class="line s-in">So you start texting. <em>One person at a time.</em></p></div></section>
+    <section class="slide"><div class="inner"><p class="line s-in">An hour later you're still awake.<br>Still uncovered.</p></div></section>
+
+    <!-- THE TURN -->
+    <section class="slide" data-rail="The fix"><div class="inner"><p class="line sm s-in">What if it just…</p><p class="line s-in" style="--d:.12s">handled itself?</p></div></section>
+    <section class="slide"><div class="inner"><span class="kicker label-line s-in">Meet Relay</span><p class="line s-in" style="--d:.12s">Post the gap in your group chat.<br><em>Relay finds the cover.</em></p></div></section>
+
+    <!-- HOW IT WORKS -->
+    <section class="slide" data-rail="How it works">
+      <div class="inner">
+        <span class="kicker label-line s-in" style="align-self:flex-start">Four steps. Then it runs itself.</span>
+        <div class="steps-list">
+          <div class="stepline s-in" style="--d:.06s"><div class="stepnum">1</div><div class="steptxt"><h3>Add Relay to your group chat</h3><p>The Telegram group your team already lives in. No new accounts for staff.</p></div></div>
+          <div class="stepline s-in" style="--d:.16s"><div class="stepnum">2</div><div class="steptxt"><h3>It learns the schedule</h3><p>Relay reads the conversation, tracks who's on, and stays quiet until it's needed.</p></div></div>
+          <div class="stepline s-in" style="--d:.26s"><div class="stepnum">3</div><div class="steptxt"><h3>It does the chasing</h3><p>Someone needs a shift covered — Relay reaches out, collects answers, and locks it in.</p></div></div>
+          <div class="stepline s-in" style="--d:.36s"><div class="stepnum">4</div><div class="steptxt"><h3>You wake up to a filled schedule</h3><p>A clean, current schedule for the whole team. No spreadsheet, no 40-message thread.</p></div></div>
         </div>
-        <!-- Mock dashboard content -->
-        <div style="display:flex;min-height:400px">
-          <!-- Sidebar mock -->
-          <div style="width:176px;background:#131009;padding:18px 14px 18px;border-right:1px solid rgba(250,247,242,0.06);flex-shrink:0;display:flex;flex-direction:column">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:22px;padding:0 2px">
-              <div style="width:24px;height:24px;background:var(--accent);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="14" height="14"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/><polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/><polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-              </div>
-              <div>
-                <div style="color:rgba(250,247,242,0.92);font-weight:700;font-size:13px;line-height:1.2">Relay</div>
-                <div style="color:rgba(250,247,242,0.35);font-size:10px;line-height:1.2">Mesa Verde Kitchen</div>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:2px;flex:1">
-              <div style="padding:8px 10px;border-radius:6px;font-size:12px;font-weight:600;color:var(--accent);background:rgba(217,95,43,0.12);border-left:3px solid var(--accent);display:flex;align-items:center;gap:7px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                Overview
-              </div>
-              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Schedule
-              </div>
-              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                Staff
-              </div>
-              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                Payroll
-              </div>
-              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Time Clock
-              </div>
-              <div style="padding:8px 10px;font-size:12px;color:rgba(250,247,242,0.38);display:flex;align-items:center;gap:7px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                Settings
-              </div>
-            </div>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="slide dash" data-rail="The dashboard" data-dim="1" id="dashboard">
+      <div class="inner">
+        <div class="dash-head s-in">
+          <span class="kicker label-line">The live product</span>
+          <h2>A real dashboard. Not a slideshow.</h2>
+          <p>Schedule, staff, payroll, time clock — all updating automatically from the group chat.</p>
+        </div>
+        <div class="dm-frame s-in" style="--d:.1s" id="dmFrame">
+          <div class="dm-chrome">
+            <span class="dm-dot" style="background:#FF5F57"></span><span class="dm-dot" style="background:#FEBC2E"></span><span class="dm-dot" style="background:#28C840"></span>
+            <span class="dm-url" id="dmUrl">app.getrelay.com/dashboard</span>
+            <span class="dm-live"><i></i>Live</span>
           </div>
-          <!-- Main content mock -->
-          <div style="flex:1;background:#FAF7F2;padding:18px;overflow:hidden">
-            <!-- Stat cards -->
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:12px">
-              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
-                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Staff Scheduled</div>
-                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">12</div>
+          <div class="dm-body">
+            <div class="dm-side">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:22px;padding:0 2px">
+                <div style="width:24px;height:24px;background:#D95F2B;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="14" height="14"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/><polyline points="13,9 17,13 13,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/><polyline points="20,9 24,13 20,17" stroke="#D95F2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></div>
+                <div class="dm-brand-text"><div style="color:rgba(250,247,242,0.92);font-weight:700;font-size:13px;line-height:1.2">Relay</div><div style="color:rgba(250,247,242,0.35);font-size:10px;line-height:1.2">Mesa Verde Kitchen</div></div>
               </div>
-              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
-                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Shifts This Week</div>
-                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">38</div>
-              </div>
-              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
-                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Coverage Requests</div>
-                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">2</div>
-                <div style="font-size:9px;color:#D95F2B;margin-top:3px;font-weight:500">Avg 14min to fill</div>
-              </div>
-              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
-                <div style="font-size:9px;color:#9A8880;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Labor Cost</div>
-                <div style="font-family:'DM Serif Display',Georgia,serif;font-size:24px;font-weight:400;color:#1C1410;line-height:1.1">$3,240</div>
-                <div style="font-size:9px;color:#2D7D5A;margin-top:3px;font-weight:500">28% of revenue</div>
-              </div>
+              <nav class="dm-nav" id="dmNav">
+                <div class="dm-nav-item active" data-page="overview"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="dm-nav-label">Overview</span></div>
+                <div class="dm-nav-item" data-page="schedule"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="dm-nav-label">Schedule</span></div>
+                <div class="dm-nav-item" data-page="staff"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="dm-nav-label">Staff</span></div>
+                <div class="dm-nav-item" data-page="payroll"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span class="dm-nav-label">Payroll</span></div>
+                <div class="dm-nav-item" data-page="timeclock"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="dm-nav-label">Time Clock</span></div>
+                <div class="dm-nav-item" style="margin-top:auto"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="dm-nav-label">Settings</span></div>
+              </nav>
             </div>
-            <!-- Schedule preview -->
-            <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0;margin-bottom:10px">
-              <div style="font-size:11px;font-weight:700;color:#1C1410;margin-bottom:9px;letter-spacing:-0.01em">This Week's Schedule</div>
-              <div style="display:grid;grid-template-columns:80px repeat(7,1fr);gap:3px;font-size:9px">
-                <div style="color:#9A8880;font-weight:700;padding:3px 0"></div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Mon</div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Tue</div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Wed</div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Thu</div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Fri</div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Sat</div>
-                <div style="color:#9A8880;font-weight:700;text-align:center;padding:3px 0">Sun</div>
-                <!-- Row 1 -->
-                <div style="font-weight:600;color:#1C1410;padding:3px 0;font-size:10px">Alex M.</div>
-                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
-                <div></div>
-                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
-                <div></div>
-                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
-                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
-                <div></div>
-                <!-- Row 2 -->
-                <div style="font-weight:600;color:#1C1410;padding:3px 0;font-size:10px">Sam K.</div>
-                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
-                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
-                <div></div>
-                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
-                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
-                <div></div>
-                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Brunch</div>
-                <!-- Row 3 -->
-                <div style="font-weight:600;color:#1C1410;padding:3px 0;font-size:10px">Jordan T.</div>
-                <div></div>
-                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Brunch</div>
-                <div style="background:#E6F4ED;color:#1A5C3E;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Brunch</div>
-                <div style="background:#FDF0E8;color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Lunch</div>
-                <div></div>
-                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
-                <div style="background:rgba(217,95,43,0.1);color:#8B3A16;border-radius:3px;padding:2px 4px;text-align:center;font-weight:600">Dinner</div>
-              </div>
-            </div>
-            <!-- Bottom two panels -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <!-- Recent activity -->
-              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
-                <div style="font-size:11px;font-weight:700;color:#1C1410;margin-bottom:9px;letter-spacing:-0.01em">Recent Activity</div>
-                <div style="display:flex;flex-direction:column;gap:8px">
-                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
-                    <span style="width:6px;height:6px;background:#D95F2B;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
-                    <span style="color:#4A3F35;flex:1;line-height:1.4">Alex called out Friday dinner — coverage filled in 11 min</span>
-                    <span style="color:#9A8880;white-space:nowrap;font-size:9px">2hr ago</span>
+            <div class="dm-main" id="dmMain">
+              <div class="dm-page active run" data-page="overview">
+                <div class="dm-stats">
+                  <div class="dm-stat dm-in" style="--d:0ms"><div class="dm-stat-l">Staff Scheduled</div><div class="dm-stat-v" data-count="12">0</div></div>
+                  <div class="dm-stat dm-in" style="--d:70ms"><div class="dm-stat-l">Shifts This Week</div><div class="dm-stat-v" data-count="38">0</div></div>
+                  <div class="dm-stat dm-in" id="dmCoverStat" style="--d:140ms"><div class="dm-stat-l">Open Coverage</div><div class="dm-stat-v" id="dmCoverVal">2</div><div class="dm-stat-s" id="dmCoverSub" style="color:#D95F2B">1 awaiting cover</div></div>
+                  <div class="dm-stat dm-in" style="--d:210ms"><div class="dm-stat-l">Labor Cost</div><div class="dm-stat-v" data-count="3240" data-money="1">$0</div><div class="dm-stat-s" style="color:#2D7D5A">28% of revenue</div></div>
+                </div>
+                <div class="dm-card dm-in" style="--d:240ms;margin-bottom:10px">
+                  <div class="dm-ch">This Week's Schedule</div>
+                  <div class="dm-srow"><div></div><div class="dm-dayhdr">Mon</div><div class="dm-dayhdr">Tue</div><div class="dm-dayhdr">Wed</div><div class="dm-dayhdr">Thu</div><div class="dm-dayhdr">Fri</div><div class="dm-dayhdr">Sat</div><div class="dm-dayhdr">Sun</div></div>
+                  <div class="dm-srow"><div class="dm-sname">Alex M.</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div></div></div>
+                  <div class="dm-srow"><div class="dm-sname">Sam K.</div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div></div><div class="dm-chip l">Lunch</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip b">Brunch</div></div>
+                  <div class="dm-srow"><div class="dm-sname">Jordan T.</div><div></div><div class="dm-chip b">Brunch</div><div class="dm-chip b">Brunch</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div class="dm-card dm-in" style="--d:300ms">
+                    <div class="dm-ch">Recent Activity</div>
+                    <div id="dmActivity">
+                      <div class="dm-feed"><span class="dm-fdot" style="background:#D95F2B"></span><span class="dm-ftext">Alex called out Friday dinner — coverage requested</span><span class="dm-ftime">2hr ago</span></div>
+                      <div class="dm-feed"><span class="dm-fdot" style="background:#2D7D5A"></span><span class="dm-ftext">Sam and Jordan confirmed a Saturday swap</span><span class="dm-ftime">5hr ago</span></div>
+                      <div class="dm-feed"><span class="dm-fdot" style="background:#9A8880"></span><span class="dm-ftext">Schedule published to Telegram — 12 staff notified</span><span class="dm-ftime">Yesterday</span></div>
+                    </div>
                   </div>
-                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
-                    <span style="width:6px;height:6px;background:#2D7D5A;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
-                    <span style="color:#4A3F35;flex:1;line-height:1.4">Sam and Jordan confirmed shift swap for Saturday</span>
-                    <span style="color:#9A8880;white-space:nowrap;font-size:9px">5hr ago</span>
-                  </div>
-                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
-                    <span style="width:6px;height:6px;background:#9A8880;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
-                    <span style="color:#4A3F35;flex:1;line-height:1.4">Schedule published to Telegram — 12 staff notified</span>
-                    <span style="color:#9A8880;white-space:nowrap;font-size:9px">Yesterday</span>
+                  <div class="dm-card dm-in" style="--d:360ms">
+                    <div class="dm-ch">Relay's Insights</div>
+                    <div class="dm-feed"><span class="dm-fdot" style="background:#D95F2B"></span><span class="dm-ftext">Friday dinner has been understaffed 3 weeks in a row</span></div>
+                    <div class="dm-feed"><span class="dm-fdot" style="background:#2D7D5A"></span><span class="dm-ftext">Labor cost is down 4% from last week — nice work</span></div>
+                    <div class="dm-feed"><span class="dm-fdot" style="background:#E5A100"></span><span class="dm-ftext">Sam K. is at 38hrs — 2 more shifts risk overtime</span></div>
                   </div>
                 </div>
               </div>
-              <!-- Relay's insights -->
-              <div style="background:#FFFFFF;border-radius:8px;padding:13px 14px;border:1px solid #E8DFD0">
-                <div style="font-size:11px;font-weight:700;color:#1C1410;margin-bottom:9px;letter-spacing:-0.01em">Relay's Insights</div>
-                <div style="display:flex;flex-direction:column;gap:8px">
-                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
-                    <span style="width:6px;height:6px;background:#D95F2B;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
-                    <span style="color:#4A3F35;flex:1;line-height:1.4">Friday dinner has been understaffed 3 weeks in a row</span>
-                  </div>
-                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
-                    <span style="width:6px;height:6px;background:#2D7D5A;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
-                    <span style="color:#4A3F35;flex:1;line-height:1.4">Labor cost is down 4% from last week — nice work</span>
-                  </div>
-                  <div style="display:flex;align-items:flex-start;gap:7px;font-size:10px">
-                    <span style="width:6px;height:6px;background:#E5A100;border-radius:50%;flex-shrink:0;margin-top:3px"></span>
-                    <span style="color:#4A3F35;flex:1;line-height:1.4">Sam K. is at 38hrs — 2 more shifts risk overtime</span>
-                  </div>
+              <div class="dm-page" data-page="schedule">
+                <div class="dm-pagehead dm-in"><div><h4>Weekly Schedule</h4><div class="dm-sub">Week of Jun 16 – Jun 22</div></div><span class="dm-pill"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Published</span></div>
+                <div class="dm-card dm-in" style="--d:60ms">
+                  <div class="dm-srow"><div></div><div class="dm-dayhdr">Mon</div><div class="dm-dayhdr">Tue</div><div class="dm-dayhdr">Wed</div><div class="dm-dayhdr">Thu</div><div class="dm-dayhdr">Fri</div><div class="dm-dayhdr">Sat</div><div class="dm-dayhdr">Sun</div></div>
+                  <div class="dm-srow dm-in" style="--d:120ms"><div class="dm-sname">Alex M.</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div></div></div>
+                  <div class="dm-srow dm-in" style="--d:180ms"><div class="dm-sname">Sam K.</div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div></div><div class="dm-chip l">Lunch</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip b">Brunch</div></div>
+                  <div class="dm-srow dm-in" style="--d:240ms"><div class="dm-sname">Jordan T.</div><div></div><div class="dm-chip b">Brunch</div><div class="dm-chip b">Brunch</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div></div>
+                  <div class="dm-srow dm-in" style="--d:300ms"><div class="dm-sname">Priya N.</div><div class="dm-chip l">Lunch</div><div class="dm-chip l">Lunch</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div></div></div>
+                  <div class="dm-srow dm-in" style="--d:360ms"><div class="dm-sname">Diego R.</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip d">Dinner</div><div></div><div class="dm-chip d">Dinner</div><div class="dm-chip b">Brunch</div><div class="dm-chip b">Brunch</div></div>
                 </div>
+                <div class="dm-in" style="--d:420ms;font-size:10px;color:#9A8880;margin-top:9px;display:flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:#2D7D5A;display:inline-block"></span> 38 shifts filled · 0 gaps · everyone confirmed</div>
+              </div>
+              <div class="dm-page" data-page="staff">
+                <div class="dm-pagehead dm-in"><div><h4>Team</h4><div class="dm-sub">12 active · 3 cross-trained</div></div><span class="dm-pill ghost">+ Add staff</span></div>
+                <div class="dm-card dm-in" style="--d:60ms">
+                  <div class="dm-staff dm-in" style="--d:120ms"><div class="dm-av">AM</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Alex Morgan</div><div class="dm-staff-role">Server · 32h this week</div></div><div style="width:60px"><div class="dm-bar"><i style="width:84%;--d:300ms"></i></div></div><span class="dm-tag ok">Reliable</span></div>
+                  <div class="dm-staff dm-in" style="--d:180ms"><div class="dm-av">SK</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Sam Kim</div><div class="dm-staff-role">Server · 38h this week</div></div><div style="width:60px"><div class="dm-bar"><i style="width:100%;--d:360ms"></i></div></div><span class="dm-tag warn">Near OT</span></div>
+                  <div class="dm-staff dm-in" style="--d:240ms"><div class="dm-av">JT</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Jordan Taylor</div><div class="dm-staff-role">Cook · 34h this week</div></div><div style="width:60px"><div class="dm-bar"><i style="width:90%;--d:420ms"></i></div></div><span class="dm-tag ok">Reliable</span></div>
+                  <div class="dm-staff dm-in" style="--d:300ms"><div class="dm-av">PN</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Priya Nair</div><div class="dm-staff-role">Cook · 30h this week</div></div><div style="width:60px"><div class="dm-bar"><i style="width:79%;--d:480ms"></i></div></div><span class="dm-tag ok">Reliable</span></div>
+                  <div class="dm-staff dm-in" style="--d:360ms"><div class="dm-av">DR</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Diego Ramos</div><div class="dm-staff-role">Server · 31h this week</div></div><div style="width:60px"><div class="dm-bar"><i style="width:82%;--d:540ms"></i></div></div><span class="dm-tag ok">Reliable</span></div>
+                  <div class="dm-staff dm-in" style="--d:420ms;border-bottom:none"><div class="dm-av">MC</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Maya Chen</div><div class="dm-staff-role">Bartender · 26h this week</div></div><div style="width:60px"><div class="dm-bar"><i style="width:68%;--d:600ms"></i></div></div><span class="dm-tag new">New hire</span></div>
+                </div>
+              </div>
+              <div class="dm-page" data-page="payroll">
+                <div class="dm-pagehead dm-in"><div><h4>Payroll</h4><div class="dm-sub">Week of Jun 16 · ready to run</div></div><span class="dm-pill"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export to Excel</span></div>
+                <div class="dm-card dm-in" style="--d:60ms">
+                  <div class="dm-prow head"><div>Staff</div><div class="dm-num">Hours</div><div class="dm-num">Rate</div><div class="dm-num">Gross</div></div>
+                  <div class="dm-prow dm-in" style="--d:120ms"><div>Alex Morgan</div><div class="dm-num">32.0</div><div class="dm-num">$12.00</div><div class="dm-num"><span data-count="384" data-money="1">$0</span></div></div>
+                  <div class="dm-prow dm-in" style="--d:170ms"><div>Sam Kim</div><div class="dm-num">38.0</div><div class="dm-num">$12.00</div><div class="dm-num"><span data-count="456" data-money="1">$0</span></div></div>
+                  <div class="dm-prow dm-in" style="--d:220ms"><div>Jordan Taylor</div><div class="dm-num">34.0</div><div class="dm-num">$18.00</div><div class="dm-num"><span data-count="612" data-money="1">$0</span></div></div>
+                  <div class="dm-prow dm-in" style="--d:270ms"><div>Priya Nair</div><div class="dm-num">30.0</div><div class="dm-num">$18.00</div><div class="dm-num"><span data-count="540" data-money="1">$0</span></div></div>
+                  <div class="dm-prow dm-in" style="--d:320ms"><div>Diego Ramos</div><div class="dm-num">31.0</div><div class="dm-num">$12.00</div><div class="dm-num"><span data-count="372" data-money="1">$0</span></div></div>
+                  <div class="dm-prow dm-in" style="--d:370ms"><div>Maya Chen</div><div class="dm-num">26.0</div><div class="dm-num">$15.00</div><div class="dm-num"><span data-count="420" data-money="1">$0</span></div></div>
+                  <div class="dm-prow total dm-in" style="--d:430ms"><div>Total</div><div class="dm-num"></div><div class="dm-num"></div><div class="dm-num"><span data-count="2784" data-money="1">$0</span></div></div>
+                </div>
+              </div>
+              <div class="dm-page" data-page="timeclock">
+                <div class="dm-pagehead dm-in"><div><h4>On the clock now</h4><div class="dm-sub">Live · updates from the group chat</div></div><span class="dm-pill ghost">3 working</span></div>
+                <div class="dm-clock dm-in" style="--d:60ms"><span class="dm-onshift"></span><div class="dm-av">JT</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Jordan Taylor</div><div class="dm-staff-role">Cook · clocked in 11:02 AM</div></div><span class="dm-timer" data-elapsed="18760">00:00:00</span></div>
+                <div class="dm-clock dm-in" style="--d:130ms"><span class="dm-onshift"></span><div class="dm-av">PN</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Priya Nair</div><div class="dm-staff-role">Cook · clocked in 12:30 PM</div></div><span class="dm-timer" data-elapsed="13480">00:00:00</span></div>
+                <div class="dm-clock dm-in" style="--d:200ms"><span class="dm-onshift"></span><div class="dm-av">MC</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Maya Chen</div><div class="dm-staff-role">Bartender · clocked in 1:45 PM</div></div><span class="dm-timer" data-elapsed="9060">00:00:00</span></div>
+                <div class="dm-clock dm-in" style="--d:270ms"><span class="dm-onshift late"></span><div class="dm-av">DR</div><div style="flex:1;min-width:0"><div class="dm-staff-name">Diego Ramos</div><div class="dm-staff-role" style="color:#8A6300">Server · clocked in 12 min late</div></div><span class="dm-tag warn">Flagged</span></div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ── SIGNUP ────────────────────────────────────────────────── -->
-  <section class="signup" id="signup">
-    <div class="container">
-      <div class="signup-inner">
-        <h2 class="reveal">Be first in line when we launch.</h2>
-        <p class="signup-sub reveal delay-1">Early access is limited. Drop your email and we'll reach out before we open to everyone — no pitch emails, just a heads up.</p>
+    <!-- PLATFORMS -->
+    <section class="slide" data-rail="Platforms" data-dim="1">
+      <div class="inner">
+        <span class="kicker label-line s-in">Where it runs</span>
+        <p class="line s-in" style="--d:.1s">Live on <em>Telegram</em>, today.</p>
+        <div class="plat-row s-in" style="--d:.2s">
+          <span class="badge"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" rx="6" fill="#229ED9"/><path d="M5.2 11.794c3.793-1.653 6.322-2.742 7.588-3.268 3.614-1.504 4.367-1.765 4.855-1.774.108-.002.349.025.505.152a.55.55 0 0 1 .185.356c.017.103.038.337.021.52-.19 1.998-1.013 6.846-1.432 9.083-.177.946-.526 1.263-.864 1.295-.733.067-1.29-.484-2-.949-1.111-.728-1.739-1.182-2.818-1.892-1.247-.82-.439-1.271.272-2.009.186-.193 3.42-3.134 3.482-3.401.008-.034.015-.158-.059-.224-.074-.065-.183-.043-.262-.025-.112.025-1.892 1.203-5.34 3.53-.505.347-.963.516-1.371.508-.452-.01-1.321-.255-1.968-.465-.793-.257-1.424-.393-1.37-.83.029-.228.341-.46.94-.698Z" fill="white"/></svg> Telegram</span>
+          <span class="badge soon">Slack <span class="micro">soon</span></span>
+          <span class="badge soon">WhatsApp <span class="micro">soon</span></span>
+        </div>
+      </div>
+    </section>
 
-        <form class="signup-form reveal delay-2" id="signupForm">
-          <input
-            class="signup-input"
-            type="email"
-            id="emailInput"
-            placeholder="Your email"
-            required
-          />
-          <button type="submit" class="signup-btn">Save My Spot</button>
+    <!-- CTA + FOOTER -->
+    <section class="slide cta" id="signup" data-rail="Get started" data-dim="1">
+      <div class="inner">
+        <h2 class="s-in">Stop chasing <em>shifts</em>.</h2>
+        <p class="s-in" style="--d:.08s">Drop your email and we'll get Relay running in your group chat — usually the same day. No app to install, no contracts, no setup fee.</p>
+        <form class="signup-form s-in" style="--d:.16s" id="signupForm">
+          <input class="signup-input" type="email" id="emailInput" placeholder="you@yourbusiness.com" required />
+          <button type="submit" class="signup-btn">Get Started</button>
         </form>
-
-        <div class="signup-success" id="signupSuccess">
-          <div class="success-icon">✓</div>
-          <div class="success-heading">You're on the list.</div>
-          <p class="success-body">We'll reach out personally before early access opens — usually within a week or two.</p>
+        <div class="signup-ok" id="signupOk">
+          <div class="ok-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div style="font-weight:800;font-size:1.2rem">Got it — talk soon.</div>
+          <p class="micro" style="max-width:340px">We'll reach out personally to get Relay set up in your group chat, usually within a day.</p>
         </div>
+        <p class="micro s-in" style="--d:.24s">Already a manager? <a href="/login" style="color:var(--accent);font-weight:600">Log in to your dashboard →</a></p>
       </div>
-    </div>
-  </section>
-
-  <!-- ── FOOTER ────────────────────────────────────────────────── -->
-  <footer>
-    <div class="container footer-inner">
-      <div class="footer-logo">Relay</div>
-      <p class="footer-tagline">Built by a developer who kept hearing the same complaint from small business friends.</p>
-      <p class="footer-secondary">Currently in private beta. No app stores. No enterprise pricing. Just a bot that works.</p>
-    </div>
-  </footer>
+      <div class="foot">
+        <div class="foot-logo">Relay</div>
+        <div class="foot-tag">Scheduling that lives in your group chat. No app stores. No contracts. Just a bot that works.</div>
+      </div>
+    </section>
+  </main>
 
   <script>
-    // ── Scroll reveal ──────────────────────────────────────────
-    const revealObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-            revealObserver.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
-    );
+  (function () {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
-    document.querySelectorAll('.reveal').forEach(el => {
-      revealObserver.observe(el);
-    });
+    /* background relay network */
+    const canvas = document.getElementById('bg'), ctx = canvas.getContext('2d');
+    let W, H, DPR;
+    function resize() { DPR = Math.min(devicePixelRatio || 1, 2); W = canvas.width = innerWidth * DPR; H = canvas.height = innerHeight * DPR; canvas.style.width = innerWidth + 'px'; canvas.style.height = innerHeight + 'px'; }
+    resize(); addEventListener('resize', resize);
+    const N = innerWidth < 700 ? 90 : 150;
+    const pts = [];
+    for (let i = 0; i < N; i++) { const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), phi = i * Math.PI * (3 - Math.sqrt(5)); pts.push({ x: Math.cos(phi) * r, y, z: Math.sin(phi) * r }); }
+    const edges = [];
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) { const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y, dz = pts[i].z - pts[j].z; if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 0.46) edges.push({ a: i, b: j }); }
+    const pulses = [];
+    const spawn = () => { if (edges.length) pulses.push({ e: edges[(Math.random() * edges.length) | 0], t: 0, spd: 0.012 + Math.random() * 0.02 }); };
+    for (let i = 0; i < 5; i++) spawn();
 
-    // ── Button ripple ──────────────────────────────────────────
-    document.querySelectorAll('.btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        const rect = this.getBoundingClientRect();
-        const size = Math.max(rect.width, rect.height);
-        const x = e.clientX - rect.left - size / 2;
-        const y = e.clientY - rect.top - size / 2;
-        const ripple = document.createElement('span');
-        ripple.className = 'ripple';
-        ripple.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
-        this.appendChild(ripple);
-        ripple.addEventListener('animationend', () => ripple.remove());
+    let smooth = 0, netVis = 1, netTarget = 1;
+    function project(p, rx, ry, camZ, s) {
+      let x = p.x * Math.cos(ry) - p.z * Math.sin(ry), z = p.x * Math.sin(ry) + p.z * Math.cos(ry);
+      let y = p.y * Math.cos(rx) - z * Math.sin(rx); z = p.y * Math.sin(rx) + z * Math.cos(rx);
+      const f = s / (z + camZ);
+      return { x: W / 2 + x * f, y: H / 2 + y * f, depth: clamp((z + 1) / 2, 0, 1) };
+    }
+    function frame(now) {
+      const maxScroll = Math.max(1, document.body.scrollHeight - innerHeight);
+      smooth = lerp(smooth, clamp(scrollY / maxScroll, 0, 1), 0.08);
+      netVis = lerp(netVis, netTarget, 0.06);
+      const ry = now * 0.00006 + smooth * 2.4, rx = 0.5 + Math.sin(now * 0.0002) * 0.12 + smooth * 0.5;
+      const s = Math.min(W, H) * 0.36, camZ = 2.6 - smooth * 0.35;
+      const vis = netVis;
+      ctx.clearRect(0, 0, W, H);
+      const proj = pts.map(p => project(p, rx, ry, camZ, s));
+      ctx.lineWidth = DPR;
+      for (const e of edges) { const a = proj[e.a], b = proj[e.b], dep = (a.depth + b.depth) / 2; ctx.strokeStyle = `rgba(242,114,47,${(0.05 + dep * 0.1) * vis})`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+      for (let i = pulses.length - 1; i >= 0; i--) { const pu = pulses[i]; pu.t += pu.spd; if (pu.t >= 1) { pulses.splice(i, 1); spawn(); continue; } const a = proj[pu.e.a], b = proj[pu.e.b], px = lerp(a.x, b.x, pu.t), py = lerp(a.y, b.y, pu.t), rad = 3.2 * DPR; const g = ctx.createRadialGradient(px, py, 0, px, py, rad * 4); g.addColorStop(0, `rgba(255,180,120,${0.9 * vis})`); g.addColorStop(1, 'rgba(255,180,120,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, rad * 4, 0, 7); ctx.fill(); }
+      for (const p of proj) { const sz = (0.8 + p.depth * 1.8) * DPR; ctx.fillStyle = `rgba(244,238,230,${(0.25 + p.depth * 0.6) * vis})`; ctx.beginPath(); ctx.arc(p.x, p.y, sz, 0, 7); ctx.fill(); }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    /* slide activation + dim */
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const slideIO = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.intersectionRatio >= 0.55) {
+          e.target.classList.add('active');
+          netTarget = e.target.hasAttribute('data-dim') ? 0.16 : 1;
+        }
       });
-    });
+    }, { threshold: [0, 0.55, 1] });
+    slides.forEach(s => slideIO.observe(s));
+    // hero active immediately once ready
 
-    // ── Form submit ────────────────────────────────────────────
-    const form    = document.getElementById('signupForm');
-    const success = document.getElementById('signupSuccess');
+    /* nav + rail */
+    const nav = document.getElementById('nav'), rail = document.getElementById('rail');
+    const railSlides = slides.filter(s => s.hasAttribute('data-rail'));
+    railSlides.forEach(s => { const b = document.createElement('b'); b.title = s.dataset.rail; b.addEventListener('click', () => s.scrollIntoView({ behavior: 'smooth' })); rail.appendChild(b); });
+    const railDots = Array.from(rail.children);
+    function onScroll() {
+      const y = scrollY;
+      nav.classList.toggle('show', y > innerHeight * 0.6);
+      rail.classList.toggle('show', y > innerHeight * 0.6);
+      const mid = y + innerHeight / 2; let idx = 0;
+      railSlides.forEach((s, i) => { if (s.offsetTop <= mid) idx = i; });
+      railDots.forEach((d, i) => d.classList.toggle('on', i === idx));
+    }
+    addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
 
+    /* loader */
+    const loader = document.getElementById('loader'), loadNum = document.getElementById('loadNum'), loadBar = document.getElementById('loadBar');
+    const dur = reduce ? 150 : 1200, start = performance.now();
+    (function tick(now) {
+      const p = clamp((now - start) / dur, 0, 1);
+      loadNum.textContent = String(Math.round(p * 100)).padStart(3, '0');
+      const fill = Math.round(p * 10); loadBar.textContent = '='.repeat(fill) + '-'.repeat(10 - fill);
+      if (p < 1) requestAnimationFrame(tick);
+      else { loader.classList.add('done'); document.body.classList.remove('loading'); document.querySelector('.slide.hero').classList.add('active'); }
+    })(start);
+
+    /* signup */
+    const form = document.getElementById('signupForm'), ok = document.getElementById('signupOk');
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      const email = document.getElementById('emailInput').value;
-      if (!email) return;
-
-      const submitBtn = form.querySelector('.signup-btn');
-      submitBtn.textContent = 'Saving…';
-      submitBtn.disabled = true;
-
-      // Server-side proxy — keeps the GAS URL out of the page source.
-      fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      }).catch(() => {}); // show success regardless of network result
-
-      setTimeout(() => {
-        form.style.opacity = '0';
-        form.style.transform = 'scale(0.97)';
-        form.style.transition = 'opacity 200ms ease, transform 200ms ease';
-        setTimeout(() => {
-          form.style.display = 'none';
-          success.classList.add('visible');
-        }, 200);
-      }, 600);
+      const email = document.getElementById('emailInput').value; if (!email) return;
+      const btn = form.querySelector('.signup-btn'); btn.textContent = 'Saving…'; btn.disabled = true;
+      fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }).catch(() => {});
+      setTimeout(() => { form.style.display = 'none'; ok.classList.add('show'); }, 500);
     });
+  })();
+  </script>
+
+  <!-- Dashboard demo controller -->
+  <script>
+  (function () {
+    const frame = document.getElementById('dmFrame');
+    if (!frame) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const order = ['overview', 'schedule', 'staff', 'payroll', 'timeclock'];
+    const urls = { overview: 'app.getrelay.com/dashboard', schedule: 'app.getrelay.com/schedule', staff: 'app.getrelay.com/staff', payroll: 'app.getrelay.com/payroll', timeclock: 'app.getrelay.com/time-clock' };
+    const navItems = Array.from(frame.querySelectorAll('.dm-nav-item[data-page]'));
+    const pages = Array.from(frame.querySelectorAll('.dm-page'));
+    const urlEl = document.getElementById('dmUrl');
+    const pageOf = id => pages.find(p => p.dataset.page === id);
+    let idx = 0, timer = null, paused = false, fillTimer = null;
+    const fmtNum = (n, m) => (m ? '$' : '') + Math.round(n).toLocaleString('en-US');
+    function countUp(page) {
+      page.querySelectorAll('[data-count]').forEach(el => {
+        const to = parseFloat(el.getAttribute('data-count')) || 0, money = el.hasAttribute('data-money');
+        if (reduce) { el.textContent = fmtNum(to, money); return; }
+        const d = 850, s = performance.now();
+        (function step(now) { const p = Math.min(1, (now - s) / d), e = 1 - Math.pow(1 - p, 3); el.textContent = fmtNum(to * e, money); if (p < 1) requestAnimationFrame(step); })(s);
+      });
+    }
+    function resetOverview() {
+      const a = frame.querySelector('.dm-live-added'); if (a) a.remove();
+      const v = document.getElementById('dmCoverVal'), sub = document.getElementById('dmCoverSub'), st = document.getElementById('dmCoverStat');
+      if (v) v.textContent = '2'; if (sub) { sub.textContent = '1 awaiting cover'; sub.style.color = '#D95F2B'; } if (st) st.classList.remove('dm-flash');
+    }
+    function runOverviewLive() {
+      if (reduce) return;
+      if (fillTimer) clearTimeout(fillTimer);
+      fillTimer = setTimeout(() => {
+        const feed = document.getElementById('dmActivity');
+        if (feed) { const item = document.createElement('div'); item.className = 'dm-feed dm-live-added'; item.innerHTML = '<span class="dm-fdot" style="background:#2D7D5A"></span><span class="dm-ftext">Priya grabbed <b>Friday dinner</b> — filled in 12 min</span><span class="dm-ftime">just now</span>'; feed.prepend(item); }
+        const v = document.getElementById('dmCoverVal'), sub = document.getElementById('dmCoverSub'), st = document.getElementById('dmCoverStat');
+        if (v) v.textContent = '1'; if (sub) { sub.textContent = 'all shifts covered'; sub.style.color = '#2D7D5A'; } if (st) st.classList.add('dm-flash');
+      }, 1500);
+    }
+    function activate(i) {
+      idx = (i + order.length) % order.length; const id = order[idx];
+      navItems.forEach(n => n.classList.toggle('active', n.dataset.page === id));
+      pages.forEach(p => { const on = p.dataset.page === id; p.classList.toggle('active', on); if (on) { p.classList.remove('run'); void p.offsetWidth; p.classList.add('run'); } });
+      if (urlEl) urlEl.textContent = urls[id];
+      const page = pageOf(id);
+      if (id === 'overview') { resetOverview(); countUp(page); runOverviewLive(); }
+      if (id === 'payroll') countUp(page);
+    }
+    function next() { activate(idx + 1); }
+    function start() { if (reduce || timer) return; timer = setInterval(() => { if (!paused) next(); }, 4000); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+    navItems.forEach(n => n.addEventListener('click', () => { stop(); activate(order.indexOf(n.dataset.page)); start(); }));
+    frame.addEventListener('mouseenter', () => paused = true);
+    frame.addEventListener('mouseleave', () => paused = false);
+    const fmtTime = s => [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(n => String(n).padStart(2, '0')).join(':');
+    function renderTimers(inc) { frame.querySelectorAll('.dm-timer').forEach(t => { let s = parseInt(t.dataset.elapsed || '0', 10); if (inc) { s += 1; t.dataset.elapsed = s; } t.textContent = fmtTime(s); }); }
+    renderTimers(false);
+    if (!reduce) setInterval(() => renderTimers(true), 1000);
+    // Replay from the top each time the dashboard slide comes into view
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.intersectionRatio >= 0.4) { stop(); activate(0); start(); } else stop(); });
+    }, { threshold: [0, 0.4, 0.8] });
+    io.observe(frame);
+  })();
   </script>
 </body>
 </html>
