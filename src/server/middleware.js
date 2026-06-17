@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import { ensureAccount, getLinkedGroup } from './db/accounts.js'
 
 const JWT_SECRET = process.env.JWT_SECRET
@@ -7,12 +8,54 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   process.exit(1)
 }
 
-// Supabase Auth signs access tokens (HS256) with the project JWT secret.
-// When set, the dashboard authenticates account-based; the legacy phone-OTP
-// relay_session cookie remains accepted as a fallback during migration.
+// Supabase Auth access tokens are verified two ways depending on the project:
+//  - Modern projects sign with asymmetric keys (ES256/RS256) — verified against
+//    the project's published JWKS (no shared secret needed).
+//  - Legacy projects sign HS256 with the project JWT secret (SUPABASE_JWT_SECRET).
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
-if (!SUPABASE_JWT_SECRET) {
-  console.warn('⚠️ SUPABASE_JWT_SECRET is not set — account-based login is disabled; only legacy phone-OTP sessions will work.')
+if (!SUPABASE_URL && !SUPABASE_JWT_SECRET) {
+  console.warn('⚠️ Neither SUPABASE_URL nor SUPABASE_JWT_SECRET is set — account-based login is disabled; only legacy phone-OTP sessions will work.')
+}
+
+// JWKS cache (public keys, keyed by kid). Refreshed hourly or on a kid miss.
+let _jwks = null
+let _jwksAt = 0
+async function getJwks(force = false) {
+  if (!force && _jwks && Date.now() - _jwksAt < 60 * 60 * 1000) return _jwks
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`, {
+    headers: SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {},
+  })
+  const data = await res.json()
+  const map = {}
+  for (const k of data.keys || []) map[k.kid] = k
+  _jwks = map
+  _jwksAt = Date.now()
+  return _jwks
+}
+
+async function pemForKid(kid) {
+  let jwks = await getJwks()
+  if (!jwks[kid]) jwks = await getJwks(true)  // key rotation — refresh once
+  const jwk = jwks[kid]
+  if (!jwk) return null
+  return crypto.createPublicKey({ key: jwk, format: 'jwk' }).export({ type: 'spki', format: 'pem' })
+}
+
+// Verify a Supabase access token, routing on its alg. Exported for tests.
+export async function verifySupabaseToken(token) {
+  const decoded = jwt.decode(token, { complete: true })
+  if (!decoded?.header) throw new Error('Malformed token')
+  const alg = decoded.header.alg
+  if (alg === 'HS256') {
+    if (!SUPABASE_JWT_SECRET) throw new Error('No HS256 secret configured')
+    return jwt.verify(token, SUPABASE_JWT_SECRET)
+  }
+  if (!SUPABASE_URL) throw new Error('SUPABASE_URL required for asymmetric token verification')
+  const pem = await pemForKid(decoded.header.kid)
+  if (!pem) throw new Error('No matching JWKS key')
+  return jwt.verify(token, pem, { algorithms: ['ES256', 'RS256', 'EdDSA'] })
 }
 
 function parseCookies(req) {
@@ -65,9 +108,9 @@ export async function requireAuth(req, res, next) {
   }
 
   // 1. Account-based (Supabase Auth) — preferred.
-  if (SUPABASE_JWT_SECRET) {
+  if (SUPABASE_URL || SUPABASE_JWT_SECRET) {
     try {
-      const payload = jwt.verify(token, SUPABASE_JWT_SECRET)
+      const payload = await verifySupabaseToken(token)
       const authId = payload.sub
       const email = payload.email || payload.user_metadata?.email || null
       const account = await ensureAccount(authId, email)

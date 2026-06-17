@@ -147,7 +147,12 @@
 
     // ── After Supabase auth: run the login confirmation code if required ──
     async function handleLoginThen2fa() {
-      await authFetch('/api/account/bootstrap', { method: 'POST' }).catch(() => {});
+      try {
+        await authFetch('/api/account/bootstrap', { method: 'POST' });
+      } catch (e) {
+        showError(errorEl, 'You signed in, but the server rejected the session. Try again in a moment — if it persists, the server auth config needs a look.');
+        return;
+      }
       let res;
       try { res = await authFetch('/api/account/2fa/start', { method: 'POST' }); }
       catch { return routeAfterAuth(); }   // if 2FA can't start, don't block sign-in

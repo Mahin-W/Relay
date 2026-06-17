@@ -65,8 +65,10 @@ export async function authFetch(path, { method = 'GET', body = null } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   })
   if (res.status === 401) {
-    window.location.href = '/login'
-    throw new Error('Unauthorized')
+    // Don't bounce to /login when we're already there — that creates a reload
+    // loop if the server rejects the session. Let the caller handle it.
+    if (!location.pathname.startsWith('/login')) window.location.href = '/login'
+    const e = new Error('Unauthorized'); e.status = 401; throw e
   }
   if (!res.ok) {
     const e = await res.json().catch(() => ({}))
