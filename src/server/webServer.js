@@ -17,9 +17,11 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
       'http://localhost:8888',
     ]
 
-export function startWebServer(bot, db) {
+// Builds the configured Express app (no listen/keep-alive). Exported so the
+// route ordering — notably the public /api/public-config sitting above the
+// auth-gated /api routers — is covered by tests.
+export function createApp(bot, db) {
   const app = express()
-  const port = process.env.PORT || 10000
 
   app.use(express.json())
   app.use(cookieParser())
@@ -34,6 +36,18 @@ export function startWebServer(bot, db) {
   app.locals.bot = bot
   app.locals.db = db
 
+  app.get('/health', (req, res) =>
+    res.json({ ok: true, service: 'relay', time: new Date().toISOString() }))
+
+  // Public config for the static frontend's Supabase Auth client. The anon key
+  // is safe to expose (RLS denies anon; see migration 008). MUST be registered
+  // before the auth-gated `/api` routers below, or they shadow it with a 401.
+  app.get('/api/public-config', (req, res) =>
+    res.json({
+      supabaseUrl: process.env.SUPABASE_URL || '',
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    }))
+
   app.use('/api/auth', authRoutes)
   app.use('/api/account', accountRoutes)  // account identity + Telegram linking codes
   app.use('/api', marketingRoutes)       // POST /api/waitlist — public, no auth
@@ -41,21 +55,17 @@ export function startWebServer(bot, db) {
   app.use('/api/dashboard', dashRoutes)  // legacy — dashboard.html uses these paths
   app.use('/api', dashRoutes)            // new — clean paths for updated clients
 
-  app.get('/health', (req, res) =>
-    res.json({ ok: true, service: 'relay', time: new Date().toISOString() }))
-
-  // Public config for the static frontend's Supabase Auth client. The anon key
-  // is safe to expose (RLS denies anon; see migration 008).
-  app.get('/api/public-config', (req, res) =>
-    res.json({
-      supabaseUrl: process.env.SUPABASE_URL || '',
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
-    }))
-
   app.get('/dashboard', (req, res) => res.sendFile(path.join(publicDir, 'dashboard.html')))
   app.get('/login', (req, res) => res.sendFile(path.join(publicDir, 'login.html')))
   app.get('/signup', (req, res) => res.sendFile(path.join(publicDir, 'login.html')))
   app.get('/onboarding', (req, res) => res.sendFile(path.join(publicDir, 'onboarding.html')))
+
+  return app
+}
+
+export function startWebServer(bot, db) {
+  const app = createApp(bot, db)
+  const port = process.env.PORT || 10000
 
   app.listen(port, () => console.log(`Web server on port ${port}`))
 
