@@ -12,19 +12,21 @@ export function emailConfigured() {
   return !!RESEND_API_KEY
 }
 
-export async function sendEmail({ to, subject, text }) {
+export async function sendEmail({ to, subject, text, html }) {
   if (!RESEND_API_KEY) {
     logger.error('sendEmail skipped — RESEND_API_KEY not set')
     return false
   }
   try {
+    const payload = { from: RESEND_FROM, to, subject, text }
+    if (html) payload.html = html
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: RESEND_FROM, to, subject, text }),
+      body: JSON.stringify(payload),
     })
     if (!res.ok) {
       logger.error(`sendEmail failed: ${res.status} ${await res.text().catch(() => '')}`)

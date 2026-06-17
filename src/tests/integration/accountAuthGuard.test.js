@@ -24,6 +24,7 @@ const { resetFakeClient, seedTable } = supabaseFake
 
 const dashRouter = (await import('../../server/dashRoutes.js')).default
 const accountRouter = (await import('../../server/accountRoutes.js')).default
+const { _clear: clear2fa } = await import('../../server/twoFactor.js')
 
 const AUTH_ID = '00000000-0000-0000-0000-000000000042'
 
@@ -105,6 +106,7 @@ describe('login confirmation code (2FA)', () => {
   // A connected account with 2FA on (default) and a Telegram DM on file.
   function seed2faAccount({ enabled = true } = {}) {
     resetFakeClient()
+    clear2fa()  // reset pending-code store so cooldown doesn't bleed across tests
     seedTable('accounts', [{ id: AUTH_ID, email: 'owner@shop.com', business_name: 'Bagels', setup_data: {}, login_2fa_enabled: enabled }])
     seedTable('setup_sessions', [{ group_id: 'grp-42', group_name: 'Bagels', account_id: AUTH_ID, setup_complete: true, dm_chat_id: 5551234 }])
   }
@@ -149,6 +151,17 @@ describe('login confirmation code (2FA)', () => {
     await request('POST', '/api/account/2fa/start', { token: supabaseToken(), bot })
     const verify = await request('POST', '/api/account/2fa/verify', { token: supabaseToken(), body: { code: '000000' } })
     assert.equal(verify.status, 401)
+  })
+
+  test('rapid re-starts reuse the code (no email flood)', async () => {
+    seed2faAccount()
+    const bot = botStub()
+    const first = await request('POST', '/api/account/2fa/start', { token: supabaseToken(), bot })
+    const second = await request('POST', '/api/account/2fa/start', { token: supabaseToken(), bot })
+    assert.equal(first.body.required, true)
+    assert.equal(second.body.required, true)
+    assert.equal(second.body.resent, false)
+    assert.equal(bot.sent.length, 1)  // only one code delivered despite two starts
   })
 
   test('with 2FA disabled the dashboard is not locked', async () => {

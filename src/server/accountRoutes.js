@@ -9,7 +9,7 @@ import {
   getLinkedGroup,
   getAccountTelegramDm,
 } from './db/accounts.js'
-import { generateCode, setCode, verifyCode } from './twoFactor.js'
+import { generateCode, setCode, verifyCode, withinCooldown, getPending } from './twoFactor.js'
 import { emailConfigured, sendEmail } from './email.js'
 
 const router = express.Router()
@@ -18,6 +18,24 @@ function maskEmail(email) {
   if (!email || !email.includes('@')) return 'your email'
   const [user, domain] = email.split('@')
   return `${user[0]}${'•'.repeat(Math.max(1, user.length - 1))}@${domain}`
+}
+
+// Branded HTML email for the login confirmation code (with a plain-text fallback).
+function loginCodeEmail(code) {
+  return {
+    subject: 'Your Relay login code',
+    text: `Your Relay login code is ${code}. It expires in 10 minutes. If you didn't try to sign in, you can ignore this email.`,
+    html: `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#FAF7F2;padding:32px 16px;">
+  <div style="max-width:440px;margin:0 auto;background:#FFFFFF;border:1px solid #E8DFD0;border-radius:16px;padding:40px 36px;text-align:center;">
+    <div style="font-size:22px;font-weight:800;color:#1C1410;letter-spacing:-0.02em;margin-bottom:6px;">Relay</div>
+    <div style="font-size:15px;color:#4A3F35;margin-bottom:28px;">Your login confirmation code</div>
+    <div style="font-size:36px;font-weight:800;letter-spacing:10px;color:#D95F2B;background:#FDF0E8;border-radius:12px;padding:18px 0;">${code}</div>
+    <div style="font-size:13px;color:#9A8880;line-height:1.6;margin-top:28px;">This code expires in 10 minutes.<br/>If you didn't try to sign in, you can safely ignore this email.</div>
+  </div>
+  <div style="text-align:center;color:#B8A99C;font-size:12px;margin-top:20px;">Relay · scheduling that runs on your team chat</div>
+</div>`,
+  }
 }
 
 // All account routes require an account-based (Supabase) session. Legacy
@@ -120,6 +138,12 @@ router.post('/2fa/start', requireAuth, requireAccount, async (req, res) => {
     const account = await getAccountByAuthId(req.manager.accountId)
     if (!account || account.login_2fa_enabled === false) return res.json({ required: false })
 
+    // Anti-flood: if a code was sent in the last minute, reuse it (no new email).
+    if (withinCooldown(account.id)) {
+      const p = getPending(account.id)
+      return res.json({ required: true, channel: p.channel, hint: p.hint, resent: false })
+    }
+
     const bot = req.app.locals.bot
     const dmChatId = await getAccountTelegramDm(account.id)
 
@@ -129,19 +153,19 @@ router.post('/2fa/start', requireAuth, requireAccount, async (req, res) => {
     if (!channel) return res.json({ required: false, reason: 'no_channel' })
 
     const code = generateCode()
-    setCode(account.id, code)
 
     if (channel === 'telegram') {
       await bot.sendMessage(dmChatId, `🔐 Your Relay login code: *${code}*\n\nExpires in 10 minutes.`, { parse_mode: 'Markdown' })
-      return res.json({ required: true, channel, hint: 'your Telegram' })
+      const hint = 'your Telegram'
+      setCode(account.id, code, { channel, hint })
+      return res.json({ required: true, channel, hint })
     }
-    const sent = await sendEmail({
-      to: account.email,
-      subject: 'Your Relay login code',
-      text: `Your Relay login code is ${code}. It expires in 10 minutes.`,
-    })
+
+    const sent = await sendEmail({ to: account.email, ...loginCodeEmail(code) })
     if (!sent) return res.json({ required: false, reason: 'no_channel' })
-    return res.json({ required: true, channel, hint: maskEmail(account.email) })
+    const hint = maskEmail(account.email)
+    setCode(account.id, code, { channel, hint })
+    return res.json({ required: true, channel, hint })
   } catch (err) {
     console.error('2fa start error:', err.message)
     res.status(500).json({ error: 'Could not send your login code — try again' })

@@ -4,19 +4,37 @@
 
 const store = new Map()
 const TTL_MS = 10 * 60 * 1000
+const RESEND_COOLDOWN_MS = 60 * 1000  // don't email a new code more than once/min
 const MAX_ATTEMPTS = 6
 
 export function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-export function setCode(accountId, code) {
-  store.set(accountId, { code, expiresAt: Date.now() + TTL_MS, attempts: 0 })
+// Store a freshly sent code along with how it was delivered (so a within-cooldown
+// re-request can report the same channel without resending).
+export function setCode(accountId, code, meta = {}) {
+  store.set(accountId, {
+    code,
+    expiresAt: Date.now() + TTL_MS,
+    sentAt: Date.now(),
+    attempts: 0,
+    channel: meta.channel || null,
+    hint: meta.hint || null,
+  })
 }
 
-export function hasPending(accountId) {
+// The current valid pending entry, or null.
+export function getPending(accountId) {
   const e = store.get(accountId)
-  return !!e && e.expiresAt > Date.now()
+  if (!e || e.expiresAt < Date.now()) return null
+  return e
+}
+
+// True if a code was sent recently — caller should reuse it instead of resending.
+export function withinCooldown(accountId) {
+  const e = getPending(accountId)
+  return !!e && Date.now() - e.sentAt < RESEND_COOLDOWN_MS
 }
 
 // Returns { ok:true } or { ok:false, reason }.
