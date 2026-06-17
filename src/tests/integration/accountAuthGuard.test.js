@@ -31,22 +31,27 @@ function supabaseToken(sub = AUTH_ID, email = 'owner@shop.com') {
   return jwt.sign({ sub, email, aud: 'authenticated', role: 'authenticated' }, process.env.SUPABASE_JWT_SECRET)
 }
 
-function app() {
+function twoFactorToken(accountId = AUTH_ID) {
+  return jwt.sign({ accountId, twofa: true }, process.env.JWT_SECRET)
+}
+
+function app(bot = null) {
   const a = express()
   a.use(express.json())
-  a.locals.bot = null
+  a.locals.bot = bot
   a.use('/api/account', accountRouter)
   a.use('/api/dashboard', dashRouter)  // legacy paths used by dashboard.html
   a.use('/api', dashRouter)            // clean paths
   return a
 }
 
-async function request(method, path, { token, body } = {}) {
-  const server = createServer(app())
+async function request(method, path, { token, body, bot = null, twofa } = {}) {
+  const server = createServer(app(bot))
   await new Promise(r => server.listen(0, r))
   const { port } = server.address()
   const headers = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = 'Bearer ' + token
+  if (twofa) headers['x-relay-2fa'] = twofa
   const res = await fetch(`http://127.0.0.1:${port}${path}`, {
     method, headers, body: body ? JSON.stringify(body) : undefined,
   })
@@ -55,10 +60,11 @@ async function request(method, path, { token, body } = {}) {
   return { status: res.status, body: data }
 }
 
+// Connect-guard tests isolate the group gate, so disable 2FA on the account.
 beforeEach(() => {
   resetFakeClient()
   // Auth trigger normally creates this; pre-seed for the test.
-  seedTable('accounts', [{ id: AUTH_ID, email: 'owner@shop.com', business_name: 'Bagels', setup_data: {} }])
+  seedTable('accounts', [{ id: AUTH_ID, email: 'owner@shop.com', business_name: 'Bagels', setup_data: {}, login_2fa_enabled: false }])
 })
 
 describe('account auth + pre-connect guard', () => {
@@ -92,5 +98,62 @@ describe('account auth + pre-connect guard', () => {
     const r = await request('POST', '/api/account/link-code', { token: supabaseToken() })
     assert.equal(r.status, 200)
     assert.ok(r.body.deepLink.includes('start=link_'))
+  })
+})
+
+describe('login confirmation code (2FA)', () => {
+  // A connected account with 2FA on (default) and a Telegram DM on file.
+  function seed2faAccount({ enabled = true } = {}) {
+    resetFakeClient()
+    seedTable('accounts', [{ id: AUTH_ID, email: 'owner@shop.com', business_name: 'Bagels', setup_data: {}, login_2fa_enabled: enabled }])
+    seedTable('setup_sessions', [{ group_id: 'grp-42', group_name: 'Bagels', account_id: AUTH_ID, setup_complete: true, dm_chat_id: 5551234 }])
+  }
+  function botStub() {
+    const sent = []
+    return { sent, sendMessage: async (chatId, text) => { sent.push({ chatId, text }) } }
+  }
+
+  test('dashboard is locked until the code is verified', async () => {
+    seed2faAccount()
+    const r = await request('GET', '/api/dashboard/overview', { token: supabaseToken() })
+    assert.equal(r.status, 401)
+    assert.equal(r.body.twoFactorRequired, true)
+  })
+
+  test('a valid 2FA token unlocks the dashboard', async () => {
+    seed2faAccount()
+    const r = await request('GET', '/api/dashboard/overview', { token: supabaseToken(), twofa: twoFactorToken() })
+    assert.equal(r.status, 200)
+  })
+
+  test('start sends a Telegram code, verify returns a working token', async () => {
+    seed2faAccount()
+    const bot = botStub()
+    const start = await request('POST', '/api/account/2fa/start', { token: supabaseToken(), bot })
+    assert.equal(start.body.required, true)
+    assert.equal(start.body.channel, 'telegram')
+    const code = String(bot.sent[0].text).match(/\b(\d{6})\b/)[1]
+
+    const verify = await request('POST', '/api/account/2fa/verify', { token: supabaseToken(), body: { code } })
+    assert.equal(verify.body.success, true)
+    assert.ok(verify.body.token)
+
+    // The returned token unlocks the dashboard.
+    const ov = await request('GET', '/api/dashboard/overview', { token: supabaseToken(), twofa: verify.body.token })
+    assert.equal(ov.status, 200)
+  })
+
+  test('wrong code is rejected', async () => {
+    seed2faAccount()
+    const bot = botStub()
+    await request('POST', '/api/account/2fa/start', { token: supabaseToken(), bot })
+    const verify = await request('POST', '/api/account/2fa/verify', { token: supabaseToken(), body: { code: '000000' } })
+    assert.equal(verify.status, 401)
+  })
+
+  test('with 2FA disabled the dashboard is not locked', async () => {
+    seed2faAccount({ enabled: false })
+    const r = await request('GET', '/api/dashboard/overview', { token: supabaseToken() })
+    assert.equal(r.status, 200)
   })
 })

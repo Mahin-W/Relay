@@ -8,6 +8,17 @@ import { manualClockOut, manualClockIn } from '../timeclock/clockOverride.js'
 const router = express.Router()
 router.use(requireAuth)
 
+// Two-factor gate: when an account has the login confirmation code enabled, the
+// dashboard stays fully locked (reads and writes) until the code is verified for
+// this session. The 2FA start/verify endpoints live in accountRoutes, which is a
+// separate router, so they remain reachable while this is unverified.
+router.use((req, res, next) => {
+  if (req.manager?.authType === 'account' && req.manager.twoFactorEnabled && !req.manager.twoFactorVerified) {
+    return res.status(401).json({ error: 'Confirm your login code to continue.', twoFactorRequired: true })
+  }
+  next()
+})
+
 // Account-centric gate: an account with no connected Telegram group has a null
 // groupId. Read (GET) requests are allowed — they return empty/zeroed views the
 // dashboard renders behind a "connect your team chat" banner. Mutations and

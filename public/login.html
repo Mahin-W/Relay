@@ -22,6 +22,7 @@
     .form-input { width: 100%; padding: 14px 16px; border: 1.5px solid #E8DFD0; border-radius: 8px; font-size: 16px; font-family: inherit; color: #1C1410; background: #FAF7F2; outline: none; transition: border-color 0.2s; }
     .form-input:focus { border-color: #D95F2B; }
     .form-input::placeholder { color: #9A8880; }
+    .code-input { letter-spacing: 10px; text-align: center; font-size: 24px; font-weight: 700; }
     .btn-primary { background: #D95F2B; color: #FFFFFF; border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 600; font-family: inherit; width: 100%; cursor: pointer; transition: background 0.2s; }
     .btn-primary:hover { background: #B84D20; }
     .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
@@ -35,6 +36,8 @@
     .error-message.visible { display: block; }
     .ok-message { display: none; color: #2e7d32; font-size: 14px; text-align: center; margin-top: 12px; line-height: 1.4; }
     .ok-message.visible { display: block; }
+    .step { display: none; }
+    .step.active { display: block; }
     .footer { background: #1C1410; padding: 40px 32px; text-align: center; }
     .footer-brand { font-size: 18px; font-weight: 800; color: #FFFFFF; margin-bottom: 8px; }
     .footer-tagline { font-size: 14px; color: #9A8880; }
@@ -63,33 +66,45 @@
           </svg>
         </div>
       </div>
-      <h1 id="title">Welcome back</h1>
-      <p class="subtitle" id="subtitle">Sign in to your Relay account</p>
 
-      <button type="button" class="btn-google" id="google-btn">
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
-        Continue with Google
-      </button>
+      <!-- Step 1: Google / email auth -->
+      <div id="step-auth" class="step active">
+        <h1 id="title">Welcome back</h1>
+        <p class="subtitle" id="subtitle">Sign in to your Relay account</p>
 
-      <div class="divider">or</div>
+        <button type="button" class="btn-google" id="google-btn">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+          Continue with Google
+        </button>
 
-      <div class="form-group">
-        <label class="form-label" for="email">Email</label>
-        <input type="email" class="form-input" id="email" placeholder="you@restaurant.com" autocomplete="email">
+        <div class="divider">or</div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Email</label>
+          <input type="email" class="form-input" id="email" placeholder="you@restaurant.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input type="password" class="form-input" id="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+
+        <button type="button" class="btn-primary" id="submit-btn">Sign in</button>
+        <p class="error-message" id="error"></p>
+        <p class="ok-message" id="ok"></p>
+        <p class="hint-text" id="toggle-hint">New to Relay? <a id="toggle-link">Create an account</a></p>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="password">Password</label>
-        <input type="password" class="form-input" id="password" placeholder="••••••••" autocomplete="current-password">
+
+      <!-- Step 2: Login confirmation code (2FA) -->
+      <div id="step-code" class="step">
+        <h1>Confirm it's you</h1>
+        <p class="subtitle" id="code-subtitle">We sent a 6-digit code.</p>
+        <input type="text" class="form-input code-input" id="code-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+        <div style="height:12px"></div>
+        <button type="button" class="btn-primary" id="verify-btn">Verify</button>
+        <p class="error-message" id="code-error"></p>
+        <p class="hint-text"><a id="resend-link">Resend code</a> &nbsp;·&nbsp; <a id="signout-link">Use a different account</a></p>
       </div>
 
-      <button type="button" class="btn-primary" id="submit-btn">Sign in</button>
-
-      <p class="error-message" id="error"></p>
-      <p class="ok-message" id="ok"></p>
-
-      <p class="hint-text" id="toggle-hint">
-        New to Relay? <a id="toggle-link">Create an account</a>
-      </p>
     </div>
   </main>
 
@@ -99,24 +114,19 @@
   </footer>
 
   <script type="module">
-    import { getSupabase, getAccessToken, routeAfterAuth } from './relayAuth.js';
+    import { getSupabase, getAccessToken, routeAfterAuth, authFetch, setTwoFactorToken, signOut } from './relayAuth.js';
 
-    const title = document.getElementById('title');
-    const subtitle = document.getElementById('subtitle');
-    const submitBtn = document.getElementById('submit-btn');
-    const googleBtn = document.getElementById('google-btn');
-    const emailEl = document.getElementById('email');
-    const passwordEl = document.getElementById('password');
-    const errorEl = document.getElementById('error');
-    const okEl = document.getElementById('ok');
-    const toggleHint = document.getElementById('toggle-hint');
-    const toggleLink = document.getElementById('toggle-link');
+    const $ = id => document.getElementById(id);
+    const stepAuth = $('step-auth'), stepCode = $('step-code');
+    const title = $('title'), subtitle = $('subtitle'), submitBtn = $('submit-btn'), googleBtn = $('google-btn');
+    const emailEl = $('email'), passwordEl = $('password'), errorEl = $('error'), okEl = $('ok');
+    const toggleHint = $('toggle-hint');
 
     let mode = location.pathname === '/signup' ? 'signup' : 'login';
 
-    function showError(msg) { errorEl.textContent = msg; errorEl.classList.add('visible'); okEl.classList.remove('visible'); }
-    function showOk(msg) { okEl.textContent = msg; okEl.classList.add('visible'); errorEl.classList.remove('visible'); }
+    function showError(el, msg) { el.textContent = msg; el.classList.add('visible'); }
     function clearMsg() { errorEl.classList.remove('visible'); okEl.classList.remove('visible'); }
+    function goToCodeStep() { stepAuth.classList.remove('active'); stepCode.classList.add('active'); }
 
     function applyMode() {
       if (mode === 'signup') {
@@ -132,63 +142,76 @@
         passwordEl.autocomplete = 'current-password';
         toggleHint.innerHTML = 'New to Relay? <a id="toggle-link">Create an account</a>';
       }
-      document.getElementById('toggle-link').addEventListener('click', toggleMode);
+      $('toggle-link').addEventListener('click', () => { mode = mode === 'login' ? 'signup' : 'login'; clearMsg(); applyMode(); });
     }
 
-    function toggleMode() {
-      mode = mode === 'login' ? 'signup' : 'login';
-      clearMsg();
-      applyMode();
+    // ── After Supabase auth: run the login confirmation code if required ──
+    async function handleLoginThen2fa() {
+      await authFetch('/api/account/bootstrap', { method: 'POST' }).catch(() => {});
+      let res;
+      try { res = await authFetch('/api/account/2fa/start', { method: 'POST' }); }
+      catch { return routeAfterAuth(); }   // if 2FA can't start, don't block sign-in
+      if (!res || !res.required) return routeAfterAuth();
+      $('code-subtitle').textContent = res.channel === 'telegram'
+        ? 'Enter the 6-digit code we sent to your Telegram.'
+        : `Enter the 6-digit code we emailed to ${res.hint}.`;
+      goToCodeStep();
+      $('code-input').focus();
     }
 
-    // If already signed in, route onward.
-    (async () => {
-      try { if (await getAccessToken()) await routeAfterAuth(); } catch {}
-    })();
+    async function verifyCode() {
+      const code = $('code-input').value.trim();
+      if (code.length < 6) { showError($('code-error'), 'Enter the 6-digit code.'); return; }
+      $('code-error').classList.remove('visible');
+      $('verify-btn').disabled = true; $('verify-btn').textContent = 'Verifying…';
+      try {
+        const r = await authFetch('/api/account/2fa/verify', { method: 'POST', body: { code } });
+        setTwoFactorToken(r.token);
+        await routeAfterAuth();
+      } catch (err) {
+        showError($('code-error'), err.message || 'Incorrect code.');
+        $('verify-btn').disabled = false; $('verify-btn').textContent = 'Verify';
+      }
+    }
+
+    // If already signed in, jump straight to the 2FA/route flow.
+    (async () => { try { if (await getAccessToken()) await handleLoginThen2fa(); } catch {} })();
 
     googleBtn.addEventListener('click', async () => {
       clearMsg();
       try {
         const sb = await getSupabase();
-        await sb.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: location.origin + '/onboarding' },
-        });
-      } catch (err) { showError(err.message || 'Could not start Google sign-in.'); }
+        await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + '/login' } });
+      } catch (err) { showError(errorEl, err.message || 'Could not start Google sign-in.'); }
     });
 
     submitBtn.addEventListener('click', async () => {
       clearMsg();
-      const email = emailEl.value.trim();
-      const password = passwordEl.value;
-      if (!email || !password) { showError('Enter your email and password.'); return; }
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
+      const email = emailEl.value.trim(), password = passwordEl.value;
+      if (!email || !password) { showError(errorEl, 'Enter your email and password.'); return; }
+      submitBtn.disabled = true; submitBtn.textContent = mode === 'signup' ? 'Creating…' : 'Signing in…';
       try {
         const sb = await getSupabase();
         if (mode === 'signup') {
           const { data, error } = await sb.auth.signUp({ email, password });
           if (error) throw error;
-          if (!data.session) {
-            showOk('Check your email to confirm your account, then sign in.');
-            mode = 'login'; applyMode();
-            return;
-          }
-          await routeAfterAuth();
+          if (!data.session) { okEl.textContent = 'Check your email to confirm your account, then sign in.'; okEl.classList.add('visible'); mode = 'login'; applyMode(); return; }
         } else {
           const { error } = await sb.auth.signInWithPassword({ email, password });
           if (error) throw error;
-          await routeAfterAuth();
         }
+        await handleLoginThen2fa();
       } catch (err) {
-        showError(err.message || 'Something went wrong — try again.');
+        showError(errorEl, err.message || 'Something went wrong — try again.');
       } finally {
-        submitBtn.disabled = false;
-        applyMode();
+        submitBtn.disabled = false; applyMode();
       }
     });
 
+    $('verify-btn').addEventListener('click', verifyCode);
+    $('code-input').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, ''); if (e.target.value.length === 6) verifyCode(); });
+    $('resend-link').addEventListener('click', () => handleLoginThen2fa());
+    $('signout-link').addEventListener('click', () => signOut('/login'));
     passwordEl.addEventListener('keydown', e => { if (e.key === 'Enter') submitBtn.click(); });
     applyMode();
   </script>

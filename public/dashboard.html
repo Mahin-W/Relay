@@ -7,8 +7,9 @@
   <link rel="icon" type="image/svg+xml" href="relay-favicon.svg" />
   <!-- Supabase Auth bootstrap: exposes token getter + sign-out, redirects if no session. -->
   <script type="module">
-    import { getAccessToken, requireSession, signOut } from './relayAuth.js';
+    import { getAccessToken, requireSession, signOut, getTwoFactorToken } from './relayAuth.js';
     window.__relayGetToken = getAccessToken;
+    window.__relayGet2fa = getTwoFactorToken;
     window.__relaySignOut = () => signOut('/login');
     window.__relayAuthReady = requireSession('/login');
   </script>
@@ -2295,6 +2296,8 @@
       const token = window.__relayGetToken ? await window.__relayGetToken() : null;
       const headers = { ...base };
       if (token) headers['Authorization'] = 'Bearer ' + token;
+      const twofa = window.__relayGet2fa ? window.__relayGet2fa() : null;
+      if (twofa) headers['x-relay-2fa'] = twofa;
       return headers;
     }
 
@@ -5097,6 +5100,8 @@
     async function loadSettingsPage() {
       try {
         const config = await api('/api/settings/full');
+        const acct = await api('/api/account').catch(() => null);
+        if (acct) { config.hasAccount = true; config.twoFactorEnabled = acct.twoFactorEnabled !== false; }
         renderSettingsPage(config || {});
         // Restore dark-mode toggle visual state after render
         const darkOn = document.documentElement.classList.contains('dark');
@@ -5184,6 +5189,19 @@
       }
     }
 
+    async function toggleTwoFactor() {
+      const toggle = document.getElementById('twofa-toggle');
+      if (!toggle) return;
+      const isCurrentlyOn = toggle.classList.contains('on');
+      try {
+        await api('/api/account', 'PATCH', { twoFactorEnabled: !isCurrentlyOn });
+        toggle.classList.toggle('on');
+        showToast(isCurrentlyOn ? 'Login confirmation code disabled' : 'Login confirmation code enabled');
+      } catch (e) {
+        showToast(e.message || 'Failed to update', 'error');
+      }
+    }
+
     async function toggleNavPage(pageId) {
       const toggle = document.getElementById(`nav-toggle-${pageId}`);
       if (!toggle) return;
@@ -5231,8 +5249,21 @@
           <button data-target="shifts"      onclick="scrollToSection(this)">Shifts</button>
           <button data-target="shift-reqs"  onclick="scrollToSection(this)">Requirements</button>
           <button data-target="rules"       onclick="scrollToSection(this)">Rules</button>
+          ${config.hasAccount ? '<button data-target="security" onclick="scrollToSection(this)">Security</button>' : ''}
           <button data-target="account"     onclick="scrollToSection(this)">Account</button>
         </div>
+
+        ${config.hasAccount ? `
+        <div class="settings-section" id="security">
+          <div class="settings-section-title">Security</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Login confirmation code</div>
+              <div class="setting-desc">Require a one-time code at login — sent to your Telegram, or your email if Telegram isn't connected. Recommended.</div>
+            </div>
+            <div class="toggle ${config.twoFactorEnabled ? 'on' : ''}" id="twofa-toggle" onclick="toggleTwoFactor()"></div>
+          </div>
+        </div>` : ''}
 
         <div class="settings-section" id="appearance">
           <div class="settings-section-title">Appearance</div>

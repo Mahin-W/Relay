@@ -33,6 +33,12 @@ services:
       # account linking code (?start=link_<code>) and add-to-group button.
       - key: BOT_USERNAME
         sync: false
+      # Login 2FA email fallback (Resend) for accounts with no Telegram linked.
+      # Optional — without it, 2FA sends only via Telegram.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
       # Optional — proxy target for the landing-page waitlist form.
       - key: WAITLIST_GAS_URL
         sync: false

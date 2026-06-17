@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   business_name       TEXT,
   setup_data          JSONB DEFAULT '{}'::jsonb,
   onboarding_complete BOOLEAN DEFAULT false,
+  login_2fa_enabled   BOOLEAN DEFAULT true,  -- login confirmation code (migration 011)
   created_at          TIMESTAMPTZ DEFAULT now(),
   updated_at          TIMESTAMPTZ DEFAULT now()
 );

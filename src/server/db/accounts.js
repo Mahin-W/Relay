@@ -84,6 +84,44 @@ export async function getLinkedGroup(accountId) {
   }
 }
 
+// The Telegram DM chat id for an account's owner, if reachable — used to deliver
+// the login confirmation code. Prefers the connected group's recorded dm_chat_id,
+// then falls back to the linked Telegram user's staff_dms entry.
+export async function getAccountTelegramDm(accountId) {
+  try {
+    const { data: sess } = await getDb()
+      .from('setup_sessions')
+      .select('dm_chat_id')
+      .eq('account_id', accountId)
+      .not('dm_chat_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (sess?.dm_chat_id) return sess.dm_chat_id
+
+    const { data: link } = await getDb()
+      .from('account_links')
+      .select('telegram_user_id')
+      .eq('account_id', accountId)
+      .not('telegram_user_id', 'is', null)
+      .order('used_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (link?.telegram_user_id) {
+      const { data: dm } = await getDb()
+        .from('staff_dms')
+        .select('dm_chat_id')
+        .eq('user_id', link.telegram_user_id)
+        .maybeSingle()
+      return dm?.dm_chat_id ?? null
+    }
+    return null
+  } catch (err) {
+    logger.error(`getAccountTelegramDm failed: ${err.message}`)
+    return null
+  }
+}
+
 // ── Account links (one-time deep-link codes) ─────────────────────────────────
 
 function generateLinkCode() {

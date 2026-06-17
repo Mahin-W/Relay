@@ -1,5 +1,5 @@
 import express from 'express'
-import { requireAuth } from './middleware.js'
+import { requireAuth, signTwoFactorToken, setTwoFactorCookie } from './middleware.js'
 import {
   getAccountByAuthId,
   ensureAccount,
@@ -7,9 +7,18 @@ import {
   updateAccountSetupData,
   createAccountLink,
   getLinkedGroup,
+  getAccountTelegramDm,
 } from './db/accounts.js'
+import { generateCode, setCode, verifyCode } from './twoFactor.js'
+import { emailConfigured, sendEmail } from './email.js'
 
 const router = express.Router()
+
+function maskEmail(email) {
+  if (!email || !email.includes('@')) return 'your email'
+  const [user, domain] = email.split('@')
+  return `${user[0]}${'•'.repeat(Math.max(1, user.length - 1))}@${domain}`
+}
 
 // All account routes require an account-based (Supabase) session. Legacy
 // phone-OTP sessions have no accountId and are rejected here.
@@ -44,6 +53,7 @@ router.get('/', requireAuth, requireAccount, async (req, res) => {
       businessName: account.business_name,
       setupData: account.setup_data || {},
       onboardingComplete: account.onboarding_complete,
+      twoFactorEnabled: account.login_2fa_enabled !== false,
       connected: !!req.manager.groupId,
     })
   } catch (err) {
@@ -55,10 +65,11 @@ router.get('/', requireAuth, requireAccount, async (req, res) => {
 // PATCH /api/account — update business name and/or merge a setup_data patch.
 router.patch('/', requireAuth, requireAccount, async (req, res) => {
   try {
-    const { businessName, setupData, onboardingComplete } = req.body || {}
+    const { businessName, setupData, onboardingComplete, twoFactorEnabled } = req.body || {}
     const updates = {}
     if (typeof businessName === 'string') updates.business_name = businessName
     if (typeof onboardingComplete === 'boolean') updates.onboarding_complete = onboardingComplete
+    if (typeof twoFactorEnabled === 'boolean') updates.login_2fa_enabled = twoFactorEnabled
 
     if (Object.keys(updates).length) {
       await updateAccount(req.manager.accountId, updates)
@@ -95,6 +106,68 @@ router.post('/link-code', requireAuth, requireAccount, async (req, res) => {
     })
   } catch (err) {
     console.error('link-code error:', err.message)
+    res.status(500).json({ error: 'Something went wrong — try again' })
+  }
+})
+
+// POST /api/account/2fa/start — send a login confirmation code, if required.
+// Returns { required:false } when 2FA is off, already verified this session, or
+// no delivery channel is available (fail-open so owners aren't locked out).
+router.post('/2fa/start', requireAuth, requireAccount, async (req, res) => {
+  try {
+    if (req.manager.twoFactorVerified) return res.json({ required: false })
+
+    const account = await getAccountByAuthId(req.manager.accountId)
+    if (!account || account.login_2fa_enabled === false) return res.json({ required: false })
+
+    const bot = req.app.locals.bot
+    const dmChatId = await getAccountTelegramDm(account.id)
+
+    let channel = null
+    if (dmChatId && bot) channel = 'telegram'
+    else if (account.email && emailConfigured()) channel = 'email'
+    if (!channel) return res.json({ required: false, reason: 'no_channel' })
+
+    const code = generateCode()
+    setCode(account.id, code)
+
+    if (channel === 'telegram') {
+      await bot.sendMessage(dmChatId, `🔐 Your Relay login code: *${code}*\n\nExpires in 10 minutes.`, { parse_mode: 'Markdown' })
+      return res.json({ required: true, channel, hint: 'your Telegram' })
+    }
+    const sent = await sendEmail({
+      to: account.email,
+      subject: 'Your Relay login code',
+      text: `Your Relay login code is ${code}. It expires in 10 minutes.`,
+    })
+    if (!sent) return res.json({ required: false, reason: 'no_channel' })
+    return res.json({ required: true, channel, hint: maskEmail(account.email) })
+  } catch (err) {
+    console.error('2fa start error:', err.message)
+    res.status(500).json({ error: 'Could not send your login code — try again' })
+  }
+})
+
+// POST /api/account/2fa/verify — check the code and unlock the session.
+router.post('/2fa/verify', requireAuth, requireAccount, async (req, res) => {
+  try {
+    const { code } = req.body || {}
+    if (!code) return res.status(400).json({ error: 'Enter the code' })
+    const result = verifyCode(req.manager.accountId, String(code).trim())
+    if (!result.ok) {
+      const msgs = {
+        none: 'No code requested — start again.',
+        expired: 'That code expired — request a new one.',
+        too_many: 'Too many attempts — request a new code.',
+        incorrect: 'Incorrect code.',
+      }
+      return res.status(401).json({ error: msgs[result.reason] || 'Verification failed', reason: result.reason })
+    }
+    const token = signTwoFactorToken(req.manager.accountId)
+    setTwoFactorCookie(res, token)
+    res.json({ success: true, token })
+  } catch (err) {
+    console.error('2fa verify error:', err.message)
     res.status(500).json({ error: 'Something went wrong — try again' })
   }
 })

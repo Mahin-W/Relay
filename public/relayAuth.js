@@ -37,7 +37,17 @@ export async function signOut(redirect = '/login') {
     const sb = await getSupabase()
     await sb.auth.signOut()
   } catch { /* ignore */ }
+  try { localStorage.removeItem('relay_2fa') } catch {}
   window.location.href = redirect
+}
+
+// Login confirmation code (2FA) proof, stored after /2fa/verify and sent as a
+// header on every authed request (more robust than a cross-origin cookie).
+export function getTwoFactorToken() {
+  try { return localStorage.getItem('relay_2fa') } catch { return null }
+}
+export function setTwoFactorToken(token) {
+  try { token ? localStorage.setItem('relay_2fa', token) : localStorage.removeItem('relay_2fa') } catch {}
 }
 
 // Authenticated fetch helper — attaches the Supabase access token as a Bearer.
@@ -45,6 +55,8 @@ export async function authFetch(path, { method = 'GET', body = null } = {}) {
   const token = await getAccessToken()
   const headers = {}
   if (token) headers['Authorization'] = 'Bearer ' + token
+  const twofa = getTwoFactorToken()
+  if (twofa) headers['x-relay-2fa'] = twofa
   if (body) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, {
     method,

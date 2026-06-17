@@ -15,18 +15,47 @@ if (!SUPABASE_JWT_SECRET) {
   console.warn('⚠️ SUPABASE_JWT_SECRET is not set — account-based login is disabled; only legacy phone-OTP sessions will work.')
 }
 
-function extractToken(req) {
+function parseCookies(req) {
   const cookieStr = req.headers.cookie || ''
-  const cookies = Object.fromEntries(
+  return Object.fromEntries(
     cookieStr.split(';').map(c => {
       const [k, ...v] = c.trim().split('=')
       return [k, v.join('=')]
     }).filter(([k]) => k)
   )
+}
+
+function extractToken(req) {
+  const cookies = parseCookies(req)
   return req.headers.authorization?.replace('Bearer ', '')
     || cookies.relay_session
     || cookies['sb-access-token']
     || null
+}
+
+// Proof that the login confirmation code was entered this session. Signed with
+// JWT_SECRET; the frontend also sends it as the x-relay-2fa header for
+// cross-origin requests where the cookie may not ride along.
+function readTwoFactor(req, accountId) {
+  const token = req.headers['x-relay-2fa'] || parseCookies(req).relay_2fa
+  if (!token) return false
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    return payload.twofa === true && String(payload.accountId) === String(accountId)
+  } catch {
+    return false
+  }
+}
+
+export function signTwoFactorToken(accountId) {
+  return jwt.sign({ accountId, twofa: true }, JWT_SECRET, { expiresIn: '24h' })
+}
+
+// Session cookie (no Max-Age) so closing the browser forces re-verification next
+// login, honoring "a code each login".
+export function setTwoFactorCookie(res, token) {
+  res.setHeader('Set-Cookie',
+    `relay_2fa=${token}; HttpOnly; Secure; SameSite=Lax; Path=/`)
 }
 
 export async function requireAuth(req, res, next) {
@@ -50,6 +79,9 @@ export async function requireAuth(req, res, next) {
         email,
         groupId: group?.group_id ?? null,
         restaurantName: group?.group_name || account?.business_name || 'Your Restaurant',
+        // Login confirmation code (2FA). Default on; owners disable in Settings.
+        twoFactorEnabled: account?.login_2fa_enabled !== false,
+        twoFactorVerified: readTwoFactor(req, authId),
       }
       return next()
     } catch (e) {
