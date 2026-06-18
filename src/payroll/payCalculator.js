@@ -1,5 +1,8 @@
 // Pure pay calculation functions — no DB, no Groq.
 
+// P1-24: minimum wage floor for late-deduction capping (US federal default).
+const MIN_WAGE = Number(process.env.MIN_WAGE) || 7.25
+
 function parseTimeToMinutes(timeStr) {
   if (!timeStr) return 0
   const s = String(timeStr).trim().toLowerCase().replace(/\s+/g, ' ')
@@ -56,10 +59,26 @@ export function calculateShiftPay(shift, role, lateMinutes = 0, partialFrom = nu
   // Step 2 — deduct late time
   const lateHours = (lateMinutes ?? 0) / 60
   const effectiveHours = Math.max(0, hoursWorked - lateHours)
-  const lateDeduction = round2((hoursWorked - effectiveHours) * hourlyRate)
 
-  // Step 3 — gross pay
-  const grossPay = round2(effectiveHours * hourlyRate)
+  // Step 3 — gross pay, floored at minimum wage for hours actually worked (P1-24).
+  // The late deduction may not reduce effective $/hr below MIN_WAGE for hours the
+  // employee was present. If lateMinutes >= hoursWorked (entire shift missed), no
+  // floor applies (effectiveHours = 0, employee was absent, grossPay stays $0).
+  // Guard: if hourlyRate itself is below MIN_WAGE we must not inflate above full pay.
+  const rawGross = round2(effectiveHours * hourlyRate)
+  const fullPay = round2(hoursWorked * hourlyRate)
+  let grossPay, lateDeduction
+  if (effectiveHours > 0) {
+    const minWageFloor = round2(MIN_WAGE * hoursWorked)
+    // cappedFloor: the floor we actually apply — never exceeds what would be paid for full hours
+    const cappedFloor = Math.min(minWageFloor, fullPay)
+    grossPay = Math.max(rawGross, cappedFloor)
+    lateDeduction = round2(fullPay - grossPay)
+  } else {
+    // Employee was absent for the entire shift — no floor, no pay
+    grossPay = 0
+    lateDeduction = fullPay
+  }
 
   const breakdown = `${shift.name ?? 'Shift'} (${shift.dayOfWeek ?? ''}) — ${hoursScheduled.toFixed(1)}hrs @ $${hourlyRate}/hr`
 

@@ -181,4 +181,69 @@ await Promise.all([
     const result = calculateWeeklyPay([], [], [{ roleName: 'Server', hourlyRate: 15 }])
     assert.equal(result.length, 0)
   }),
+
+  // ── P1-24: late deduction must not pull gross below minimum-wage floor ────────
+
+  test('calculateShiftPay: large lateMinutes floors grossPay at MIN_WAGE * hoursWorked (P1-24)', () => {
+    // 4-hour shift at $10/hr = $40.00 full pay.
+    // 180 late minutes (3 hrs) → effectiveHours=1, grossPay=1*10=$10.
+    // MIN_WAGE default=7.25; floor=7.25*4=$29.00.
+    // $10 < $29, so grossPay must be clamped to $29.00.
+    // lateDeduction = round2(4*10 - 29) = $11.00 (not $30).
+    const result = calculateShiftPay(
+      shift('Morning', 'Wednesday', '8:00 AM', '12:00 PM'),
+      role('Cook', 10),
+      180  // 3 hrs late on a 4-hr shift → would normally pay only 1hr=$10
+    )
+    const hoursWorked = 4  // total shift hours (hoursScheduled)
+    const minWage = Number(process.env.MIN_WAGE) || 7.25
+    const floor = Math.round(minWage * hoursWorked * 100) / 100  // 29.00
+    // grossPay must not drop below the min-wage floor
+    assert.ok(
+      result.grossPay >= floor - 0.005,
+      `grossPay ${result.grossPay} should be >= min-wage floor ${floor}`
+    )
+    // lateDeduction must be correspondingly reduced (= fullPay - cappedGross)
+    const fullPay = Math.round(hoursWorked * 10 * 100) / 100  // 40.00
+    const expectedDeduction = Math.round((fullPay - result.grossPay) * 100) / 100
+    assert.ok(
+      Math.abs(result.lateDeduction - expectedDeduction) < 0.01,
+      `lateDeduction should be ${expectedDeduction}, got ${result.lateDeduction}`
+    )
+    // grossPay + lateDeduction should equal full hours * rate
+    const total = Math.round((result.grossPay + result.lateDeduction) * 100) / 100
+    assert.ok(
+      Math.abs(total - fullPay) < 0.01,
+      `grossPay + lateDeduction should equal fullPay (${fullPay}), got ${total}`
+    )
+  }),
+
+  test('calculateShiftPay: normal late deduction (not floored) still works (P1-24)', () => {
+    // 8-hour shift at $15/hr, 30 min late. effectiveHours=7.5, grossPay=112.50.
+    // floor=7.25*8=$58.00. 112.50 > 58.00 → no clamping. Same as before.
+    const result = calculateShiftPay(
+      shift('Morning', 'Monday', '9:00 AM', '5:00 PM'),
+      role('Chef', 15),
+      30
+    )
+    assert.ok(Math.abs(result.grossPay - 112.50) < 0.01, `expected 112.50, got ${result.grossPay}`)
+    assert.ok(Math.abs(result.lateDeduction - 7.50) < 0.01, `expected 7.50, got ${result.lateDeduction}`)
+  }),
+
+  test('calculateShiftPay: hourlyRate below MIN_WAGE — floor never inflates above full pay (P1-24)', () => {
+    // 4-hour shift at $5/hr (below min wage). Full pay = 4*5=$20.
+    // floor = MIN_WAGE*4 = 7.25*4=$29. But we must never pay MORE than full hours×rate.
+    // Guard: cappedGross = Math.min(floor, hoursWorked*hourlyRate) = min(29,20) = 20.
+    // So even with a large late penalty, grossPay should not exceed $20.
+    const result = calculateShiftPay(
+      shift('Short', 'Monday', '9:00 AM', '1:00 PM'),
+      role('Trainee', 5),
+      60   // 1 hr late → effectiveHours=3, grossPay=15 without floor
+    )
+    const fullPay = 4 * 5  // 20.00 — full hours at rate
+    assert.ok(
+      result.grossPay <= fullPay + 0.005,
+      `grossPay ${result.grossPay} must not exceed fullPay ${fullPay} even when hourlyRate < MIN_WAGE`
+    )
+  }),
 ])
