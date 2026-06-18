@@ -52,8 +52,8 @@ function makeThenableChain(resolveWith) {
 
 function makeHistoryDb(history) {
   const staffData = [
-    { telegram_id: 'marcus_1', name: 'Marcus' },
-    { telegram_id: 'reliable_1', name: 'Sarah' },
+    { telegram_user_id: 'marcus_1', name: 'Marcus' },
+    { telegram_user_id: 'reliable_1', name: 'Sarah' },
   ]
   return {
     from: (table) => {
@@ -66,7 +66,7 @@ function makeHistoryDb(history) {
           }),
         }
       }
-      if (table === 'staff_members') {
+      if (table === 'staff') {
         return {
           select: () => makeThenableChain(() => ({ data: staffData, error: null })),
         }
@@ -99,12 +99,12 @@ function makeInsertDb() {
 // Mock DB for detectStatedVsActualGap — returns per-staff histories
 function makeGapDb(staffHistories) {
   const staffData = Object.entries(staffHistories).map(([id, h]) => ({
-    telegram_id: id,
+    telegram_user_id: id,
     name: h.name || id,
   }))
   return {
     from: (table) => {
-      if (table === 'staff_members') {
+      if (table === 'staff') {
         return {
           select: () => makeThenableChain(() => ({ data: staffData, error: null })),
         }

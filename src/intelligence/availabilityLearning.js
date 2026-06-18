@@ -81,9 +81,9 @@ export async function calculateReliableAvailability(staffId, groupId, weeksBack 
   let staffName = staffId
   try {
     const { data: members } = await client
-      .from('staff_members')
+      .from('staff')
       .select('name')
-      .eq('telegram_id', staffId)
+      .eq('telegram_user_id', staffId)
       .eq('group_id', groupId)
     if (members && members.length > 0) staffName = members[0].name
   } catch {
@@ -168,8 +168,8 @@ export async function detectStatedVsActualGap(groupId, db = null) {
   let staffMembers
   try {
     const { data } = await client
-      .from('staff_members')
-      .select('telegram_id, name')
+      .from('staff')
+      .select('telegram_user_id, name')
       .eq('group_id', groupId)
       .order('name')
     staffMembers = data || []
@@ -182,7 +182,7 @@ export async function detectStatedVsActualGap(groupId, db = null) {
   const results = []
   for (const member of staffMembers) {
     const reliability = await calculateReliableAvailability(
-      member.telegram_id, groupId, 8, client
+      member.telegram_user_id, groupId, 8, client
     )
     if (reliability.weeksAnalyzed < 4) continue
 

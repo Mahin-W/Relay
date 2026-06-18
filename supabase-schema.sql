@@ -1,5 +1,11 @@
 -- Relay Bot — Complete Supabase Schema
 -- Run this in Supabase SQL Editor → New Query → Run
+--
+-- 47 tables, verified to match the live database exactly (no drift).
+-- Last reconciled 2026-06-18: removed dead/duplicate tables (login_otps,
+-- platform_contacts, schedule_quality_scores) and concept-duplicate tables that
+-- never existed in the DB (staff_members → use `staff`; coverage_confirmations →
+-- derive from `coverage_requests`).
 
 -- ═══════════════════════════════════════════════════════════════
 -- SETUP TABLES
@@ -475,7 +481,6 @@ CREATE INDEX IF NOT EXISTS idx_demand_signals_group_week
 -- ═══════════════════════════════════════════════════════════════
 
 -- weekly_quality_scores — per-week schedule quality grade
--- Note: superseded `schedule_quality_scores`; both names accepted for back-compat.
 CREATE TABLE IF NOT EXISTS weekly_quality_scores (
   id BIGSERIAL PRIMARY KEY,
   group_id TEXT NOT NULL,
@@ -564,20 +569,6 @@ CREATE TABLE IF NOT EXISTS discovered_patterns (
 CREATE INDEX IF NOT EXISTS idx_discovered_patterns_group
   ON discovered_patterns(group_id, status);
 
--- coverage_confirmations — historical record of who covered which shift
-CREATE TABLE IF NOT EXISTS coverage_confirmations (
-  id BIGSERIAL PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  request_id BIGINT REFERENCES coverage_requests(id) ON DELETE CASCADE,
-  staff_id BIGINT REFERENCES staff(id) ON DELETE SET NULL,
-  covered_by TEXT,
-  response_minutes INTEGER,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_coverage_confirmations_group
-  ON coverage_confirmations(group_id, created_at DESC);
-
 -- staff_availability_windows — bounded availability (days + before/after time)
 CREATE TABLE IF NOT EXISTS staff_availability_windows (
   id BIGSERIAL PRIMARY KEY,
@@ -589,21 +580,6 @@ CREATE TABLE IF NOT EXISTS staff_availability_windows (
   updated_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now()
 );
-
--- staff_members — registered staff identity (telegram_id ↔ staff link)
--- Used by availability learning. Distinct from `staff` (which is the roster).
-CREATE TABLE IF NOT EXISTS staff_members (
-  id BIGSERIAL PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
-  telegram_id BIGINT,
-  name TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(group_id, telegram_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_staff_members_group_telegram
-  ON staff_members(group_id, telegram_id);
 
 -- availability_outcomes — per-day comparison of stated vs actual availability
 CREATE TABLE IF NOT EXISTS availability_outcomes (
@@ -659,11 +635,11 @@ BEGIN
       'business_rules', 'schedule_edit_events', 'learned_preferences', 'morale_events',
       'demand_signals', 'partial_coverage',
       -- Tables added in the schema reconciliation pass
-      'tip_records', 'recognition_events', 'schedule_quality_scores',
+      'tip_records', 'recognition_events',
       'daily_revenue', 'revenue_types',
       'weekly_quality_scores', 'restaurant_tip_settings', 'cross_training',
-      'recurring_constraints', 'discovered_patterns', 'coverage_confirmations',
-      'staff_availability_windows', 'staff_members', 'availability_outcomes'
+      'recurring_constraints', 'discovered_patterns',
+      'staff_availability_windows', 'availability_outcomes'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
@@ -673,21 +649,6 @@ BEGIN
     );
   END LOOP;
 END $$;
-
--- Platform contacts (multi-platform identity mapping)
-CREATE TABLE IF NOT EXISTS platform_contacts (
-  id BIGSERIAL PRIMARY KEY,
-  staff_id BIGINT REFERENCES staff(id) ON DELETE CASCADE,
-  platform TEXT NOT NULL CHECK (platform IN ('telegram','sms','whatsapp')),
-  platform_user_id TEXT NOT NULL,
-  platform_chat_id TEXT,
-  display_name TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(platform, platform_user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_platform_contacts_staff ON platform_contacts(staff_id);
-
-ALTER TABLE platform_contacts ENABLE ROW LEVEL SECURITY;
 
 -- ═══════════════════════════════════════════════════════════════
 -- TIPS, RECOGNITION & SCHEDULE QUALITY
@@ -712,19 +673,6 @@ CREATE TABLE IF NOT EXISTS recognition_events (
   recipient_name TEXT,
   message TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS schedule_quality_scores (
-  id BIGSERIAL PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  week_start DATE NOT NULL,
-  score INTEGER CHECK (score >= 0 AND score <= 100),
-  grade TEXT,
-  draft_edits INTEGER DEFAULT 0,
-  coverage_requests INTEGER DEFAULT 0,
-  no_shows INTEGER DEFAULT 0,
-  avg_fill_minutes INTEGER,
-  UNIQUE(group_id, week_start)
 );
 
 -- ═══════════════════════════════════════════════════════════════

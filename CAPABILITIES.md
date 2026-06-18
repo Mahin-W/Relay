@@ -117,7 +117,8 @@ Last updated: 2026-06-18
 
 ## Database Tables
 
-Tables referenced across the codebase (some created via SQL migrations, not all in base schema):
+Key tables — a representative subset of the 47-table schema. Full, authoritative
+definitions (kept in sync with the live database) live in `supabase-schema.sql`.
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
@@ -143,9 +144,8 @@ Tables referenced across the codebase (some created via SQL migrations, not all 
 | staff_reliability_events | Reliability event log | staff_id, group_id, event_type, recorded_at, metadata |
 | on_call | On-call records | staff_id, group_id, week_start, days, all_week |
 | onboarding_pending | New hire onboarding tracking | group_id, name, role, start_date, status, announced_at, completed_at |
-| payroll | Payroll records | group_id, week_start, staff pay summaries |
-| partial_coverage | Partial shift coverage | request_id, volunteer, from_time, until_time |
-| rotation_scores | Rotation fairness data | Used by rotationTracker for equity tracking |
+| payroll_records | Payroll records | group_id, staff_id, week_start, total_hours, total_gross_pay, shift_breakdown (JSONB) |
+| partial_coverage | Partial shift coverage | coverage_request_id, staff_id, staff_name, cover_from, cover_until |
 
 ## Environment Variables
 

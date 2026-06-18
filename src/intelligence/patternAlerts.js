@@ -145,12 +145,25 @@ export async function analyzeOnCallCandidates(groupId, db = null) {
   if (db?.getOnCallHistory) {
     rows = await db.getOnCallHistory(groupId)
   } else {
+    // Derive coverage/response history from coverage_requests — the canonical
+    // table. (`coverage_confirmations` was a duplicate concept that never existed
+    // in the DB; covered_by / created_at / covered_at on coverage_requests hold
+    // the same data.) There's no per-coverer id column, so key by coverer name.
     const { data, error } = await getDb()
-      .from('coverage_confirmations')
-      .select('covered_by, staff_id, response_minutes, created_at')
+      .from('coverage_requests')
+      .select('covered_by, created_at, covered_at, status')
       .eq('group_id', groupId)
+      .eq('status', 'covered')
+      .not('covered_at', 'is', null)
     if (error) throw error
-    rows = data || []
+    rows = (data || [])
+      .filter((r) => r.covered_by && r.created_at && r.covered_at)
+      .map((r) => ({
+        staff_id: r.covered_by,
+        covered_by: r.covered_by,
+        response_minutes: Math.round((new Date(r.covered_at) - new Date(r.created_at)) / 60000),
+        created_at: r.created_at,
+      }))
   }
 
   if (rows.length === 0) return []
