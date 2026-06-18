@@ -33,6 +33,16 @@ test('preFilter edge cases', async (t) => {
     t.test("'otw' → no skip (on the way)", () => assert.equal(shouldSkip('otw'), false)),
     t.test("'wdym' → no skip (asking for clarification about a shift)", () => assert.equal(shouldSkip('wdym'), false)),
 
+    // ── SLANG CONFIRMATIONS — must NOT skip (P1-27) ────────────────────────
+    t.test("'bet' → no skip (slang confirmation)", () => assert.equal(shouldSkip('bet'), false)),
+    t.test("'fasho' → no skip (slang confirmation)", () => assert.equal(shouldSkip('fasho'), false)),
+    t.test("'say less' → no skip (slang confirmation)", () => assert.equal(shouldSkip('say less'), false)),
+    t.test("'word' → no skip (slang confirmation)", () => assert.equal(shouldSkip('word'), false)),
+    t.test("'no cap' → no skip (slang affirmation)", () => assert.equal(shouldSkip('no cap'), false)),
+    t.test("'i got u' → no skip (slang confirmation)", () => assert.equal(shouldSkip('i got u'), false)),
+    t.test("'got it' → no skip (confirmation)", () => assert.equal(shouldSkip('got it'), false)),
+    t.test("'on it' → no skip (confirmation)", () => assert.equal(shouldSkip('on it'), false)),
+
     // ── SHOULD STILL SKIP (truly irrelevant) ────────────────────────────────
     t.test("'lmaooo' → skip (laugh variant)", () => assert.equal(shouldSkip('lmaooo'), true)),
     t.test("'lollll' → skip (laugh variant)", () => assert.equal(shouldSkip('lollll'), true)),

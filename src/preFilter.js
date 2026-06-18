@@ -5,6 +5,8 @@ const TRIGGERS = new Set([
   "i'm in", "i'm out", 'in', 'out', 'pass',
   'omw', 'otw', 'here', 'done', 'wdym',
   "can't",
+  // Slang confirmations — staff use these as coverage confirms (P1-27)
+  'bet', 'fasho', 'say less', 'word', 'no cap', 'i got u', 'got it', 'on it',
   // Confirmation emojis — valid coverage confirmations in group chat
   '👍', '✅', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿',
 ]);
