@@ -201,11 +201,47 @@ async function _getManagerDmChatId(groupId, db = null) {
 }
 
 /**
+ * P1-11: Auto-close an open punch by setting clock_out to the shift's scheduled end time.
+ * Marks clock_out_raw as "(auto-closed)" for auditability.
+ *
+ * @param {object} entry - entry from getMissedClockOuts
+ * @param {object|null} db - injection for testing
+ */
+export async function autoClosePunch(entry, db = null) {
+  try {
+    // Build a Date for today at the shift's end_time
+    const { hours, minutes } = parseEndTime(entry.shiftEndTime)
+    const clockOutTime = new Date()
+    clockOutTime.setHours(hours, minutes, 0, 0)
+    const rawNote = '(auto-closed)'
+
+    if (db?.autoClosePunch) {
+      await db.autoClosePunch(entry.clockEntryId, clockOutTime, rawNote)
+      return
+    }
+
+    const supabase = getDb()
+    const { error } = await supabase
+      .from('time_entries')
+      .update({
+        clock_out: clockOutTime.toISOString(),
+        clock_out_raw: rawNote,
+      })
+      .eq('id', entry.clockEntryId)
+      .is('clock_out', null) // safety: don't overwrite if already closed
+    if (error) throw error
+  } catch (err) {
+    console.error(`autoClosePunch failed: ${err.message}`)
+  }
+}
+
+/**
  * Called from a 15-min cron job.
  * 1. Gets missed clock-outs for the group.
  * 2. DMs each staff member an alert.
- * 3. Sends a summary to the manager.
- * 4. Does nothing if no missed entries.
+ * 3. Auto-closes each open punch at scheduled shift end.
+ * 4. Sends a summary (including auto-close notice) to the manager.
+ * 5. Does nothing if no missed entries.
  *
  * @param {object} bot - Telegram bot instance
  * @param {string} groupId
@@ -217,9 +253,10 @@ export async function handleMissedClockOutCheck(bot, groupId, db = null) {
 
     if (missed.length === 0) return
 
-    // Alert each staff member
+    // Alert each staff member and auto-close the punch
     for (const entry of missed) {
       await sendMissedClockOutAlert(bot, entry, db)
+      await autoClosePunch(entry, db)
     }
 
     // Alert manager
@@ -230,10 +267,13 @@ export async function handleMissedClockOutCheck(bot, groupId, db = null) {
     const lines = missed.map((entry) => {
       const shiftEnd = buildShiftEndDatetime(entry.shiftEndTime, now)
       const minsAgo = Math.round((now.getTime() - shiftEnd.getTime()) / 60000)
-      return `• ${entry.staffName} — ${entry.shiftName} (ended ${minsAgo}min ago)`
+      return `• ${entry.staffName} — ${entry.shiftName} (ended ${minsAgo}min ago, auto-closed at ${entry.shiftEndTime})`
     })
 
-    const managerMsg = `⚠️ Possible missed clock-outs:\n${lines.join('\n')}`
+    const managerMsg =
+      `⚠️ Missed clock-outs auto-closed for review:\n${lines.join('\n')}\n\n` +
+      `These punches were automatically closed at the scheduled shift end. ` +
+      `Please review and adjust if needed.`
     await bot.sendMessage(managerChatId, managerMsg)
   } catch (err) {
     console.error(`handleMissedClockOutCheck failed: ${err.message}`)

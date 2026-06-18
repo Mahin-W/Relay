@@ -5,6 +5,7 @@ import {
   getMissedClockOuts,
   sendMissedClockOutAlert,
   handleMissedClockOutCheck,
+  autoClosePunch,
 } from '../../timeclock/missedClockOut.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -315,4 +316,64 @@ test('getMissedClockOuts: falls back to 30-min grace when clockout_grace_min uns
   }
   const result = await getMissedClockOuts('group-1', now, db)
   assert.equal(result.length, 0, 'Default grace=30 → 20-min-late entry should NOT be returned')
+})
+
+// ── P1-11: auto-close missed clock-outs ──────────────────────────────────────
+
+test('autoClosePunch: sets clock_out to shift end time', async () => {
+  const closedRows = []
+  const db = {
+    autoClosePunch: async (entryId, clockOutTime, rawNote) => {
+      closedRows.push({ entryId, clockOutTime, rawNote })
+    },
+  }
+  const entry = makeEntry({ clockEntryId: 99, shiftEndTime: '22:00' })
+  await autoClosePunch(entry, db)
+  assert.equal(closedRows.length, 1, 'autoClosePunch should call db.autoClosePunch')
+  assert.equal(closedRows[0].entryId, 99)
+  // clock_out should be a Date or ISO string at 22:00
+  const dt = new Date(closedRows[0].clockOutTime)
+  assert.equal(dt.getHours(), 22, 'clock_out should be at shift end hour (22)')
+  assert.equal(dt.getMinutes(), 0)
+})
+
+test('autoClosePunch: raw note contains "(auto-closed)"', async () => {
+  const closedRows = []
+  const db = {
+    autoClosePunch: async (entryId, clockOutTime, rawNote) => {
+      closedRows.push({ rawNote })
+    },
+  }
+  await autoClosePunch(makeEntry({ clockEntryId: 100, shiftEndTime: '18:30' }), db)
+  assert.ok(
+    closedRows[0].rawNote.includes('auto-closed'),
+    `Expected "(auto-closed)" in rawNote, got: "${closedRows[0].rawNote}"`
+  )
+})
+
+test('handleMissedClockOutCheck: auto-closes open punch past end+grace and notifies manager', async () => {
+  const bot = new MockBot()
+  const closedEntries = []
+  const db = {
+    getMissedClockOuts: async () => [makeEntry({ dmChatId: 999, clockEntryId: 77, shiftEndTime: '22:00' })],
+    markAlerted: async () => {},
+    getManagerDmChatId: async () => 888,
+    autoClosePunch: async (entryId, clockOutTime, rawNote) => {
+      closedEntries.push({ entryId, clockOutTime, rawNote })
+    },
+  }
+
+  await handleMissedClockOutCheck(bot, 'group-1', db)
+
+  // Punch should be auto-closed
+  assert.equal(closedEntries.length, 1, 'Expected autoClosePunch to be called once')
+  assert.equal(closedEntries[0].entryId, 77)
+
+  // Manager should be notified about auto-close
+  const managerMsg = bot.lastMessage(888)
+  assert.ok(managerMsg, 'Expected manager notification')
+  assert.ok(
+    managerMsg.text.toLowerCase().includes('auto') || managerMsg.text.toLowerCase().includes('closed'),
+    `Expected auto-close mention in manager message: "${managerMsg.text}"`
+  )
 })
