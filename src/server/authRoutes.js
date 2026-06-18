@@ -1,6 +1,7 @@
 import express from 'express'
 import { getDb } from '../db.js'
 import { signToken, setCookieHeader, requireAuth } from './middleware.js'
+import { otpIpLimiter } from './ipRateLimit.js'
 
 const router = express.Router()
 
@@ -21,6 +22,13 @@ function generateOTP() {
 // POST /api/auth/request-code
 router.post('/request-code', async (req, res) => {
   try {
+    // IP-based rate limit: max 10 requests per rolling hour per IP.
+    // Requires app.set('trust proxy', 1) so req.ip reflects the real client behind Render's proxy.
+    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown'
+    if (!otpIpLimiter.isAllowed(clientIp)) {
+      return res.status(429).json({ error: 'Too many requests — please try again later.' })
+    }
+
     const { phone } = req.body
     if (!phone) return res.status(400).json({ error: 'Phone number required' })
 

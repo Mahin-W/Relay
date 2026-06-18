@@ -25,6 +25,11 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
 export function createApp(bot, db) {
   const app = express()
 
+  // Trust the first hop (Render's reverse proxy) so req.ip returns the real
+  // client IP rather than the proxy's internal address — required for IP-based
+  // rate limiting in authRoutes.js.
+  app.set('trust proxy', 1)
+
   app.use(express.json())
   app.use(cookieParser())
   app.use(cors({
