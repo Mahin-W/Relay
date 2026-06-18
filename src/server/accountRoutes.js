@@ -8,6 +8,7 @@ import {
   createAccountLink,
   getLinkedGroup,
   getAccountTelegramDm,
+  isProvisionalGroup,
 } from './db/accounts.js'
 import { generateCode, setCode, verifyCode } from './twoFactor.js'
 import { emailConfigured, sendEmail } from './email.js'
@@ -172,13 +173,17 @@ router.post('/2fa/verify', requireAuth, requireAccount, async (req, res) => {
   }
 })
 
-// GET /api/account/connection-status — is a Telegram group connected yet?
+// GET /api/account/connection-status — is a real (non-provisional) Telegram group connected?
+// A provisional 'web:<accountId>' group_id is assigned at signup but does not
+// count as "connected" — that requires a real Telegram group to be rekeyed onto
+// the account.
 router.get('/connection-status', requireAuth, requireAccount, async (req, res) => {
   try {
     const group = await getLinkedGroup(req.manager.accountId)
+    const connected = !!group?.group_id && !isProvisionalGroup(group.group_id)
     res.json({
-      connected: !!group?.group_id,
-      groupId: group?.group_id ?? null,
+      connected,
+      groupId: connected ? group.group_id : null,
       restaurantName: group?.group_name ?? null,
       setupComplete: group?.setup_complete ?? false,
       inviteLink: group?.setup_data?.invite_link ?? null,

@@ -1,6 +1,8 @@
 // Verifies the account-based auth path through requireAuth (Supabase token →
-// account → resolved group) and the dashRoutes pre-connect guard: reads are
-// allowed with a null group, mutations are blocked until a group is connected.
+// account → resolved group) and the dashRoutes pre-connect guard. Every account
+// has a provisional group_id ('web:<id>') from signup, so mutations are always
+// allowed (writes go to the provisional group, never orphaned). The gate only
+// blocks the rare case of a genuinely group-less account (legacy/migration).
 //
 // Run with:
 //   node --experimental-test-module-mocks --test src/tests/integration/accountAuthGuard.test.js
@@ -65,6 +67,9 @@ beforeEach(() => {
   resetFakeClient()
   // Auth trigger normally creates this; pre-seed for the test.
   seedTable('accounts', [{ id: AUTH_ID, email: 'owner@shop.com', business_name: 'Bagels', setup_data: {}, login_2fa_enabled: false }])
+  // Provisioning always creates a provisional group_id ('web:<accountId>') for
+  // every account at signup, so setup_sessions is pre-seeded here to reflect that.
+  seedTable('setup_sessions', [{ group_id: `web:${AUTH_ID}`, account_id: AUTH_ID, setup_complete: false }])
 })
 
 describe('account auth + pre-connect guard', () => {
@@ -78,10 +83,12 @@ describe('account auth + pre-connect guard', () => {
     assert.equal(r.status, 200)
   })
 
-  test('account with no connected group: mutation blocked with 409', async () => {
+  test('provisioned account (provisional group): mutation is allowed', async () => {
+    // Every account gets a provisional 'web:<id>' group at signup. Writes must
+    // not be blocked — they go to the provisional group, never orphaned.
     const r = await request('POST', '/api/staff', { token: supabaseToken(), body: { name: 'Sam', role: 'Server' } })
-    assert.equal(r.status, 409)
-    assert.equal(r.body.notConnected, true)
+    assert.notEqual(r.status, 409)
+    assert.notEqual(r.status, 401)
   })
 
   test('connected account: mutation allowed', async () => {

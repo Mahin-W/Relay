@@ -20,15 +20,15 @@ router.use((req, res, next) => {
   next()
 })
 
-// Account-centric gate: an account with no connected Telegram group has a null
-// groupId. Read (GET) requests are allowed — they return empty/zeroed views the
-// dashboard renders behind a "connect your team chat" banner. Mutations and
-// bot-notifying actions are blocked until a group is connected, since they would
-// otherwise write orphaned rows or try to message a group that doesn't exist.
+// Account-centric gate: every account owns a group_id from signup (provisional
+// 'web:<accountId>' until a Telegram group is rekeyed onto it), so writes are
+// never orphaned. Only block the rare case of no group at all (legacy sessions).
 router.use((req, res, next) => {
+  // Every account owns a group_id from signup, so writes are never orphaned.
+  // Only block the rare case of no group at all (legacy sessions).
   if (req.method !== 'GET' && !req.manager?.groupId) {
     return res.status(409).json({
-      error: 'Connect your Telegram team chat first to make changes here.',
+      error: 'Your account is still initializing — refresh and try again.',
       notConnected: true,
     })
   }
