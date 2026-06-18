@@ -117,7 +117,13 @@ export async function recomputeWeekPayroll(groupId, weekStart, staffId, db = nul
       }
     }
 
-    const delta = Math.round((newGrossPay - oldGrossPay) * 100) / 100
+    // ── P1-21: retroactive reprice must never LOWER already-worked pay ────────
+    // Retroactively decreasing pay for hours already worked is illegal in many
+    // states. A rate change may only increase past-week pay (prospective decreases
+    // apply to future pay periods only). If the recomputed total is lower than
+    // what was already recorded, keep the higher recorded amount.
+    const guardedGrossPay = Math.max(newGrossPay, oldGrossPay)
+    const delta = Math.round((guardedGrossPay - oldGrossPay) * 100) / 100
 
     // ── 5. Upsert updated payroll record ──────────────────────────────────
     const updatedRow = {
@@ -127,7 +133,7 @@ export async function recomputeWeekPayroll(groupId, weekStart, staffId, db = nul
       total_hours: weekRecord.total_hours ?? 0,
       total_late_minutes: weekRecord.total_late_minutes ?? 0,
       total_late_deduction: weekRecord.total_late_deduction ?? 0,
-      total_gross_pay: newGrossPay,
+      total_gross_pay: guardedGrossPay,
       shift_breakdown: weekRecord.shift_breakdown ?? [],
     }
 
@@ -137,11 +143,11 @@ export async function recomputeWeekPayroll(groupId, weekStart, staffId, db = nul
       const { savePeriodPayroll } = await loadPayDb()
       await savePeriodPayroll(groupId, weekStart, [
         { staffId, totalHours: updatedRow.total_hours, totalLateMinutes: 0,
-          totalLateDeduction: 0, totalGrossPay: newGrossPay, shifts: [] }
+          totalLateDeduction: 0, totalGrossPay: guardedGrossPay, shifts: [] }
       ])
     }
 
-    return [{ staffId, oldGrossPay, newGrossPay, delta }]
+    return [{ staffId, oldGrossPay, newGrossPay: guardedGrossPay, delta }]
   } catch (err) {
     // Never crash — always recover (CLAUDE.md rule)
     console.error(`recomputeWeekPayroll error: ${err.message}`)

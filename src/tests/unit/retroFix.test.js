@@ -191,4 +191,54 @@ await Promise.all([
     await assert.doesNotReject(recomputeAllWeeksForStaff('grp-1', 1015, null))
   }),
 
+  // ── P1-21: retroactive reprice must never lower already-worked pay ────────────
+
+  test('P1-21: rate DECREASE does not reduce past-week gross pay (recomputeWeekPayroll)', async () => {
+    // Sam was paid 25h * $19 = $475 for week 2025-01-27.
+    // Rate drops to $15. New computed total = 25 * $15 = $375 < $475.
+    // Guard must keep recorded total at $475 (never lower).
+    const db = makeDb()
+    db.staff[0].hourlyRate = 15  // rate DECREASE from $19 → $15
+    const results = await recomputeWeekPayroll('grp-1', '2025-01-27', 1015, db)
+    assert.equal(results.length, 1)
+    // newGrossPay must not be lower than oldGrossPay
+    assert.ok(
+      results[0].newGrossPay >= results[0].oldGrossPay - 0.005,
+      `newGrossPay (${results[0].newGrossPay}) must not be less than oldGrossPay (${results[0].oldGrossPay}) on rate decrease`
+    )
+    // The DB record must also retain the original (higher) value
+    const record = db.payrollRecords.find(r => r.staff_id === 1015 && r.week_start === '2025-01-27')
+    assert.ok(
+      record.total_gross_pay >= 475.00 - 0.005,
+      `DB record (${record.total_gross_pay}) must not drop below original 475.00 on rate decrease`
+    )
+  }),
+
+  test('P1-21: rate DECREASE across all weeks leaves past pay unchanged (recomputeAllWeeksForStaff)', async () => {
+    // Both weeks were paid at $19. Rate drops to $15.
+    // Neither week's recorded gross should be reduced.
+    const db = makeDb()
+    db.staff[0].hourlyRate = 15
+    await recomputeAllWeeksForStaff('grp-1', 1015, db)
+
+    const w1 = db.payrollRecords.find(r => r.staff_id === 1015 && r.week_start === '2025-01-27')
+    const w2 = db.payrollRecords.find(r => r.staff_id === 1015 && r.week_start === '2025-02-03')
+    assert.ok(w1.total_gross_pay >= 475.00 - 0.005,
+      `w1 should remain >= 475 on decrease, got ${w1.total_gross_pay}`)
+    assert.ok(w2.total_gross_pay >= 570.00 - 0.005,
+      `w2 should remain >= 570 on decrease, got ${w2.total_gross_pay}`)
+  }),
+
+  test('P1-21: rate INCREASE still applies correctly (recomputeWeekPayroll)', async () => {
+    // This ensures the guard does not break the increase path.
+    // Sam: 25h * $21 = $525 > $475 (old). Should apply.
+    const db = makeDb()
+    db.staff[0].hourlyRate = 21
+    const results = await recomputeWeekPayroll('grp-1', '2025-01-27', 1015, db)
+    assert.ok(
+      Math.abs(results[0].newGrossPay - 525.00) < 0.01,
+      `rate increase should apply: expected 525, got ${results[0].newGrossPay}`
+    )
+  }),
+
 ])
