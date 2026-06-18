@@ -1,5 +1,6 @@
 import { llmCreate, llmWithRetry, extractJSON } from '../parsers/llm.js'
 import { getSetupSession, getStaffForGroup, addScheduleAssignment, clearScheduleAssignments, getShiftsForGroup, getShiftRequirements, getRatesForGroup, getOvertimeSettings } from '../setup/setupDb.js'
+import { upsertScheduleAssignments, deleteStaleAssignments } from '../setup/db/assignments.js'
 import { updateScheduleStatus } from '../availability/availabilityDb.js'
 import { generateWeeklySchedule, formatScheduleMessage, formatWarningsSection, formatWeekLabel } from './generateSchedule.js'
 import { getGroupMembersWithDm } from '../db.js'
@@ -109,10 +110,16 @@ export async function publishSchedule(bot, schedule, managerGroup) {
     await updateScheduleStatus(schedule.id, 'published')
 
     const assignments = schedule.assignments ?? []
-    await clearScheduleAssignments(schedule.group_id, schedule.week_start)
-    for (const a of assignments) {
-      await addScheduleAssignment(schedule.group_id, a.shiftId, a.staffId, schedule.week_start)
-    }
+    // P1-7: atomic-ish republish — upsert new rows first (no zero-row window),
+    // then delete only the stale ones (rows whose shift+staff key is not in the new set).
+    const newAssignmentKeys = assignments.map(a => ({
+      groupId: schedule.group_id,
+      shiftId: a.shiftId,
+      staffId: a.staffId,
+      weekStart: schedule.week_start,
+    }))
+    await upsertScheduleAssignments(newAssignmentKeys)
+    await deleteStaleAssignments(schedule.group_id, schedule.week_start, newAssignmentKeys)
 
     const weekLabel = formatWeekLabel(schedule.week_start)
     const setupSession = await getSetupSession(schedule.group_id)

@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { generateWeeklySchedule, formatScheduleMessage } from '../../schedule/generateSchedule.js'
+import { upsertScheduleAssignments, deleteStaleAssignments } from '../../setup/db/assignments.js'
 
 // Integration tests for schedule generation + formatting.
 // All scenarios run in parallel within each test.
@@ -278,5 +279,137 @@ describe('Schedule Formatting', () => {
       formatted.includes('⚠️'),
       `Empty schedule should give guidance. Got:\n${formatted}`
     )
+  })
+})
+
+// ── P1-7: atomic-ish republish — upsert-first, delete-stale-second ────────────
+
+describe('Republish atomicity (P1-7)', () => {
+
+  // Build a minimal fake DB store that the assignment helpers can talk to.
+  // We use a plain Map so we fully control what's in `schedule_assignments`.
+  function makeFakeDb(initialRows = []) {
+    let _nextId = 1000
+    const store = [...initialRows.map(r => ({ ...r }))]
+
+    return {
+      // Returns row array for inspection
+      _rows: () => [...store],
+
+      // Minimal Supabase-chainable fake wired to schedule_assignments only
+      from: (_table) => {
+        const filters = []
+        let _op = null
+        let _payload = null
+        let _upsertOpts = null
+
+        const q = {
+          select: () => q,
+          upsert: (payload, opts) => { _op = 'upsert'; _payload = payload; _upsertOpts = opts; return q },
+          delete: () => { _op = 'delete'; return q },
+          eq: (col, val) => { filters.push([col, val]); return q },
+          not: (col, op, val) => {
+            // .not('id', 'in', [...]) → exclude rows whose col is in val
+            q._notInCol = col; q._notInVals = val
+            return q
+          },
+          then: (resolve) => {
+            if (_op === 'upsert') {
+              const items = Array.isArray(_payload) ? _payload : [_payload]
+              const conflictCols = (_upsertOpts?.onConflict || 'id').split(',').map(s => s.trim())
+              for (const p of items) {
+                const idx = store.findIndex(r => conflictCols.every(c => String(r[c]) === String(p[c])))
+                if (idx >= 0) {
+                  Object.assign(store[idx], p)
+                } else {
+                  store.push({ id: _nextId++, ...p })
+                }
+              }
+              return resolve({ data: items, error: null })
+            }
+            if (_op === 'delete') {
+              let toDelete = store.filter(r => filters.every(([col, val]) => String(r[col]) === String(val)))
+              if (q._notInCol && q._notInVals) {
+                const excludeSet = new Set(q._notInVals.map(String))
+                toDelete = toDelete.filter(r => !excludeSet.has(String(r[q._notInCol])))
+              }
+              const deleteIds = new Set(toDelete.map(r => r.id))
+              store.splice(0, store.length, ...store.filter(r => !deleteIds.has(r.id)))
+              return resolve({ data: toDelete, error: null })
+            }
+            return resolve({ data: store.filter(r => filters.every(([col, val]) => String(r[col]) === String(val))), error: null })
+          },
+          catch: () => q,
+          _notInCol: null,
+          _notInVals: null,
+        }
+        return q
+      },
+    }
+  }
+
+  test('upsert-then-delete leaves exactly the new assignment set', async () => {
+    const GROUP = 'rp-group'
+    const WEEK2 = '2025-07-14'
+
+    // Initial published state: shifts 10, 20, 30 all assigned to staff 1
+    const initial = [
+      { id: 1, group_id: GROUP, shift_id: 10, staff_id: 1, week_start: WEEK2 },
+      { id: 2, group_id: GROUP, shift_id: 20, staff_id: 1, week_start: WEEK2 },
+      { id: 3, group_id: GROUP, shift_id: 30, staff_id: 1, week_start: WEEK2 },
+    ]
+
+    const fakeDb = makeFakeDb(initial)
+
+    // New schedule: shift 10 stays (staff 1), shift 20 reassigned to staff 2, shift 30 removed, shift 40 added
+    const newAssignments = [
+      { groupId: GROUP, shiftId: 10, staffId: 1, weekStart: WEEK2 },
+      { groupId: GROUP, shiftId: 20, staffId: 2, weekStart: WEEK2 },
+      { groupId: GROUP, shiftId: 40, staffId: 1, weekStart: WEEK2 },
+    ]
+
+    await upsertScheduleAssignments(newAssignments, fakeDb)
+    await deleteStaleAssignments(GROUP, WEEK2, newAssignments, fakeDb)
+
+    const rows = fakeDb._rows()
+
+    // Exactly 3 rows should remain
+    assert.equal(rows.length, 3, `Expected 3 rows, got ${rows.length}: ${JSON.stringify(rows)}`)
+
+    // shift 30 / staff 1 should be gone (stale)
+    const staleGone = !rows.some(r => r.shift_id === 30 && r.staff_id === 1)
+    assert.ok(staleGone, 'Stale assignment (shift 30, staff 1) should have been deleted')
+
+    // All new assignments present
+    for (const a of newAssignments) {
+      const found = rows.some(r =>
+        String(r.shift_id) === String(a.shiftId) &&
+        String(r.staff_id) === String(a.staffId) &&
+        r.week_start === a.weekStart
+      )
+      assert.ok(found, `Expected assignment shift ${a.shiftId} / staff ${a.staffId} to be present`)
+    }
+  })
+
+  test('republish with identical assignments leaves the same rows (idempotent)', async () => {
+    const GROUP = 'rp-group2'
+    const WEEK2 = '2025-07-14'
+
+    const initial = [
+      { id: 10, group_id: GROUP, shift_id: 1, staff_id: 5, week_start: WEEK2 },
+      { id: 11, group_id: GROUP, shift_id: 2, staff_id: 6, week_start: WEEK2 },
+    ]
+    const fakeDb = makeFakeDb(initial)
+
+    const same = [
+      { groupId: GROUP, shiftId: 1, staffId: 5, weekStart: WEEK2 },
+      { groupId: GROUP, shiftId: 2, staffId: 6, weekStart: WEEK2 },
+    ]
+
+    await upsertScheduleAssignments(same, fakeDb)
+    await deleteStaleAssignments(GROUP, WEEK2, same, fakeDb)
+
+    const rows = fakeDb._rows()
+    assert.equal(rows.length, 2, `Idempotent republish should leave 2 rows, got ${rows.length}`)
   })
 })

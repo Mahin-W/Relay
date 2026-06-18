@@ -45,6 +45,89 @@ export async function clearScheduleAssignments(groupId, weekStart) {
   }
 }
 
+/**
+ * P1-7: Upsert the new assignment set FIRST (using the unique constraint from
+ * migration 009: group_id, shift_id, staff_id, week_start) so there is no
+ * window where zero rows exist. Accepts an optional `db` override for testing.
+ *
+ * @param {Array<{groupId, shiftId, staffId, weekStart}>} assignments
+ * @param {object} [db] - optional Supabase client override (for testing)
+ */
+export async function upsertScheduleAssignments(assignments, db = null) {
+  try {
+    if (!assignments || assignments.length === 0) return
+    const client = db ?? getDb()
+    const rows = assignments.map(a => ({
+      group_id: a.groupId,
+      shift_id: a.shiftId,
+      staff_id: a.staffId,
+      week_start: a.weekStart,
+      status: 'scheduled',
+    }))
+    const { error } = await client
+      .from('schedule_assignments')
+      .upsert(rows, { onConflict: 'group_id,shift_id,staff_id,week_start' })
+    if (error) throw error
+    logger.db(`Upserted ${rows.length} schedule assignments`)
+  } catch (err) {
+    logger.error(`upsertScheduleAssignments failed: ${err.message}`)
+    throw err
+  }
+}
+
+/**
+ * P1-7: After upserting the new assignment set, delete rows for this
+ * group+week whose (shift_id, staff_id) key is NOT in the new set.
+ * Accepts an optional `db` override for testing.
+ *
+ * Strategy: fetch current ids → diff against new set → delete stale ids one by one.
+ * supabase-js v2 doesn't support .in() on the DELETE path cleanly without RPC,
+ * so we delete each stale row individually. Stale sets are typically small
+ * (schedule changes affect a handful of assignments).
+ *
+ * @param {string} groupId
+ * @param {string} weekStart
+ * @param {Array<{shiftId, staffId}>} newAssignments - the newly upserted set
+ * @param {object} [db] - optional Supabase client override (for testing)
+ */
+export async function deleteStaleAssignments(groupId, weekStart, newAssignments, db = null) {
+  try {
+    const client = db ?? getDb()
+    // Fetch all current rows for this group+week
+    const { data: existing, error: fetchErr } = await client
+      .from('schedule_assignments')
+      .select('id, shift_id, staff_id')
+      .eq('group_id', groupId)
+      .eq('week_start', weekStart)
+    if (fetchErr) throw fetchErr
+    if (!existing || existing.length === 0) return
+
+    // Build a set of "shiftId:staffId" keys from the new assignment set
+    const keepKeys = new Set(newAssignments.map(a => `${a.shiftId}:${a.staffId}`))
+
+    // Collect ids of rows that are NOT in the new set (stale)
+    const staleIds = existing
+      .filter(r => !keepKeys.has(`${r.shift_id}:${r.staff_id}`))
+      .map(r => r.id)
+
+    if (staleIds.length === 0) return
+
+    // Delete each stale row by id (small set — safe to loop)
+    for (const id of staleIds) {
+      const { error: delErr } = await client
+        .from('schedule_assignments')
+        .delete()
+        .eq('id', id)
+      if (delErr) throw delErr
+    }
+
+    logger.db(`Deleted ${staleIds.length} stale assignments for group ${groupId} week ${weekStart}`)
+  } catch (err) {
+    logger.error(`deleteStaleAssignments failed: ${err.message}`)
+    throw err
+  }
+}
+
 export async function addScheduleAssignment(groupId, shiftId, staffId, weekStart) {
   try {
     const { data, error } = await getDb()
