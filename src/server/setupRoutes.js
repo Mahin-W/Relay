@@ -7,6 +7,8 @@ import { getStaffForGroup, saveStaff, updateStaffById, deleteStaffById } from '.
 import { getShiftsForGroup, getShiftRequirements, saveShift, saveShiftRequirement, deleteShiftById } from '../setup/db/shifts.js'
 import { normalizeShiftTime } from '../utils/time.js'
 import { getRatesForGroup, updateRoleRate, deleteRole } from '../setup/db/roles.js'
+import { parseShift, parseStaff, parseShiftRequirements } from '../parseMessage.js'
+import { hasAnyLLM } from '../parsers/llm.js'
 
 const router = express.Router()
 const gate = [requireAuth, requireAccount]
@@ -162,6 +164,39 @@ router.delete('/shift/:id', ...gate, async (req, res) => {
   } catch (err) {
     console.error('DELETE /setup/shift error:', err.message)
     res.status(500).json({ error: 'Could not remove shift' })
+  }
+})
+
+const MAX_PARSE = 2000
+function parseGuard(req, res) {
+  if (!hasAnyLLM()) { res.status(503).json({ error: 'AI parsing is not available', reason: 'no_llm' }); return null }
+  const text = String(req.body?.text || '')
+  if (text.length > MAX_PARSE) { res.status(400).json({ error: 'That description is too long' }); return null }
+  return text
+}
+
+router.post('/parse-shifts', ...gate, async (req, res) => {
+  const text = parseGuard(req, res); if (text === null) return
+  try {
+    const shifts = await parseShift(text)
+    const names = [...new Set(shifts.map(s => s.name))]
+    const reqs = names.length ? await parseShiftRequirements(text, names) : []
+    const byName = {}
+    for (const r of reqs) (byName[r.shift_name] ||= []).push({ role: r.role, count: r.count })
+    res.json({ shifts: shifts.map(s => ({ ...s, requirements: byName[s.name] || [] })) })
+  } catch (err) {
+    console.error('POST /setup/parse-shifts error:', err.message)
+    res.json({ shifts: [] })
+  }
+})
+
+router.post('/parse-staff', ...gate, async (req, res) => {
+  const text = parseGuard(req, res); if (text === null) return
+  try {
+    res.json({ staff: await parseStaff(text, null) })
+  } catch (err) {
+    console.error('POST /setup/parse-staff error:', err.message)
+    res.json({ staff: [] })
   }
 })
 
