@@ -14,19 +14,21 @@ Staff only need Telegram. There's no extra app to install.
 
 ## How it works
 
-1. Add the Relay bot to your team's Telegram group as an admin
-2. Run `/setup` in the group — about 5 minutes in DM with the bot
+1. Create your Relay account on the web and run the setup wizard — add your roles, your team, and your shifts (type them in, or describe them in plain English and Relay parses them with AI)
+2. Connect your team's Telegram group from the last step of the wizard (add the bot as an admin) — your setup syncs into the chat automatically
 3. Staff register with one tap from the link the bot posts
 4. Generate schedules, handle coverage, log revenue, run payroll — all in the chat your team already uses
 5. The web dashboard gives you a full management view at any time
+
+Prefer to set up entirely in chat? You can still run `/setup` in the group instead — both paths write to the same place.
 
 ---
 
 ## Dashboard
 
-Access your dashboard at `https://getrelay-app.netlify.app/dashboard`.
+Access Relay at `https://getrelay-app.netlify.app`.
 
-Log in with your phone number. The bot DMs you a 6-digit code; you paste it. The session lasts 7 days.
+Sign in with your Relay account — Google, or email + password. When login confirmation (2FA) is enabled, the bot DMs you a 6-digit code (or emails it if you haven't linked Telegram yet). New accounts land in the web setup wizard; returning owners go straight to the dashboard.
 
 ### Dashboard pages
 
@@ -202,7 +204,7 @@ Most manager commands also work in your private chat with the bot — no need to
 
 When a command runs in DM, results are sent to you in the same chat instead of being forwarded to your DMs.
 
-The "DM-enabled" column in the Group Chat tables above marks which commands currently work in DMs. Write commands (set-rate, set-budget, add-shift, etc.) and a few that depend on group context (rotation, tipmode, etc.) still need to be run in the group — see [FUTURE_WORK.md](FUTURE_WORK.md) for the followup plan.
+The "DM-enabled" column in the Group Chat tables above marks which commands currently work in DMs. Write commands (set-rate, set-budget, add-shift, etc.) and a few that depend on group context (rotation, tipmode, etc.) still need to be run in the group.
 
 ### Natural-language manager actions in DM
 
@@ -219,7 +221,7 @@ These work in your private chat with the bot:
 | "Marcus can also work prep" | Records cross-training. |
 | "who is working" | Current shift roster. |
 
-Schedule edits via DM ("remove Sarah from Friday Dinner", "add Mike to Saturday Lunch", emergency-coverage queries) are tracked for the next iteration — see [FUTURE_WORK.md](FUTURE_WORK.md).
+Schedule edits via DM ("remove Sarah from Friday Dinner", "add Mike to Saturday Lunch", emergency-coverage queries) are planned for a future iteration.
 
 ---
 
@@ -292,28 +294,19 @@ Run on their own — no command needed.
 
 ## Setup Guide
 
-### 1. Add the bot to your group
-Search for your bot's username on Telegram and add it to your team's group. Make it an admin so it can read messages.
+### 1. Create your account and run the web wizard
+Go to `https://getrelay-app.netlify.app`, sign up, and walk the setup wizard — roles first, then your team (pick each person's role from your list), then shifts (type them or describe them in plain English and Relay parses them; bulk-apply a shift across the week), then pay rates per role.
 
-### 2. Run `/setup`
-Type `/setup` in the group. The bot DMs you a 5-minute wizard that captures:
-- Business name
-- Shifts (name, day, hours)
-- Staff names and roles
-- Pay rates per role
-- Tip settings
-- Overtime settings
+### 2. Connect your Telegram group
+The wizard's final step links your group — add the bot as an admin and your roles, staff, shifts, and rates sync into the chat automatically. Prefer chat-only setup? Run `/setup` in the group instead (tip and overtime settings are configured there).
 
-### 3. Set your phone number
-DM the bot: `/setphone +15550001234`. This links your phone to your account for dashboard login.
-
-### 4. Register your staff
+### 3. Register your staff
 Type `/register` in the group. Staff tap the link and connect to the bot in one step.
 
-### 5. Collect availability
+### 4. Collect availability
 Run `/availability` each week. Staff reply via DM with the shifts they can work.
 
-### 6. Generate and publish
+### 5. Generate and publish
 Run `/makeschedule` (or use the dashboard). Review the draft and reply "approve" to publish to the group. Or edit it first via DM in natural language.
 
 ---
@@ -355,7 +348,7 @@ node scripts/migrate.js         # apply pending migrations
 node scripts/migrate.js --dry-run
 ```
 
-Migrations live in `scripts/migrations/`. Migration 008 locks down RLS — run the operator action in `LAUNCH_OPERATOR_TASKS.md` before applying it.
+Migrations live in `scripts/migrations/`. Migration 008 locks down RLS — make sure `SUPABASE_SERVICE_ROLE_KEY` is set on the server before applying it (the server uses it to bypass per-tenant policies and rely on app-layer auth).
 
 ---
 
@@ -366,7 +359,7 @@ Migrations live in `scripts/migrations/`. Migration 008 locks down RLS — run t
 - **Dashboard**: vanilla JS SPA, no framework, single HTML file
 - **Database**: Supabase / Postgres with row-level security
 - **LLM**: Cerebras `llama-3.3-70b` primary, Groq `llama-3.3-70b-versatile` fallback (via the `openai` SDK)
-- **Auth**: JWT in HTTP-only cookies, OTP delivered via Telegram DM
+- **Auth**: Supabase Auth accounts (Google / email + password), Bearer access tokens verified server-side; optional login confirmation code (2FA) via Telegram DM or email. Legacy phone-OTP (JWT cookie) sessions still supported.
 - **Hosting**: Render (backend) + Netlify (static frontend) + Supabase (DB)
 - **Exports**: ExcelJS
 - **Crons**: `node-cron`
@@ -377,4 +370,4 @@ Migrations live in `scripts/migrations/`. Migration 008 locks down RLS — run t
 
 Email **mahinwaghray@gmail.com**. Usually replies within a day.
 
-For known issues and the post-launch backlog, see [`LAUNCH_AUDIT_BUGS.md`](LAUNCH_AUDIT_BUGS.md), [`PRODUCTION_READINESS_REPORT.md`](PRODUCTION_READINESS_REPORT.md), and [`LAUNCH_OPERATOR_TASKS.md`](LAUNCH_OPERATOR_TASKS.md).
+For the production-readiness audit (P0 blockers and how they were resolved), see [`PRODUCTION_READINESS_REPORT.md`](PRODUCTION_READINESS_REPORT.md).

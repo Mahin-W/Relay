@@ -400,7 +400,7 @@ bot.onText(/^\/reliability/, async (msg) => {
 
 bot.onText(/^\/rotation/, async (msg) => {
   // Group only — handler internally uses bot.getChatMember which doesn't work in DM.
-  // Tracked as DM-followup in FUTURE_WORK.md.
+  // DM support is a planned followup.
   if (!['group', 'supergroup'].includes(msg.chat.type)) return
   await handleRotationCommand(bot, msg)
 })

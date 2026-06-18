@@ -2,7 +2,9 @@
 
 **Date:** 2026-05-08 (P0 status updated 2026-05-09; first P1 batch shipped 2026-05-15)
 **Auditor:** Claude Opus 4.7 (12-agent parallel codebase audit)
-**Verdict:** ✅ **All 13 P0 blockers fixed and deployed. SQL migrations 008/009 applied to Supabase. Render boot is green as of 2026-05-15 (`JWT_SECRET` env set). 4 P1s fixed (P1-1, P1-3, P1-12, P1-28); 28 P1s still open — see `LAUNCH_AUDIT_BUGS.md`.**
+**Verdict:** ✅ **All 13 P0 blockers fixed and deployed. SQL migrations 008/009 applied to Supabase. Render boot green.**
+
+> This is a historical pre-launch audit (May 2026). The P0 sections below are kept as a record of what was found and how each was resolved. The product has since shipped account-centric web auth and the unified-store onboarding wizard (see `CAPABILITIES.md` for current state).
 
 ## P0 status (2026-05-09)
 

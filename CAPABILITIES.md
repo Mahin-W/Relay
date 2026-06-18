@@ -1,13 +1,16 @@
 # Relay — Capabilities & Status
-Last updated: 2026-05-15
+Last updated: 2026-06-18
 
-> **2026-05-15 deploy state:** Render `relay-v5ne` is live and healthy. `JWT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TELEGRAM_BOT_TOKEN`, `ALLOWED_ORIGINS` all set. RLS migrations 008/009 applied. 4 P1s shipped (P1-1, P1-3, P1-12, P1-28).
+> **2026-06-18 state:** Live on Render (backend) + Netlify (frontend) + Supabase. RLS migrations 008/009 applied; migration 030 adds the `rekey_group()` function. The web setup wizard was rebuilt roles-first with AI shift parsing, and onboarding now runs on a **single source of truth**: every account is provisioned a `group_id` at signup, the wizard writes live operational rows via `/api/account/setup/*`, and connecting a Telegram group **rekeys** that data onto the real chat id (the old `setup_data`→tables staging/merge step is gone).
 
 ## Feature Status
 
 | Feature | Status | File(s) | Notes |
 |---------|--------|---------|-------|
-| Setup wizard | ✅ WIRED | src/setup/setupFlow.js, src/setup/shiftSteps.js, src/setup/staffSteps.js | 6-step state machine: welcome → add_shifts → shift_roles → role_rates → add_staff → overtime_setup → complete. Re-running `/setup` on a populated group requires explicit "yes wipe" confirmation. |
+| Setup wizard (Telegram) | ✅ WIRED | src/setup/setupFlow.js, src/setup/shiftSteps.js, src/setup/staffSteps.js | 6-step state machine: welcome → add_shifts → shift_roles → role_rates → add_staff → overtime_setup → complete. Re-running `/setup` on a populated group requires explicit "yes wipe" confirmation. |
+| Setup wizard (web) | ✅ WIRED | public/onboarding.html, public/onboarding.js, public/onboardingHelpers.js, src/server/setupRoutes.js | Roles-first 6-step wizard: business → roles → employees → shifts → pay rates → review/connect. Writes live operational rows via `/api/account/setup/*`. AI "describe your shifts/team" via parse-shifts/parse-staff. Bulk multi-day shift tooling, business-type templates, instant resume. |
+| Account auth (web) | ✅ WIRED | src/server/middleware.js, src/server/accountRoutes.js, public/login.html, public/relayAuth.js | Supabase Auth (Google / email+password) → Bearer token verified server-side. Optional login confirmation code (2FA) via Telegram DM or email. Legacy phone-OTP sessions still accepted. |
+| Account→group provisioning + rekey | ✅ WIRED | src/server/db/accounts.js (ensureAccountGroup, isProvisionalGroup), src/setup/connectAccount.js, src/setup/db/rekey.js | Every account owns a `group_id` (`web:<uuid>`) from signup, so the dashboard/wizard write live data immediately. Connecting Telegram rekeys every `group_id` row onto the chat id via the `rekey_group()` Postgres fn — replaces the old `mergeFromAccount` staging translator. |
 | Admin management | ✅ WIRED | src/setup/db/admins.js | /addadmin, /removeadmin, /admins. Manager-only grant/revoke. |
 | Pre-filter | ✅ WIRED | src/preFilter.js | shouldSkip() — 4-layer noise filter: triggers whitelist, laugh regex, pure emoji regex, 42 known fillers. Saves ~40-50% LLM calls. |
 | NLP intent parsing | ✅ WIRED | src/parsers/messageParsers.js | parseMessage() via Cerebras (llama-3.3-70b). 14 intent types. Slang/AAVE-aware. |
@@ -118,7 +121,7 @@ Tables referenced across the codebase (some created via SQL migrations, not all 
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
-| setup_sessions | Setup wizard state + group config | group_id, manager_id, dm_chat_id, step, setup_data (JSONB), setup_complete |
+| setup_sessions | Setup wizard state + the account↔group bridge | group_id (real Telegram chat id, or `web:<accountId>` before a group is connected), account_id, manager_id, dm_chat_id, step, setup_data (JSONB), setup_complete |
 | shifts | Shift definitions | id, group_id, name, day_of_week, start_time, end_time |
 | shift_requirements | Role requirements per shift | shift_id, role, count |
 | staff | Staff roster | id, group_id, name, role |
@@ -208,24 +211,12 @@ Total: 37 suites, 553 tests
 
 ## Known Gaps
 
-1. **Overtime pay not used in production** — calculateWeeklyPayWithOT() exists in payCalculator.js and is fully tested (34 tests), but reviewSchedule.js still calls basic calculateWeeklyPay(). Fix: swap the call in publishSchedule().
+1. **Passive availability not integrated** — handleAvailabilityMention() saves to passive_availability table, but generateWeeklySchedule() only reads from active availability table. Passive data is write-only.
 
-2. **Passive availability not integrated** — handleAvailabilityMention() saves to passive_availability table, but generateWeeklySchedule() only reads from active availability table. Passive data is write-only.
+2. **Receipt reminders not wired** — sendReceiptReminders() is exported from readReceipts.js but never called from any cron or command. Needs a cron job or manual trigger.
 
-3. **Receipt reminders not wired** — sendReceiptReminders() is exported from readReceipts.js but never called from any cron or command. Needs a cron job or manual trigger.
+3. **Unused format functions** — formatPayBreakdown(), formatPayBreakdownWithOT(), formatPersonalPayStub() are exported but called from nowhere.
 
-4. **Unused format functions** — formatPayBreakdown(), formatPayBreakdownWithOT(), formatPersonalPayStub() are exported but called from nowhere.
+4. **coverage_maybe has no dedicated handler** — Bot sends a generic confirmation prompt inline in groupRouter.js rather than routing to a handler function.
 
-5. **coverage_maybe has no dedicated handler** — Bot sends a generic confirmation prompt inline in groupRouter.js rather than routing to a handler function.
-
-6. **schedule_update intent has no handler** — Parsed by messageParsers.js but only logged in groupRouter.js, never acted upon.
-
-## Wiring TODO
-
-From src/payroll/WIRING_TODO.md (mostly obsolete — items already implemented):
-- /setovertime command: DONE (in index.js)
-- /spreadsheet command: DONE (in index.js)
-- DM router pay queries: DONE (in dmRouter.js)
-- publishSchedule spreadsheet: DONE (in reviewSchedule.js)
-
-Remaining: Wire calculateWeeklyPayWithOT() into publishSchedule() to replace basic pay calculator.
+5. **schedule_update intent has no handler** — Parsed by messageParsers.js but only logged in groupRouter.js, never acted upon.
