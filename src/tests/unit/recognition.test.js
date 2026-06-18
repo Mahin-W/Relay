@@ -8,6 +8,7 @@ import {
   saveRecognitionEvent,
   getRecognitionHistory,
   getRecognitionLeaderboard,
+  _clearCooldownForTest,
 } from '../../engagement/recognition.js'
 
 const mockStaff = [
@@ -146,7 +147,11 @@ await describe('formatGroupShoutout', { concurrency: true }, async () => {
 
 // ── handleRecognition (MockBot, MockDB) ──────────────────────────────────────
 
-await describe('handleRecognition', { concurrency: true }, async () => {
+await describe('handleRecognition', { concurrency: false }, async () => {
+  // Clear the production cooldown map between tests so shared module-level state
+  // doesn't cause tests to interfere with each other (P1-31 cooldown side effect).
+  beforeEach(() => _clearCooldownForTest())
+
   function makeRecognitionDb() {
     const db = {
       recognitionEvents: [],
@@ -235,6 +240,64 @@ await describe('handleRecognition', { concurrency: true }, async () => {
     const sent = bot.lastMessage(msg.chat.id)
     assert.ok(sent.options.reply_to_message_id, 'should set reply_to_message_id')
     assert.equal(sent.options.reply_to_message_id, msg.message_id)
+  })
+
+  // ── P1-31: recognition cooldown ────────────────────────────────────────────
+
+  await it('P1-31: second identical recognition within cooldown window is suppressed', async () => {
+    const bot = new MockBot()
+    const db = makeRecognitionDb()
+    db.staff = [{ id: 1, name: 'Marcus', group_id: '-100999888' }]
+
+    const baseMsg = makeGroupMsg({ text: 'shoutout Marcus for covering' })
+    const now = Date.now()
+    const _cooldownMap = new Map()  // isolated per-test map
+
+    // First kudos — should go through
+    await handleRecognition(bot, baseMsg, baseMsg.chat.id, db, { now, _cooldownMap })
+    assert.equal(db.recognitionEvents.length, 1, 'first recognition should be saved')
+    assert.equal(bot.sentMessages.length, 1, 'first recognition should post')
+
+    // Second identical kudos 30 seconds later (within 60s window) — should be suppressed
+    await handleRecognition(bot, baseMsg, baseMsg.chat.id, db, { now: now + 30_000, _cooldownMap })
+    assert.equal(db.recognitionEvents.length, 1, 'second recognition within window should NOT be saved')
+    assert.equal(bot.sentMessages.length, 1, 'second recognition within window should NOT post')
+  })
+
+  await it('P1-31: same recognition after cooldown window expires is allowed', async () => {
+    const bot = new MockBot()
+    const db = makeRecognitionDb()
+    db.staff = [{ id: 1, name: 'Marcus', group_id: '-100999888' }]
+
+    const baseMsg = makeGroupMsg({ text: 'shoutout Marcus for covering' })
+    const now = Date.now()
+    const _cooldownMap = new Map()  // isolated per-test map
+
+    // First kudos
+    await handleRecognition(bot, baseMsg, baseMsg.chat.id, db, { now, _cooldownMap })
+    assert.equal(db.recognitionEvents.length, 1, 'first kudos saved')
+
+    // Second kudos 90 seconds later (past 60s window) — should be allowed
+    await handleRecognition(bot, baseMsg, baseMsg.chat.id, db, { now: now + 90_000, _cooldownMap })
+    assert.equal(db.recognitionEvents.length, 2, 'kudos after window should be saved')
+    assert.equal(bot.sentMessages.length, 2, 'kudos after window should post')
+  })
+
+  await it('P1-31: different recognizer can kudos same recipient immediately', async () => {
+    const bot = new MockBot()
+    const db = makeRecognitionDb()
+    db.staff = [{ id: 1, name: 'Marcus', group_id: '-100999888' }]
+
+    const now = Date.now()
+    const _cooldownMap = new Map()  // isolated per-test map
+    const msg1 = makeGroupMsg({ text: 'shoutout Marcus', from: { id: 111, first_name: 'Chef1' } })
+    const msg2 = makeGroupMsg({ text: 'shoutout Marcus', from: { id: 222, first_name: 'Chef2' } })
+
+    await handleRecognition(bot, msg1, msg1.chat.id, db, { now, _cooldownMap })
+    await handleRecognition(bot, msg2, msg2.chat.id, db, { now: now + 5_000, _cooldownMap })
+
+    assert.equal(db.recognitionEvents.length, 2, 'different managers can both kudos Marcus')
+    assert.equal(bot.sentMessages.length, 2, 'both should post')
   })
 })
 

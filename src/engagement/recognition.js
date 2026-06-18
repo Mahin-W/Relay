@@ -265,6 +265,33 @@ export async function getRecognitionLeaderboard(groupId, weeksBack = 4, db = nul
   return Object.values(counts).sort((a, b) => b.count - a.count)
 }
 
+// ── Per-(recognizer→recipient) spam cooldown (P1-31) ────────────────────────
+//
+// Keyed by "groupId:fromId:recipientKey" where recipientKey is the staffId
+// (for individual) or recipientType (for team/role). Value is the timestamp
+// of the last recognition in that slot.
+//
+// In-memory only — resets on restart, which is fine (matches existing dedup
+// patterns in this repo). A 60-second window prevents rapid-fire spam without
+// blocking legitimate shoutouts that happen to be close together.
+
+const COOLDOWN_MS = 60_000  // 60 seconds
+
+const _recognitionCooldown = new Map()
+
+// Exported for test isolation only — not part of the public API.
+export function _clearCooldownForTest() { _recognitionCooldown.clear() }
+
+function _cooldownKey(groupId, fromId, recognition) {
+  const recipientKey = recognition.recipientStaffId ?? recognition.recipientName ?? recognition.recipientType
+  return `${groupId}:${fromId}:${recipientKey}`
+}
+
+function _isCoolingDown2(map, key, now) {
+  const last = map.get(key)
+  return last !== undefined && now - last < COOLDOWN_MS
+}
+
 // ── Formatting ───────────────────────────────────────────────────────────────
 
 export function formatGroupShoutout(recognition, managerName) {
@@ -287,7 +314,7 @@ function getWeekStart() {
   return monday.toISOString().slice(0, 10)
 }
 
-export async function handleRecognition(bot, msg, groupId, db = null) {
+export async function handleRecognition(bot, msg, groupId, db = null, opts = {}) {
   if (!msg.text) return
 
   // Get staff list
@@ -307,6 +334,20 @@ export async function handleRecognition(bot, msg, groupId, db = null) {
       recognition.recipientName = match.name
     }
   }
+
+  // ── P1-31: per-(recognizer→recipient) spam cooldown ──────────────────────
+  // Use an injected map from opts for test isolation; fall back to the
+  // shared module-level map in production.
+  const cooldownMap = opts._cooldownMap ?? _recognitionCooldown
+  const fromId = msg.from?.id ?? 'unknown'
+  const cooldownKey = _cooldownKey(groupId, fromId, recognition)
+  const now = opts.now ?? Date.now()
+  if (_isCoolingDown2(cooldownMap, cooldownKey, now)) {
+    // Silently suppress — the same manager already gave kudos to this recipient
+    // within the cooldown window.
+    return
+  }
+  cooldownMap.set(cooldownKey, now)
 
   // Save recognition event
   const managerId = msg.from?.id
