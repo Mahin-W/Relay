@@ -1,7 +1,6 @@
 // Pure pay calculation functions — no DB, no Groq.
 
-// P1-24: minimum wage floor for late-deduction capping (US federal default).
-const MIN_WAGE = Number(process.env.MIN_WAGE) || 7.25
+import { MIN_WAGE } from './minWage.js'
 
 function parseTimeToMinutes(timeStr) {
   if (!timeStr) return 0

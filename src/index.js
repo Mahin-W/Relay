@@ -379,7 +379,9 @@ bot.onText(/^\/setrate/, async (msg) => {
     return
   }
   await updateRoleRate(groupId, roleName, amount)
-  await bot.sendMessage(groupId, `✅ ${roleName} rate updated to $${amount.toFixed(2)}/hr`)
+  const { minWageWarning } = await import('./payroll/minWage.js')
+  const warn = minWageWarning(amount)
+  await bot.sendMessage(groupId, `✅ ${roleName} rate updated to $${amount.toFixed(2)}/hr${warn ? `\n\n⚠️ ${warn}` : ''}`)
 })
 
 bot.onText(/^\/reliability/, async (msg) => {

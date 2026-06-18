@@ -2612,7 +2612,8 @@ router.patch('/roles/:role', async (req, res) => {
       .select()
       .single()
     if (error) throw error
-    res.json({ role, rate: Number(data.hourly_rate) })
+    const { minWageWarning } = await import('../payroll/minWage.js')
+    res.json({ role, rate: Number(data.hourly_rate), warning: minWageWarning(rateNum) })
   } catch (err) {
     console.error('PATCH /roles/:role error:', err.message)
     res.status(500).json({ error: 'Failed to update role rate' })
