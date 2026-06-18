@@ -2,13 +2,37 @@ import cron from 'node-cron'
 import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 
-// Tracks sent reminders to avoid double-sending within a day
-// Key: `staffName:shiftId:date`
-const sentToday = new Set()
+// Reminder dedup. An in-memory cache is the fast path AND the graceful fallback
+// when the persistent `reminder_sends` table isn't reachable (e.g. before the
+// migration is applied); the DB row is what survives a process restart so a
+// Render free-tier sleep/wake doesn't resend every reminder (P1-29).
+const recentlySent = new Set()
 
-// Tracks night-before reminders sent to avoid double-sending if cron fires twice
-// Key: `dmChatId:shiftId:night`
-const sentNightBefore = new Set()
+export async function wasReminderSent(key) {
+  if (recentlySent.has(key)) return true
+  try {
+    const { data, error } = await getDb()
+      .from('reminder_sends').select('dedup_key').eq('dedup_key', key).maybeSingle()
+    if (error) throw error
+    if (data) { recentlySent.add(key); return true }
+    return false
+  } catch {
+    // Table missing / DB unreachable → rely on the in-memory cache alone, which
+    // still dedups within this process (pre-migration behavior).
+    return false
+  }
+}
+
+export async function markReminderSent(key) {
+  recentlySent.add(key)
+  try {
+    await getDb().from('reminder_sends')
+      .upsert({ dedup_key: key }, { onConflict: 'dedup_key', ignoreDuplicates: true })
+  } catch { /* best-effort — the in-memory cache still dedups this process */ }
+}
+
+// Test hook: clear the in-memory cache between cases.
+export function _resetReminderCacheForTesting() { recentlySent.clear() }
 
 function timeToMinutes(timeStr) {
   if (!timeStr) return 0
@@ -115,11 +139,11 @@ export async function getShiftsForReminder(targetDayName, windowStart, windowEnd
 export function startReminderJobs(bot) {
   logger.bot('Starting shift reminder cron jobs')
 
-  // Clear the dedup set at midnight
+  // Clear the in-memory cache at midnight to bound its growth. Persistent dedup
+  // lives in reminder_sends; dedup keys are date-scoped so clearing is safe.
   cron.schedule('0 0 * * *', () => {
-    sentToday.clear()
-    sentNightBefore.clear()
-    logger.bot('Reminder dedup set cleared for new day')
+    recentlySent.clear()
+    logger.bot('Reminder dedup cache cleared for new day')
   })
 
   // Job 1 — Night before reminder (8pm server time)
@@ -128,6 +152,7 @@ export function startReminderJobs(bot) {
       const tomorrow = new Date()
       tomorrow.setDate(tomorrow.getDate() + 1)
       const tomorrowDay = getDayName(tomorrow)
+      const tomorrowDateStr = tomorrow.toISOString().split('T')[0]
 
       const allAssignments = await fetchScheduledShiftsForReminder()
       const toRemind = allAssignments.filter(
@@ -136,15 +161,15 @@ export function startReminderJobs(bot) {
 
       let sent = 0
       for (const a of toRemind) {
-        const nightKey = `${a.dm_chat_id}:${a.shift_id}:night`
-        if (sentNightBefore.has(nightKey)) continue
-        sentNightBefore.add(nightKey)
+        const nightKey = `${a.dm_chat_id}:${a.shift_id}:night:${tomorrowDateStr}`
+        if (await wasReminderSent(nightKey)) continue
 
         try {
           await bot.sendMessage(
             a.dm_chat_id,
             `👋 Hey ${a.staff_name}! Reminder — you're on tomorrow for ${a.shift_name}, ${a.start_time}–${a.end_time}. See you then!`
           )
+          await markReminderSent(nightKey)
           sent++
         } catch (err) {
           logger.error(`Night-before reminder failed for ${a.staff_name}: ${err.message}`)
@@ -176,15 +201,15 @@ export function startReminderJobs(bot) {
       const toRemind = await getShiftsForReminder(todayDay, wsStr, weStr)
 
       for (const a of toRemind) {
-        const key = `${a.staff_name}:${a.shift_id}:${todayDateStr}`
-        if (sentToday.has(key)) continue
+        const key = `${a.staff_name}:${a.shift_id}:2hr:${todayDateStr}`
+        if (await wasReminderSent(key)) continue
 
         try {
           await bot.sendMessage(
             a.dm_chat_id,
             `⏰ Heads up ${a.staff_name} — your ${a.shift_name} shift starts in about 2 hours at ${a.start_time}. See you soon!`
           )
-          sentToday.add(key)
+          await markReminderSent(key)
         } catch (err) {
           logger.error(`2hr reminder failed for ${a.staff_name}: ${err.message}`)
         }

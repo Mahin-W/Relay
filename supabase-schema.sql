@@ -822,3 +822,16 @@ BEGIN
       USING new_group, old_group;
   END LOOP;
 END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- REMINDER DEDUP (migration 031)
+-- ═══════════════════════════════════════════════════════════════
+
+-- P1-29: persist schedule-reminder dedup so a restart doesn't resend reminders.
+CREATE TABLE IF NOT EXISTS reminder_sends (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  dedup_key  TEXT NOT NULL UNIQUE,
+  sent_on    DATE NOT NULL DEFAULT current_date,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reminder_sends_sent_on ON reminder_sends (sent_on);
