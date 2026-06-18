@@ -46,3 +46,23 @@ export async function getStaffForGroup(groupId) {
     return []
   }
 }
+
+export async function updateStaffById(id, groupId, changes) {
+  try {
+    const fields = {}
+    if (changes.name !== undefined) fields.name = changes.name
+    if (changes.role !== undefined) fields.role = changes.role
+    const { data, error } = await getDb()
+      .from('staff').update(fields).eq('id', id).eq('group_id', groupId).select().single()
+    if (error) throw error
+    return data
+  } catch (err) { logger.error(`updateStaffById failed: ${err.message}`); return null }
+}
+
+export async function deleteStaffById(id, groupId) {
+  try {
+    const { error } = await getDb().from('staff').delete().eq('id', id).eq('group_id', groupId)
+    if (error) throw error
+    return true
+  } catch (err) { logger.error(`deleteStaffById failed: ${err.message}`); return false }
+}

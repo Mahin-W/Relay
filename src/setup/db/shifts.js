@@ -106,3 +106,12 @@ export async function getShiftRequirements(shiftId) {
     return []
   }
 }
+
+export async function deleteShiftById(shiftId, groupId) {
+  try {
+    await getDb().from('shift_requirements').delete().eq('shift_id', shiftId)
+    const { error } = await getDb().from('shifts').delete().eq('id', shiftId).eq('group_id', groupId)
+    if (error) throw error
+    return true
+  } catch (err) { logger.error(`deleteShiftById failed: ${err.message}`); return false }
+}

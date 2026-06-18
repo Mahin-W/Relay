@@ -57,6 +57,15 @@ export async function getRatesForGroup(groupId, db = null) {
   }
 }
 
+export async function deleteRole(groupId, roleName, db = null) {
+  if (db?.deleteRole) return db.deleteRole(groupId, roleName)
+  try {
+    const { error } = await getDb().from('role_rates').delete().eq('group_id', groupId).eq('role_name', roleName)
+    if (error) throw error
+    return true
+  } catch (err) { logger.error(`deleteRole failed: ${err.message}`); return false }
+}
+
 export async function getUniqueRolesForGroup(groupId, db = null) {
   if (db?.getUniqueRolesForGroup) return db.getUniqueRolesForGroup(groupId)
   try {
