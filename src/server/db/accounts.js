@@ -80,19 +80,6 @@ export async function updateAccount(authId, updates) {
   }
 }
 
-// Merge a patch into the staging setup_data JSONB (read-modify-write).
-export async function updateAccountSetupData(authId, patch) {
-  try {
-    const account = await getAccountByAuthId(authId)
-    if (!account) return null
-    const merged = { ...(account.setup_data || {}), ...patch }
-    return await updateAccount(authId, { setup_data: merged })
-  } catch (err) {
-    logger.error(`updateAccountSetupData failed: ${err.message}`)
-    return null
-  }
-}
-
 // The account<->group bridge: the connected group for an account, if any.
 export async function getLinkedGroup(accountId) {
   try {

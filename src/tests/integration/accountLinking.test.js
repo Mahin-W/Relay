@@ -48,15 +48,6 @@ describe('accounts DB module', () => {
     assert.equal(getFakeClient()._table('accounts').length, 1)
   })
 
-  test('updateAccountSetupData merges patches without clobbering', async () => {
-    await accounts.ensureAccount(AUTH_ID, 'owner@shop.com')
-    await accounts.updateAccountSetupData(AUTH_ID, { restaurant_name: 'Bagels' })
-    await accounts.updateAccountSetupData(AUTH_ID, { staff: [{ name: 'Sam', role: 'Server' }] })
-    const a = await accounts.getAccountByAuthId(AUTH_ID)
-    assert.equal(a.setup_data.restaurant_name, 'Bagels')
-    assert.equal(a.setup_data.staff.length, 1)
-  })
-
   test('getLinkedGroup returns the connected group', async () => {
     await accounts.ensureAccount(AUTH_ID, 'owner@shop.com')
     // Seed with a future created_at so it sorts first (desc) over the provisional web: row.

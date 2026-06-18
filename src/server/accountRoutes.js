@@ -4,7 +4,6 @@ import {
   getAccountByAuthId,
   ensureAccount,
   updateAccount,
-  updateAccountSetupData,
   createAccountLink,
   getLinkedGroup,
   getAccountTelegramDm,
@@ -81,10 +80,10 @@ router.get('/', requireAuth, requireAccount, async (req, res) => {
   }
 })
 
-// PATCH /api/account — update business name and/or merge a setup_data patch.
+// PATCH /api/account — update business name / onboarding / 2FA flags.
 router.patch('/', requireAuth, requireAccount, async (req, res) => {
   try {
-    const { businessName, setupData, onboardingComplete, twoFactorEnabled } = req.body || {}
+    const { businessName, onboardingComplete, twoFactorEnabled } = req.body || {}
     const updates = {}
     if (typeof businessName === 'string') updates.business_name = businessName
     if (typeof onboardingComplete === 'boolean') updates.onboarding_complete = onboardingComplete
@@ -92,9 +91,6 @@ router.patch('/', requireAuth, requireAccount, async (req, res) => {
 
     if (Object.keys(updates).length) {
       await updateAccount(req.manager.accountId, updates)
-    }
-    if (setupData && typeof setupData === 'object') {
-      await updateAccountSetupData(req.manager.accountId, setupData)
     }
     const account = await getAccountByAuthId(req.manager.accountId)
     res.json({
