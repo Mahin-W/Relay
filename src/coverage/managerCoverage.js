@@ -13,6 +13,7 @@
 import { getDb } from '../db.js'
 import { llmCreate, llmWithRetry } from '../parsers/llm.js'
 import { logger } from '../logger.js'
+import { broadcastDMs } from './throttledBroadcast.js'
 
 // ── Live DB functions ─────────────────────────────────────────────────────────
 
@@ -250,21 +251,18 @@ export async function handleManagerCoveragePost(bot, msg, intent, db = null) {
     await bot.sendMessage(groupId, groupText, { parse_mode: 'Markdown' })
     logger.bot(`Manager coverage request posted in ${groupName}: ${shift.name}`)
 
-    // 7. Broadcast to eligible staff via DMs
+    // 7. Broadcast to eligible staff via DMs (paced to respect Telegram ~30 msg/sec limit)
     const staff = await _getGroupMembersWithDm(groupId)
-    for (const member of staff) {
-      if (!member.dmChatId) continue
-      try {
-        const dmText =
-          `🔔 *Coverage Needed — ${groupName}*\n\n` +
-          `*Shift:* ${formatShiftLabel(shift)}\n\n` +
-          `Can you cover it? Reply *yes* to volunteer ✋`
-        await bot.sendMessage(member.dmChatId, dmText, { parse_mode: 'Markdown' })
-        logger.bot(`Staff DM sent to ${member.firstName}`)
-      } catch (err) {
-        logger.error(`Failed to DM staff ${member.firstName}: ${err.message}`)
-      }
-    }
+    const dmText =
+      `🔔 *Coverage Needed — ${groupName}*\n\n` +
+      `*Shift:* ${formatShiftLabel(shift)}\n\n` +
+      `Can you cover it? Reply *yes* to volunteer ✋`
+    await broadcastDMs(
+      (chatId, text, opts) => bot.sendMessage(chatId, text, opts),
+      staff,
+      () => ({ text: dmText, opts: { parse_mode: 'Markdown' } }),
+    )
+    logger.bot(`Coverage broadcast sent to ${staff.length} staff member(s) for ${shift.name}`)
 
     // 8. Notify manager DM
     await bot.sendMessage(

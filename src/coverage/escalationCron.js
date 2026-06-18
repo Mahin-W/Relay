@@ -1,5 +1,6 @@
 import { getDb } from '../db.js'
 import { logger } from '../logger.js'
+import { broadcastDMs } from './throttledBroadcast.js'
 
 // Coverage-fill escalation cron.
 //
@@ -112,6 +113,8 @@ async function sendTier1Reminder(bot, req, db) {
     return
   }
   const dms = await getStaffDmsByUserIds(db, targets)
+  // Normalise: broadcastDMs expects .dmChatId; staff_dms rows use .dm_chat_id
+  const recipients = dms.map(m => ({ ...m, dmChatId: m.dm_chat_id, firstName: m.first_name }))
   const shiftLabel = buildShiftLabel(req)
   const text =
     `⏰ *Reminder — coverage still needed*\n\n` +
@@ -119,14 +122,24 @@ async function sendTier1Reminder(bot, req, db) {
     `*Requested by:* ${req.requested_by}\n\n` +
     `It's been 30 minutes and nobody has volunteered yet. Can you help?\n` +
     `Reply *yes* to cover ✋`
+
+  // Paced broadcast — respects Telegram ~30 msg/sec limit
+  await broadcastDMs(
+    (chatId, msgText, opts) => bot.sendMessage(chatId, msgText, opts),
+    recipients,
+    () => ({ text, opts: { parse_mode: 'Markdown' } }),
+    {
+      onError: (err, recipient) =>
+        logger.error(`escalation tier 1: DM to ${recipient.firstName} failed: ${err.message}`),
+    }
+  )
+
+  // Record outreach for each successfully-attempted recipient (fire-and-forget; errors logged)
   for (const m of dms) {
     if (!m.dm_chat_id) continue
-    try {
-      await bot.sendMessage(m.dm_chat_id, text, { parse_mode: 'Markdown' })
-      await recordOutreach(db, req.id, m.user_id)
-    } catch (err) {
-      logger.error(`escalation tier 1: DM to ${m.first_name} failed: ${err.message}`)
-    }
+    recordOutreach(db, req.id, m.user_id).catch(err =>
+      logger.error(`escalation tier 1: recordOutreach failed for ${m.first_name}: ${err.message}`)
+    )
   }
   logger.bot(`escalation tier 1: re-DMed ${dms.length} unresponsive staff for request ${req.id}`)
 }
