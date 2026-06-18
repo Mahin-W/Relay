@@ -503,9 +503,15 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   // Slash commands not handled here are caught by onText handlers in index.js — don't double-reply
   if (text.startsWith('/')) return
 
-  await bot.sendMessage(msg.chat.id,
-    `To volunteer for a shift, just reply *yes* when I ask you.\n\nSend */start* if you haven't registered yet.`,
-    { parse_mode: 'Markdown' })
+  // Guard the final fallback: if the user has blocked the bot, sendMessage
+  // rejects and would surface as an unhandled rejection (P0-2/P0-3).
+  try {
+    await bot.sendMessage(msg.chat.id,
+      `To volunteer for a shift, just reply *yes* when I ask you.\n\nSend */start* if you haven't registered yet.`,
+      { parse_mode: 'Markdown' })
+  } catch (err) {
+    logger.error(`dmRouter fallback reply failed: ${err.message}`)
+  }
 }
 
 // Alias for simulation/test imports that check for routeDM export

@@ -64,10 +64,11 @@ describe('calculateCalloutProbability', { concurrency: true }, () => {
     assert.equal(result.riskLevel, 'low')
   })
 
-  it('newStaffSignals → riskLevel capped at medium (totalObservations < 3)', () => {
+  it('newStaffSignals → riskLevel kept at low (totalObservations < 3)', () => {
     const result = calculateCalloutProbability(newStaffSignals)
-    // Even though raw probability would be critical, cap at medium
-    assert.equal(result.riskLevel, 'medium')
+    // Even though raw probability would be critical, too little history to
+    // fairly flag a new hire — keep them at 'low' so they don't surface.
+    assert.equal(result.riskLevel, 'low')
   })
 
   it('historicalCalloutRateThisDay contributes 35% weight', () => {

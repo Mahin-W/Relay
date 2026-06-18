@@ -126,9 +126,11 @@ export function calculateCalloutProbability(signals) {
   else if (probability >= 0.2) riskLevel = 'medium'
   else riskLevel = 'low'
 
-  // New staff protection: cap at medium if < 3 observations
-  if (totalObservations < 3 && (riskLevel === 'high' || riskLevel === 'critical')) {
-    riskLevel = 'medium'
+  // New staff protection: with fewer than 3 observations there isn't enough
+  // history to fairly flag anyone — keep them at 'low' so a single coincidental
+  // callout doesn't surface a new hire in pre-publish briefings.
+  if (totalObservations < 3 && riskLevel !== 'low') {
+    riskLevel = 'low'
   }
 
   // Top 3 contributing factors

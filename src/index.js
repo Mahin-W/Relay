@@ -62,7 +62,7 @@ bot.deleteWebHook({ drop_pending_updates: true })
   .finally(() => bot.startPolling())
 
 // Start web dashboard server
-startWebServer(bot)
+const webServer = startWebServer(bot)
 
 let BOT_USERNAME = ''
 
@@ -940,8 +940,17 @@ cron.schedule('*/10 * * * *', async () => {
 })
 logger.info('Coverage escalation cron started (every 10 minutes)')
 
-process.on('SIGINT', () => {
-  logger.bot('Shutting down gracefully...')
-  bot.stopPolling()
-  process.exit(0)
-})
+// Graceful shutdown: stop polling, drain in-flight HTTP requests, then exit.
+// Render sends SIGTERM on deploy/restart; also handle SIGINT for local Ctrl-C.
+let shuttingDown = false
+function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  logger.bot(`Shutting down gracefully (${signal})...`)
+  try { bot.stopPolling() } catch (err) { logger.error(`stopPolling on shutdown: ${err.message}`) }
+  webServer.close(() => process.exit(0))
+  // Force-exit if connections don't drain in time so the platform can restart us.
+  setTimeout(() => process.exit(0), 8000).unref()
+}
+process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))

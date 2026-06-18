@@ -2,6 +2,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import path from 'path'
+import { getDb } from '../db.js'
 import authRoutes from './authRoutes.js'
 import accountRoutes from './accountRoutes.js'
 import setupRoutes from './setupRoutes.js'
@@ -37,8 +38,23 @@ export function createApp(bot, db) {
   app.locals.bot = bot
   app.locals.db = db
 
-  app.get('/health', (req, res) =>
-    res.json({ ok: true, service: 'relay', time: new Date().toISOString() }))
+  // Deep health check: a 200 means the web server is up AND Telegram polling is
+  // live. Polling-dead returns 503 so an external monitor (and Render's
+  // healthcheck) catches a bot that's silently stopped receiving messages — a
+  // container restart re-establishes polling. Supabase reachability is reported
+  // but does NOT fail the route (it's external; restarting wouldn't fix it).
+  app.get('/health', async (req, res) => {
+    const polling = typeof bot?.isPolling === 'function' ? bot.isPolling() : null
+    let supabase = null
+    try {
+      const { error } = await getDb().from('setup_sessions').select('group_id').limit(1)
+      supabase = !error
+    } catch { supabase = false }
+    const ok = polling !== false
+    res.status(ok ? 200 : 503).json({
+      ok, service: 'relay', polling, supabase, time: new Date().toISOString(),
+    })
+  })
 
   // Public config for the static frontend's Supabase Auth client. The anon key
   // is safe to expose (RLS denies anon; see migration 008). MUST be registered
@@ -69,10 +85,14 @@ export function startWebServer(bot, db) {
   const app = createApp(bot, db)
   const port = process.env.PORT || 10000
 
-  app.listen(port, () => console.log(`Web server on port ${port}`))
+  // Return the server so the caller can close it on shutdown (graceful drain of
+  // in-flight requests instead of killing them mid-Supabase-write).
+  const server = app.listen(port, () => console.log(`Web server on port ${port}`))
 
   // Keep Render free tier awake
   setInterval(() => {
     fetch('https://relay-v5ne.onrender.com/health').catch(() => {})
   }, 14 * 60 * 1000)
+
+  return server
 }
