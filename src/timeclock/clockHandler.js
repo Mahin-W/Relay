@@ -6,8 +6,52 @@ import { getGroupMembersWithDm, getDb } from '../db.js'
 import { logger } from '../logger.js'
 import { checkOvertimeAlert } from './clockAlerts.js'
 
+// How many minutes before shift start staff may clock in (default: 60).
+const EARLY_CLOCKIN_GRACE_MIN = Number(process.env.EARLY_CLOCKIN_GRACE_MIN) || 60
+
 function getTodayDayName() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long' })
+}
+
+/**
+ * Parse a shift start_time string ("18:00", "6pm", "6:00am", etc.) and return
+ * the number of minutes until that time from `now`. Negative means it's in the past.
+ */
+function minutesUntilShiftStart(startTimeStr, now = new Date()) {
+  if (!startTimeStr) return null
+  const s = String(startTimeStr).trim().toLowerCase()
+
+  // "18:00" or "06:00" (24h)
+  let hours, minutes
+  const h24 = s.match(/^(\d{1,2}):(\d{2})$/)
+  if (h24) {
+    hours = parseInt(h24[1])
+    minutes = parseInt(h24[2])
+  } else {
+    // "6:00am" / "6:00pm"
+    const h12c = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/)
+    if (h12c) {
+      hours = parseInt(h12c[1])
+      minutes = parseInt(h12c[2])
+      if (h12c[3] === 'pm' && hours !== 12) hours += 12
+      if (h12c[3] === 'am' && hours === 12) hours = 0
+    } else {
+      // "6am" / "6pm"
+      const h12 = s.match(/^(\d{1,2})\s*(am|pm)$/)
+      if (h12) {
+        hours = parseInt(h12[1])
+        minutes = 0
+        if (h12[2] === 'pm' && hours !== 12) hours += 12
+        if (h12[2] === 'am' && hours === 12) hours = 0
+      } else {
+        return null
+      }
+    }
+  }
+
+  const shiftTime = new Date(now)
+  shiftTime.setHours(hours, minutes, 0, 0)
+  return (shiftTime.getTime() - now.getTime()) / 60000
 }
 
 function formatTime(date) {
@@ -81,14 +125,41 @@ export async function handleClockIn(bot, msg, db = null) {
   const staffId = await resolveStaffId(userId, groupId, db)
   const today = getTodayDayName()
 
-  // Find today's shift(s)
+  // Find today's shift(s) — supports db.findPersonShiftForDay override for testing
   let shifts = []
   try {
-    const result = await findPersonShiftForDay(groupId, userId, msg.from?.first_name || '', today)
+    const _findPersonShiftForDay = db?.findPersonShiftForDay ?? findPersonShiftForDay
+    const result = await _findPersonShiftForDay(groupId, userId, msg.from?.first_name || '', today)
     shifts = result?.matches ?? []
   } catch (err) {
     logger.error(`Clock-in shift lookup failed: ${err.message}`)
   }
+
+  // ── P1-10 validation ──────────────────────────────────────────────────────
+  // (a) Must have an assigned shift today
+  if (shifts.length === 0) {
+    await bot.sendMessage(msg.chat.id,
+      "You don't have a shift scheduled today. If you think that's a mistake, ask your manager — " +
+      "they can clock you in manually from the dashboard.")
+    return true
+  }
+
+  // (b) Reject clock-in earlier than EARLY_CLOCKIN_GRACE_MIN before shift start
+  // (only checked for single-shift case; multi-shift will ask which one first)
+  if (shifts.length === 1) {
+    const shiftMatch = shifts[0]
+    const shift = shiftMatch?.shift ?? shiftMatch
+    if (shift?.start_time) {
+      const minsUntil = minutesUntilShiftStart(shift.start_time)
+      if (minsUntil !== null && minsUntil > EARLY_CLOCKIN_GRACE_MIN) {
+        await bot.sendMessage(msg.chat.id,
+          `Your ${shift.name} shift starts at ${shift.start_time}. ` +
+          `You can clock in up to ${EARLY_CLOCKIN_GRACE_MIN} min before your shift starts.`)
+        return true
+      }
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (shifts.length > 1) {
     // Multiple shifts today — ask which one
