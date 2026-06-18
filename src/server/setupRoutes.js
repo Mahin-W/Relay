@@ -3,8 +3,9 @@ import { requireAuth } from './middleware.js'
 import { requireAccount } from './accountRoutes.js'
 import { getAccountByAuthId, updateAccount, isProvisionalGroup } from './db/accounts.js'
 import { updateSetupSession } from '../setup/setupDb.js'
-import { getStaffForGroup } from '../setup/db/staff.js'
-import { getShiftsForGroup, getShiftRequirements } from '../setup/db/shifts.js'
+import { getStaffForGroup, saveStaff, updateStaffById, deleteStaffById } from '../setup/db/staff.js'
+import { getShiftsForGroup, getShiftRequirements, saveShift, saveShiftRequirement, deleteShiftById } from '../setup/db/shifts.js'
+import { normalizeShiftTime } from '../utils/time.js'
 import { getRatesForGroup, updateRoleRate, deleteRole } from '../setup/db/roles.js'
 
 const router = express.Router()
@@ -93,6 +94,74 @@ router.post('/business-name', ...gate, async (req, res) => {
   } catch (err) {
     console.error('POST /setup/business-name error:', err.message)
     res.status(500).json({ error: 'Could not save name' })
+  }
+})
+
+// ── Staff ──
+router.post('/staff', ...gate, async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim()
+    if (!name) return res.status(400).json({ error: 'Name required' })
+    const role = String(req.body?.role || 'Staff').trim() || 'Staff'
+    const row = await saveStaff(req.manager.groupId, name, role)
+    res.status(201).json({ id: row?.id, name, role })
+  } catch (err) {
+    console.error('POST /setup/staff error:', err.message)
+    res.status(500).json({ error: 'Could not add team member' })
+  }
+})
+
+router.patch('/staff/:id', ...gate, async (req, res) => {
+  try {
+    const changes = {}
+    if (req.body?.name !== undefined) changes.name = String(req.body.name).trim()
+    if (req.body?.role !== undefined) changes.role = String(req.body.role).trim()
+    const row = await updateStaffById(req.params.id, req.manager.groupId, changes)
+    res.json(row || {})
+  } catch (err) {
+    console.error('PATCH /setup/staff error:', err.message)
+    res.status(500).json({ error: 'Could not update team member' })
+  }
+})
+
+router.delete('/staff/:id', ...gate, async (req, res) => {
+  try {
+    await deleteStaffById(req.params.id, req.manager.groupId)
+    res.status(204).end()
+  } catch (err) {
+    console.error('DELETE /setup/staff error:', err.message)
+    res.status(500).json({ error: 'Could not remove team member' })
+  }
+})
+
+// ── Shifts ──
+router.post('/shift', ...gate, async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim()
+    const day = String(req.body?.day_of_week || '').trim()
+    if (!name || !day) return res.status(400).json({ error: 'Shift name and day are required' })
+    const start = normalizeShiftTime(String(req.body?.start_time || '').trim())
+    const end = normalizeShiftTime(String(req.body?.end_time || '').trim())
+    const shift = await saveShift(req.manager.groupId, name, day, start || null, end || null)
+    if (shift?.id && Array.isArray(req.body?.requirements)) {
+      for (const r of req.body.requirements) {
+        if (r?.role) await saveShiftRequirement(shift.id, r.role, Number(r.count) || 1)
+      }
+    }
+    res.status(201).json({ id: shift?.id, name, day_of_week: day, start_time: start, end_time: end })
+  } catch (err) {
+    console.error('POST /setup/shift error:', err.message)
+    res.status(500).json({ error: 'Could not add shift' })
+  }
+})
+
+router.delete('/shift/:id', ...gate, async (req, res) => {
+  try {
+    await deleteShiftById(req.params.id, req.manager.groupId)
+    res.status(204).end()
+  } catch (err) {
+    console.error('DELETE /setup/shift error:', err.message)
+    res.status(500).json({ error: 'Could not remove shift' })
   }
 })
 

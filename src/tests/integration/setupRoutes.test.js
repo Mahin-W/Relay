@@ -63,3 +63,32 @@ describe('setup routes: roles/rates/business + resume', () => {
     assert.equal(r.body.connected, false)
   })
 })
+
+describe('setup routes: staff + shifts', () => {
+  test('POST /staff inserts a staff row under the group', async () => {
+    const r = await req('POST', '/api/account/setup/staff', { name: 'Sam', role: 'Server' })
+    assert.equal(r.status, 201)
+    const rows = getFakeClient()._table('staff')
+    assert.equal(rows[0].name, 'Sam')
+    assert.equal(rows[0].group_id, PROV)
+  })
+  test('DELETE /staff/:id removes it', async () => {
+    seedTable('staff', [{ id: 7, group_id: PROV, name: 'Sam', role: 'Server' }])
+    const r = await req('DELETE', '/api/account/setup/staff/7')
+    assert.equal(r.status, 204)
+    assert.equal(getFakeClient()._table('staff').length, 0)
+  })
+  test('POST /shift creates a shift + its requirements, normalizing time', async () => {
+    const r = await req('POST', '/api/account/setup/shift', {
+      name: 'Lunch', day_of_week: 'Monday', start_time: '11am', end_time: '3pm',
+      requirements: [{ role: 'Server', count: 2 }],
+    })
+    assert.equal(r.status, 201)
+    const shift = getFakeClient()._table('shifts')[0]
+    assert.equal(shift.start_time, '11:00')
+    assert.equal(shift.end_time, '15:00')
+    const reqs = getFakeClient()._table('shift_requirements')
+    assert.equal(reqs[0].role, 'Server')
+    assert.equal(reqs[0].count, 2)
+  })
+})
