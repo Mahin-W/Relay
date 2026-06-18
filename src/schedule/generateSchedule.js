@@ -261,11 +261,17 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         shiftReqs = [{ shift_id: shift.id, role: '*', count: 1, roleId: null }]
       }
 
+      // P1-5: track which staff have already been placed on THIS shift so they
+      // cannot be picked again for a different role requirement on the same shift.
+      const assignedThisShift = new Set()
+
       for (const req of shiftReqs) {
         const roleLower = (req.role || '').toLowerCase()
         const matchAnyRole = roleLower === '*' || roleLower === ''
 
         const candidates = resolvedStaff.filter(s => {
+          // P1-5: skip staff already placed on this shift (different role slot)
+          if (assignedThisShift.has(s.staffId)) return false
           if (!matchAnyRole && (s.role || '').toLowerCase() !== roleLower) return false
           // Manual availability takes precedence over chat-collected availability:
           //   available=false → hard block regardless of chat response
@@ -299,6 +305,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         const picked = candidates.slice(0, req.count)
 
         for (const p of picked) {
+          assignedThisShift.add(p.staffId)  // P1-5: mark as placed on this shift
           assignments.push({
             shiftId: shift.id,
             shiftName: shift.name,

@@ -83,3 +83,28 @@ test('role mismatch creates gap', async () => {
   assert.equal(result.assignments.length, 0)
   assert.equal(result.gaps.length, 1)
 })
+
+// P1-5: staff cross-trained for two roles must not be double-assigned on same shift
+test('cross-trained staff assigned at most once per shift (P1-5)', async () => {
+  // Alex is both a Server and a Cook. The shift requires 1 Server AND 1 Cook.
+  // Without the fix, Alex could fill both role slots on the same shift.
+  const mockData = {
+    shifts: [shift(1, 'Monday Morning', 'Monday')],
+    staff: [
+      staff(10, 'Alex', 'Server', 'u1'),  // primary role: Server (also cross-trained as Cook, but role matching uses primary)
+      staff(10, 'Alex', 'Cook', 'u1'),    // same staff member appears with second role (simulates multi-role match)
+    ],
+    availability: [availability('u1', [], { all: true })],
+    requirements: [req(1, 'server', 1), req(1, 'cook', 1)],
+  }
+  const result = await generateWeeklySchedule('g2', WEEK, mockData)
+
+  // Alex should appear at most ONCE in the assignments for shift 1
+  const shiftOneAssignments = result.assignments.filter(a => a.shiftId === 1)
+  const assignedStaffIds = shiftOneAssignments.map(a => a.staffId)
+  const uniqueStaffIds = new Set(assignedStaffIds)
+  assert.ok(
+    uniqueStaffIds.size === assignedStaffIds.length,
+    `Staff member double-assigned to same shift! assignments: ${JSON.stringify(shiftOneAssignments)}`
+  )
+})
