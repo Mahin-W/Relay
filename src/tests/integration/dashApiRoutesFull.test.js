@@ -523,3 +523,83 @@ describe('Error handling', () => {
     assert.ok(status >= 400 && status < 500, `traversal should 4xx, got ${status}`)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P1-32 — staleAvailability flag on /api/schedule/status
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Schedule status — staleAvailability (P1-32)', () => {
+  const SCHED_GROUP = 'sched-grp'
+  const SCHED_WEEK = '2025-07-14'
+  // Schedule was generated at T0
+  const SCHEDULE_CREATED_AT = '2025-07-10T10:00:00.000Z'
+  // Availability submitted AFTER the schedule was generated (T0 + 1 hour)
+  const AVAIL_AFTER = '2025-07-10T11:00:00.000Z'
+  // Availability submitted BEFORE the schedule was generated (T0 - 1 hour)
+  const AVAIL_BEFORE = '2025-07-10T09:00:00.000Z'
+
+  test('staleAvailability=true when availability submitted after schedule was generated', async () => {
+    supabaseFake.resetFakeClient()
+    supabaseFake.seedTable('setup_sessions', [{
+      id: 99, group_id: SCHED_GROUP, group_name: 'Test', manager_id: 1,
+      dm_chat_id: 1, setup_complete: true, setup_data: {},
+    }])
+    // Seed a published schedule with a specific created_at
+    supabaseFake.seedTable('generated_schedules', [{
+      id: 501, group_id: SCHED_GROUP, week_start: SCHED_WEEK,
+      status: 'published', published_at: SCHEDULE_CREATED_AT,
+      created_at: SCHEDULE_CREATED_AT, assignments: [], gaps: [],
+    }])
+    // Seed availability row with collected_at AFTER schedule creation
+    supabaseFake.seedTable('availability', [{
+      id: 201, user_id: 1001, group_id: SCHED_GROUP, week_start: SCHED_WEEK,
+      collected_at: AVAIL_AFTER,
+    }])
+
+    const app = createTestApp()
+    const { status, body } = await request(app, 'GET', `/api/schedule/status?week=${SCHED_WEEK}`, {
+      headers: { Cookie: authCookie(SCHED_GROUP) },
+    })
+    assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(body)}`)
+    assert.equal(body.staleAvailability, true,
+      `Expected staleAvailability=true (avail at ${AVAIL_AFTER} > schedule at ${SCHEDULE_CREATED_AT}). Got: ${JSON.stringify(body)}`)
+  })
+
+  test('staleAvailability=false when availability submitted before schedule was generated', async () => {
+    supabaseFake.resetFakeClient()
+    supabaseFake.seedTable('setup_sessions', [{
+      id: 99, group_id: SCHED_GROUP, group_name: 'Test', manager_id: 1,
+      dm_chat_id: 1, setup_complete: true, setup_data: {},
+    }])
+    // Schedule created after availability
+    supabaseFake.seedTable('generated_schedules', [{
+      id: 502, group_id: SCHED_GROUP, week_start: SCHED_WEEK,
+      status: 'published', published_at: SCHEDULE_CREATED_AT,
+      created_at: SCHEDULE_CREATED_AT, assignments: [], gaps: [],
+    }])
+    // Availability submitted BEFORE schedule was created
+    supabaseFake.seedTable('availability', [{
+      id: 202, user_id: 1001, group_id: SCHED_GROUP, week_start: SCHED_WEEK,
+      collected_at: AVAIL_BEFORE,
+    }])
+
+    const app = createTestApp()
+    const { status, body } = await request(app, 'GET', `/api/schedule/status?week=${SCHED_WEEK}`, {
+      headers: { Cookie: authCookie(SCHED_GROUP) },
+    })
+    assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(body)}`)
+    assert.equal(body.staleAvailability, false,
+      `Expected staleAvailability=false (avail at ${AVAIL_BEFORE} < schedule at ${SCHEDULE_CREATED_AT}). Got: ${JSON.stringify(body)}`)
+  })
+
+  test('staleAvailability=false when no schedule exists yet', async () => {
+    supabaseFake.resetFakeClient()
+    // No generated_schedules, no availability
+    const app = createTestApp()
+    const { status, body } = await request(app, 'GET', `/api/schedule/status?week=${SCHED_WEEK}`, {
+      headers: { Cookie: authCookie(SCHED_GROUP) },
+    })
+    assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(body)}`)
+    assert.equal(body.staleAvailability, false,
+      `Expected staleAvailability=false when no schedule. Got: ${JSON.stringify(body)}`)
+  })
+})

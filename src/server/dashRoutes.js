@@ -1059,9 +1059,9 @@ router.get('/schedule/status', async (req, res) => {
     const week = safeWeekParam(req.query.week) || getCurrentWeekStart()
     const db = supabase()
 
-    const [gsResult, countResult] = await Promise.all([
+    const [gsResult, countResult, availResult] = await Promise.all([
       db.from('generated_schedules')
-        .select('status, published_at, approved_at')
+        .select('status, published_at, approved_at, created_at')
         .eq('group_id', groupId)
         .eq('week_start', week)
         .order('id', { ascending: false })
@@ -1071,10 +1071,29 @@ router.get('/schedule/status', async (req, res) => {
         .select('id', { count: 'exact', head: true })
         .eq('group_id', groupId)
         .eq('week_start', week),
+      // P1-32: fetch the most recently collected availability row for this group+week
+      db.from('availability')
+        .select('collected_at')
+        .eq('group_id', groupId)
+        .eq('week_start', week)
+        .order('collected_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const gs = gsResult.data
     const count = countResult.count || 0
+
+    // P1-32: staleAvailability=true when the most recent availability submission
+    // happened AFTER the schedule was generated. False if no schedule exists or
+    // if no availability rows exist for the week.
+    const scheduleCreatedAt = gs?.created_at ?? null
+    const latestAvailAt = availResult.data?.collected_at ?? null
+    const staleAvailability = !!(
+      scheduleCreatedAt &&
+      latestAvailAt &&
+      new Date(latestAvailAt) > new Date(scheduleCreatedAt)
+    )
 
     return res.json({
       weekStart: week,
@@ -1083,6 +1102,7 @@ router.get('/schedule/status', async (req, res) => {
       assignmentCount: count,
       hasAssignments: count > 0,
       status: gs?.status || (count > 0 ? 'draft' : 'empty'),
+      staleAvailability,
     })
   } catch (err) {
     console.error('[GET /schedule/status]', err.message)
