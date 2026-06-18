@@ -8,7 +8,7 @@ import { handleAvailabilityReply } from '../availability/collectAvailability.js'
 import { handleManagerReview } from '../schedule/reviewSchedule.js'
 import { handleDmConfirmation, handleDmCoverageTradeOffer } from '../handleCoverage.js'
 import { handleManagerTimeOffReply } from '../timeOff/handleTimeOff.js'
-import { handleScheduleQuery, handleHoursQuery, isScheduleQuery, isHoursQuery } from '../schedule/selfService.js'
+import { handleScheduleQuery, handleHoursQuery, isScheduleQuery, isHoursQuery, isScoreQuery, handleScoreQuery } from '../schedule/selfService.js'
 import { handleStaffPayQuery, handleStaffHistoryQuery, isPayQuery, isHistoryQuery } from '../payroll/staffPayService.js'
 import { isDmConfirmation, parseMessage } from '../parseMessage.js'
 import { getOutreachByUser } from '../db.js'
@@ -383,6 +383,13 @@ export async function handleDmMessage(bot, msg, isGroupAdmin, BOT_USERNAME) {
   if (isHoursQuery(text)) {
     try { await handleHoursQuery(bot, msg) } catch (err) {
       logger.error(`Hours query failed: ${err.message}`)
+    }
+    return
+  }
+
+  if (isScoreQuery(text)) {
+    try { await handleScoreQuery(bot, msg) } catch (err) {
+      logger.error(`Score query failed: ${err.message}`)
     }
     return
   }

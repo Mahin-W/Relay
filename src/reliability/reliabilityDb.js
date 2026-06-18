@@ -1,13 +1,27 @@
 import { getDb } from '../db.js'
 import { logger } from '../logger.js'
-import { computeScore, getReliabilityLabel } from './reliabilityScore.js'
+import { computeScore, getReliabilityLabel, formatMyScore, isNegativeEvent, shouldSkipNegativeEvent } from './reliabilityScore.js'
 
 /**
  * Records a reliability event for a staff member.
+ * Negative events are skipped for staff created < 14 days ago (new-hire grace).
  * Silently logs on error — never throws (callers must not crash on failure).
  */
 export async function recordEvent(staffId, groupId, eventType, metadata = {}) {
   try {
+    // New-hire grace: skip negative events for staff created in the last 14 days.
+    if (isNegativeEvent(eventType)) {
+      const { data: staffRow } = await getDb()
+        .from('staff')
+        .select('created_at')
+        .eq('id', staffId)
+        .maybeSingle()
+      if (shouldSkipNegativeEvent(staffRow?.created_at)) {
+        logger.info(`recordEvent: skipped negative '${eventType}' for staff ${staffId} (new-hire grace period)`)
+        return
+      }
+    }
+
     const { error } = await getDb()
       .from('staff_reliability_events')
       .insert({ staff_id: staffId, group_id: groupId, event_type: eventType, metadata })
@@ -15,6 +29,19 @@ export async function recordEvent(staffId, groupId, eventType, metadata = {}) {
   } catch (err) {
     logger.error(`recordEvent error [${eventType}]: ${err.message}`)
   }
+}
+
+/**
+ * Returns the computed reliability score and label for a single staff member.
+ * @param {string|number} staffId
+ * @param {string} groupId
+ * @returns {Promise<{score: number, label: string}>}
+ */
+export async function getStaffReliabilityScore(staffId, groupId) {
+  const events = await getReliabilityEvents(staffId, groupId)
+  const score = computeScore(events)
+  const label = getReliabilityLabel(score)
+  return { score, label }
 }
 
 /**

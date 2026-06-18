@@ -856,6 +856,7 @@ bot.onText(/^\/(help|commands)(\b|$)/, async (msg) => {
     `/setrate [role] [amount] — set role pay rate (GC)`,
     `/setovertime — overtime configuration (GC)`,
     `/reliability — staff reliability scores`,
+    `/myscore — your personal reliability score (staff DM)`,
     `/morale — team morale report`,
     `/briefing — daily summary`,
     ``,

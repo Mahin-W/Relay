@@ -1,6 +1,48 @@
 import { getPublishedSchedule as _getPublishedScheduleReal } from '../availability/availabilityDb.js'
 import { logger } from '../logger.js'
 
+// ── /myscore self-service ─────────────────────────────────────────────────────
+
+const SCORE_QUERY_PATTERNS = [
+  /^\s*\/myscore\s*$/i,
+  /\bmy\s+score\b/i,
+  /\bmy\s+reliability\b/i,
+  /\bhow\s+reliable\s+am\s+i\b/i,
+]
+
+export function isScoreQuery(text) {
+  return SCORE_QUERY_PATTERNS.some(p => p.test(text))
+}
+
+export async function handleScoreQuery(bot, msg, db = null) {
+  const chatId = String(msg.chat.id)
+
+  let staff
+  if (db?.getStaffByDmChatId) {
+    staff = await db.getStaffByDmChatId(chatId)
+  } else {
+    staff = await getStaffByDmChatIdReal(chatId)
+  }
+
+  if (!staff) {
+    await bot.sendMessage(chatId, `You're not registered yet. Ask your manager to add you.`)
+    return
+  }
+
+  let score, label
+  if (db?.getStaffReliabilityScore) {
+    ;({ score, label } = await db.getStaffReliabilityScore(staff.userId, staff.groupId))
+  } else {
+    const { getStaffReliabilityScore } = await import('../reliability/reliabilityDb.js')
+    ;({ score, label } = await getStaffReliabilityScore(staff.userId, staff.groupId))
+  }
+
+  const { formatMyScore } = await import('../reliability/reliabilityScore.js')
+  await bot.sendMessage(chatId, formatMyScore(score, label), { parse_mode: 'Markdown' })
+}
+
+// ── Schedule / hours queries ─────────────────────────────────────────────────
+
 const SCHEDULE_QUERY_PATTERNS = [
   /\bmy\s+schedule\b/i,
   /\bmy\s+shifts?\b/i,

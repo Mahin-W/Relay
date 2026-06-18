@@ -47,6 +47,47 @@ const LABEL_ICON = {
   poor: '🔴',
 }
 
+/** Returns true if the given event type has a negative impact on the score. */
+export function isNegativeEvent(eventType) {
+  return (SCORES[eventType] ?? 0) < 0
+}
+
+const NEW_HIRE_GRACE_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
+
+/**
+ * Returns true when a negative reliability event should be skipped because the
+ * staff member is still within the 14-day new-hire grace period.
+ * Positive events are always recorded regardless.
+ *
+ * @param {string|null|undefined} staffCreatedAt — ISO timestamp of staff.created_at
+ * @returns {boolean} true → skip the event; false → record it normally
+ */
+export function shouldSkipNegativeEvent(staffCreatedAt) {
+  if (!staffCreatedAt) return false
+  const createdAt = new Date(staffCreatedAt)
+  if (isNaN(createdAt.getTime())) return false
+  return Date.now() - createdAt.getTime() < NEW_HIRE_GRACE_MS
+}
+
+const SCORE_LABEL_EXPLANATION = {
+  excellent: 'You\'ve been very reliable — keep it up!',
+  good: 'You\'re in good standing with your team.',
+  fair: 'Some missed or late shifts are affecting your score — consistency helps.',
+  poor: 'Several missed shifts are pulling your score down. Talk to your manager if you need support.',
+}
+
+/**
+ * Formats a staff-facing one-line reliability score message.
+ * @param {number} score
+ * @param {string} label
+ * @returns {string}
+ */
+export function formatMyScore(score, label) {
+  const icon = LABEL_ICON[label] ?? '⚪'
+  const explanation = SCORE_LABEL_EXPLANATION[label] ?? ''
+  return `${icon} Your reliability score: *${score}/100* (${label})\n${explanation}`
+}
+
 /**
  * Formats a manager-only reliability report.
  * @param {Array<{staffName, score, label, eventCount}>} staffScores
