@@ -1,173 +1,242 @@
-# Setup Wizard Redesign — Design Spec
+# Setup Wizard Redesign — Design Spec (Unified-Store Model)
 
 **Date:** 2026-06-17
-**Topic:** Roles-first website setup wizard with AI shift parsing, bulk tooling, and verified account→dashboard→chat sync.
-**File touched (primary):** `public/onboarding.html` (+ new `public/onboarding.js`), `src/server/accountRoutes.js`, `src/setup/mergeFromAccount.js`, `src/setup/connectAccount.js`.
+**Topic:** Roles-first website setup wizard with AI shift parsing and bulk tooling, on a **single source of truth** that the wizard, dashboard, and Telegram chat all share — replacing the staging + merge layer with a provision-at-signup / rekey-at-connect model.
+
+**Status:** Pre-launch, **clean cutover approved** (no live data to preserve). Permanent fix, not a bandaid.
 
 ---
 
 ## 1. Goal
 
-Rebuild the website setup wizard (`public/onboarding.html`) into a faster, more polished, roles-first flow:
+Two outcomes:
 
-1. Create **roles** first; everything downstream pulls from that list.
-2. Add **employees**, picking their role from the created list.
-3. Define **shifts** in a forgiving manual grid, accelerated by an AI "describe your shifts" box (existing Cerebras/Groq parsing) and bulk day tooling.
-4. Set **pay rates**, pre-filled one row per role.
-5. **Connect Telegram.**
-
-Plus ease-of-use accelerators (templates, bulk paste, smart time parsing, state persistence, a review step) and a verified guarantee that everything the owner enters reaches **both** the dashboard and the Telegram chat through the account.
+1. **Fastest, easiest setup UX** — a roles-first wizard: create roles → add employees (role picked from that list) → define shifts (forgiving grid + AI "describe your shifts" + bulk day tooling) → set pay rates (pre-filled per role) → review → connect Telegram. Plus accelerators: business-type templates, bulk-paste employees, smart time parsing, instant resume, a review step.
+2. **The simplest possible sync** — delete the dual-store architecture. One store (the operational tables), owned by the account from the moment it's created, so the wizard writes *live* data the dashboard and chat read directly.
 
 ---
 
-## 2. Current state (as built)
+## 2. The core problem (and why the old plan was a bandaid)
 
-- Wizard = single file `public/onboarding.html` with an inline ES-module script. Steps: Business name → Staff (free-text role) → Shifts (name/day/start/end) → Pay rates → Connect Telegram.
-- Each step `PATCH`es `accounts.setup_data` (staging). Only the `staff` list is reloaded on return; shifts/rates/business-name reload partially or not at all.
-- The parsers in `src/parsers/setupParsers.js` (`parseShift`, `parseStaff`, `parseShiftRequirements`) — Cerebras-first, Groq-fallback — are **only** wired into the Telegram bot setup flow. No HTTP endpoint exposes them, and the browser must not hold LLM keys.
+Today, truth lives in **two** places depending on lifecycle stage:
 
-### Sync chain (verified)
+- **Before** a Telegram group connects → `accounts.setup_data` (JSON staging), because the dashboard's write-gate (`dashRoutes.js:28`) blocks all mutations while `groupId` is null.
+- **After** connect → group-keyed operational tables, seeded once by `mergeFromAccount` translating the JSON field-by-field.
 
-```
-Wizard ──PATCH /api/account──▶ accounts.setup_data            (staging only)
-                                     │
-              Telegram group connects (connectGroupToAccount)
-                                     │ mergeFromAccount()  ← one-time seed, guarded by setup_complete
-                                     ▼
-   group-keyed operational tables: shifts · shift_requirements · staff · role_rates · overtime_settings · tip_settings
-                       ▲                                          ▲
-   Dashboard (/api/dash/*) via req.manager.groupId   Chat / bot writers via same group_id
-                       └──── getLinkedGroup(account.id) resolves the group ────┘
-```
+That staging+translate layer is the *direct* source of every sync defect: orphan roles (roles only materialize if referenced by staff/rates/requirements), non-idempotent merge (`saveShift`/`saveStaff` are plain inserts), and "wizard edits ignored after connect." Patching each is a bandaid. **Removing the layer removes the whole class of bugs.**
 
-**Conclusion:** Dashboard and chat read/write the *same* operational tables keyed by `group_id`, resolved from the account via `setup_sessions.account_id` → `getLinkedGroup`. There is no second copy, so once connected they cannot drift. `setup_data` is a one-time seed, not a live mirror.
+### Why removal is safe (verified)
 
-### Two issues the redesign must fix
-
-**Issue A — Orphan-role gap (introduced by roles-first).**
-`GET /api/roles` (dashboard) and `mergeFromAccount` derive the role list only from `staff[].role` + `role_rates[]` + `shift_requirements`. A wizard role created but never assigned to an employee, given a rate, or used in a shift requirement would **disappear at connect** — invisible to dashboard and chat.
-
-**Fix:** in `mergeFromAccount`, after seeding staff/rates, materialize every `setup_data.roles[]` entry as a `role_rates` row if not already present. `updateRoleRate` upserts on `UNIQUE(group_id, role_name)` (default `hourly_rate = 0`), so this is idempotent and safe (~6 lines).
-
-**Issue B — Merge is not idempotent.**
-`saveShift` / `saveStaff` are plain `insert`s. On the partial-connect path (`status: needs_more`, `setup_complete` stays false), a re-add could re-run `mergeFromAccount` and **double-seed** staff/shifts.
-
-**Fix:** after a successful merge, set `setup_data.account_merged = true` on the setup session; `connectGroupToAccount` skips `mergeFromAccount` when that flag is set. (Idempotency guard, not a data-model change.)
+- **No foreign keys on `group_id`** anywhere → the group key can be changed with plain `UPDATE`s.
+- **Every operational table is `group_id TEXT`** → a synthetic string key is type-safe everywhere.
+- **"A group" is just a `setup_sessions` row** (PK `group_id`, carries `account_id`) → provisioning one is a single insert.
+- **`accounts.id` is a stable UUID** → a deterministic provisional key `web:<uuid>` that can never collide with a numeric Telegram chat id.
 
 ---
 
-## 3. New step flow (6 steps)
+## 3. Unified architecture
+
+**Principle: one source of truth — the operational tables, keyed by `group_id TEXT`. Every account owns a stable `group_id` from creation. At Telegram connect, that key is rekeyed to the real chat id.**
+
+### 3.1 Provision a group at account creation
+
+In `ensureAccount(authId, email)` (`src/server/db/accounts.js`), after ensuring the account row, ensure its session:
+
+```sql
+INSERT INTO setup_sessions (group_id, account_id, setup_complete)
+VALUES ('web:' || <accountId>, <accountId>, false)
+ON CONFLICT (group_id) DO NOTHING;   -- deterministic id ⇒ perfectly idempotent
+```
+
+Now `getLinkedGroup(accountId)` returns a real group from the first authed request, so `req.manager.groupId` is **never null**. (`ensureAccount` already runs in middleware before `getLinkedGroup`, so no ordering change is needed.)
+
+### 3.2 "Connected" signal
+
+`group_id` is always present, so connection is no longer "groupId exists." Add one helper:
+
+```js
+export const isProvisionalGroup = (id) => typeof id === 'string' && id.startsWith('web:')
+```
+
+- `GET /api/account/connection-status` → `connected = !!group && !isProvisionalGroup(group.group_id)`.
+- Onboarding's "skip to dashboard if already connected" uses this.
+
+### 3.3 Connect = rekey (future-proof, atomic)
+
+Replace `mergeFromAccount` in `connectGroupToAccount` with a **rekey**. Add a Postgres function (migration + `supabase-schema.sql`) that rekeys **every** table carrying a `group_id`, discovered dynamically — so any table added in the future is covered automatically:
+
+```sql
+CREATE OR REPLACE FUNCTION rekey_group(old_group text, new_group text)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE t record;
+BEGIN
+  FOR t IN
+    SELECT table_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'group_id'
+  LOOP
+    EXECUTE format('UPDATE public.%I SET group_id = $1 WHERE group_id = $2', t.table_name)
+      USING new_group, old_group;
+  END LOOP;
+END $$;
+```
+
+Server calls `supabase.rpc('rekey_group', { old_group: 'web:'+account.id, new_group: telegramId })` — one atomic server-side transaction. **Idempotent by construction:** after the first run no rows match the provisional id, so re-running is a no-op. **Orphan roles impossible:** roles are real `role_rates` rows from the start, so the rekey carries them like everything else.
+
+`connectGroupToAccount` becomes:
+1. `account = getAccountByTelegramUser(managerUserId)` (unchanged guard: no account → `no_account`).
+2. If a session already exists for `telegramId` and is `setup_complete` → existing already-connected path (unchanged).
+3. `rpc('rekey_group', 'web:'+account.id → telegramId)`; then update the (now-telegram-keyed) session: `group_name`, `manager_id`, `dm_chat_id`.
+4. Compute completion from **live tables** (`getStaffForGroup`, `getShiftsForGroup`) → `complete` vs `needs_more`; set `setup_complete` / `step`. Telegram-side "continue setup" DM flow unchanged.
+5. Invite-link logic unchanged.
+
+`src/setup/mergeFromAccount.js` is **deleted**; its test is replaced by a rekey test.
+
+### 3.4 Dashboard write-gate relaxation
+
+Since `groupId` is always set, the `dashRoutes.js` "must be connected" mutation gate (line 28) can no longer fire on null. Replace its intent: mutations are always allowed (they write the account's real group, never orphans); only **bot-notifying side-effects** are skipped pre-connect — which they already are, because `safeSend` no-ops without a bot/DM. Net: the dashboard becomes usable pre-connect too (consistent with the wizard), and no row is ever orphaned.
+
+---
+
+## 4. Wizard setup API (reuses canonical writers)
+
+The wizard does **not** use the 2FA/connected-gated `dashRoutes`. It gets a small, ungated (account-session) setup API in `src/server/accountRoutes.js` that calls the **existing bot-side writers** in `src/setup/db/*` — the same functions that populated operational tables before. Same writers ⇒ identical row shape ⇒ dashboard and chat see exactly what the wizard wrote. Sync is structural, not enforced.
+
+| Endpoint | Action |
+|---|---|
+| `GET  /api/account/setup` | Read back `{ roles, staff, shifts (with requirements), rates, businessName, connected }` for instant resume. Uses `getStaffForGroup`, `getShiftsForGroup`, role/rate getters. |
+| `POST /api/account/setup/role` `{ role }` | Create a role = `updateRoleRate(groupId, role, 0)` (idempotent upsert; rate 0 = unpriced until the Pay step). |
+| `DELETE /api/account/setup/role/:role` | Remove a role's `role_rates` row. |
+| `POST /api/account/setup/staff` `{ name, role }` | `saveStaff(groupId, name, role)`. |
+| `PATCH/DELETE /api/account/setup/staff/:id` | Edit/remove a staff row. |
+| `POST /api/account/setup/shift` `{ name, day_of_week, start_time, end_time, requirements:[{role,count}] }` | `saveShift(...)` then `saveShiftRequirement(shiftId, role, count)` per requirement. Server normalizes times via the existing `normalizeShiftTime`. |
+| `DELETE /api/account/setup/shift/:id` | Remove a shift (+ its requirements). |
+| `PATCH /api/account/setup/rate` `{ role, hourly_rate }` | `updateRoleRate(groupId, role, rate)`. |
+| `POST /api/account/setup/business-name` `{ name }` | Set `accounts.business_name` and the provisional session's `group_name`. |
+
+All `requireAuth + requireAccount`; `req.manager.groupId` is the provisioned id. `requireAccount` (already in `accountRoutes`) is **not** behind the dashboard's 2FA gate, so a fresh signup can complete setup before any 2FA step.
+
+### 4.1 AI parse endpoints (browser can't hold LLM keys)
+
+Also in `accountRoutes.js`, reusing `src/parseMessage.js`:
+
+- `POST /api/account/parse-shifts` `{ text }` → `parseShift(text)`, then `parseShiftRequirements(text, shiftNames)` on the same text; merge counts → `{ shifts:[{name,day_of_week,start_time,end_time,requirements:[{role,count}]}] }`.
+- `POST /api/account/parse-staff` `{ text }` → `parseStaff(text)` → `{ staff:[{name,role}] }`.
+
+Both: 2000-char cap (400 on overflow); **503** `{reason:'no_llm'}` when `hasAnyLLM()` is false. Parsers already return `[]` on failure. **Parse endpoints are pure** (no DB) — they return structured data; the frontend then POSTs it to the setup write endpoints above. Clean separation.
+
+---
+
+## 5. New step flow (6 steps)
 
 | # | Step | Summary |
 |---|------|---------|
-| 0 | Business name | Unchanged. Quick-start template chips appear here (see §6.1). |
-| 1 | **Roles** | NEW first data step. Add role names (one per row). Seeded with one empty row + clickable common-role chips. Single source of truth for all downstream dropdowns/pre-fills. |
-| 2 | **Employees** | Name + **role dropdown populated from Step 1** (each dropdown ends with "＋ New role…" inline-add). Optional **"Describe your team" box** → `parse-staff`; unknown roles auto-added to the roles list. Bulk-paste names supported. |
-| 3 | **Shifts** | Manual-first grid (multi-day chips + presets + `+ staffing`) accelerated by a **"Describe your shifts" box** → `parse-shifts`. |
-| 4 | **Pay rates** | **Pre-filled one row per role** from Step 1 (role label + $/hr). Add-row still allowed for ad-hoc roles. |
-| 5 | **Review & Connect** | Recap of everything (roles/employees/shifts/rates) with inline Edit links, then the existing Telegram connect block. |
+| 0 | Business name | + business-type template chips (§7.1). Writes via `setup/business-name`. |
+| 1 | **Roles** | NEW first data step. Add role names (one per row) → `setup/role`. Seeded with one empty row + clickable common-role chips. Source of truth for all downstream dropdowns/pre-fills. |
+| 2 | **Employees** | Name + role dropdown from Step 1 (each ends with "＋ New role…" inline-add → `setup/role`). Optional **"Describe your team" box** → `parse-staff`; unknown roles auto-created via `setup/role`. Bulk-paste names. Writes via `setup/staff`. |
+| 3 | **Shifts** | Manual-first grid (multi-day chips + presets + `+ staffing`) + **"Describe your shifts" box** → `parse-shifts`. Writes via `setup/shift`. |
+| 4 | **Pay rates** | **Pre-filled one row per role** (from `GET /api/account/setup`). Role label + $/hr → `setup/rate`. |
+| 5 | **Review & Connect** | Read-only recap (roles/employees/shifts/rates) with inline Edit links + the existing Telegram connect block. |
 
-Progress bar grows from 5 → 6 segments; completed segments are clickable to jump back. Every data step keeps a "Skip for now" affordance.
-
----
-
-## 4. Architecture & files
-
-### 4.1 Backend — two new authed parse endpoints (`src/server/accountRoutes.js`)
-
-Reuse existing parsers via `src/parseMessage.js`. Browser posts text; server parses with its own keys.
-
-- `POST /api/account/parse-shifts` `{ text }`
-  → `parseShift(text)`, then `parseShiftRequirements(text, shiftNames)` on the same text; merge counts onto matching shifts.
-  → `{ shifts: [{ name, day_of_week, start_time, end_time, requirements: [{ role, count }] }] }`
-- `POST /api/account/parse-staff` `{ text }`
-  → `parseStaff(text)` → `{ staff: [{ name, role }] }`
-
-Both: `requireAuth` + `requireAccount`; input capped at **2000 chars** (400 on overflow); **503** with `{ error, reason: 'no_llm' }` when `hasAnyLLM()` is false. On parser failure the parsers already return `[]`, so endpoints return an empty list rather than erroring.
-
-### 4.2 Backend — sync fixes
-
-- `src/setup/mergeFromAccount.js`: materialize `setup_data.roles[]` into `role_rates` (Issue A); honor `account_merged` flag (Issue B).
-- `src/setup/connectAccount.js`: set `setup_data.account_merged = true` after a successful merge; skip merge when already set.
-
-### 4.3 Frontend — split markup from logic
-
-- `public/onboarding.html`: lean markup/structure only (mirrors how `relayAuth.js` is already a separate module).
-- **NEW `public/onboarding.js`**: ES module with all wizard logic. Exposes pure, testable named exports:
-  - `expandShiftRows(rows)` — multi-day grid rows → flat `shifts[]` (one per selected day, requirements carried).
-  - `groupParsedShifts(parsed)` — day-expanded parser output → grouped multi-day rows (collapse identical name+time, merge requirements).
-  - `normalizeTime(input)` — `"11" | "11a" | "1330" | "1:30pm"` → `"11:00 AM"` / `"1:30 PM"`; returns input unchanged if unparseable.
-  - `splitNames(text)` — bulk-paste names string → `string[]`.
+Progress bar = 6 segments; completed segments clickable. Every data step keeps "Skip for now."
 
 ---
 
-## 5. Shifts grid — ease-of-use mechanics
+## 6. Shifts grid mechanics
 
-Each shift row = **name · multi-day chip picker · start · end · `+ staffing`**:
+Each row = **name · multi-day chip picker · start · end · `+ staffing`**:
 
-- **Multi-day chips** (Mon–Sun) with presets **Weekdays / Every day / Weekend**. On save, each row expands via `expandShiftRows` to one shift per selected day → the `shifts[]` array `mergeFromAccount` already expects ("add across 5/7 days" in one control).
-- **Duplicate row** button = "copy this shift across the week."
-- **`+ staffing` expander** (collapsed by default): rows of *role dropdown (from roles list) + count*, stored as `requirements: [{ role, count }]` on each expanded day's shift.
-- **Describe box:** parsed shifts come back day-expanded; `groupParsedShifts` collapses identical name+time across days into one multi-day row (with merged requirements) and appends it to the same editable grid.
-- **Time fields** run through `normalizeTime` on blur.
-
----
-
-## 6. Ease-of-use features
-
-1. **Business-type quick-start templates** (Step 0). Chips: Restaurant / Café / Bar / Retail / Coffee shop. Tapping one pre-fills the roles list and a starter shift set (e.g., Breakfast/Lunch/Dinner with typical times) into the relevant steps. Pure client-side data tables; no LLM. Non-destructive: merges with anything already entered; user edits freely.
-2. **Bulk-paste employees** (Step 2). A "paste a list of names" affordance splits on newline/comma via `splitNames` → one row each (role defaults to first role or "Staff", editable). No LLM.
-3. **Smart client-side time normalization** (Step 3, §5). `normalizeTime` on blur for manual entries.
-4. **Full state persistence + clickable progress.** Every step auto-saves its slice to `setup_data` (debounced on Continue, same as today) and **reloads on return** — roles, employees, shifts, rates, business name. Completed progress segments are clickable to navigate back. (Today only `staff` reloads.)
-5. **Review & confirm step** (Step 5, before connect). Read-only recap grouped by section with inline "Edit" links that jump to the relevant step. Footer note: *"You can change all of this anytime from your dashboard or by chatting with Relay."* Sets the seed-vs-live expectation.
-6. **Enter-to-add-row** in every list (roles, employees, shifts, rates); the new row receives focus.
+- **Multi-day chips** (Mon–Sun) + presets **Weekdays / Every day / Weekend**. On Continue, `expandShiftRows` turns each row into one `setup/shift` POST per selected day (requirements carried) — "add across 5/7 days" in one control.
+- **Duplicate row** = "copy this shift across the week."
+- **`+ staffing` expander** (collapsed): rows of *role dropdown + count* → `requirements`.
+- **Describe box:** parsed shifts come back day-expanded; `groupParsedShifts` collapses identical name+time across days into one multi-day row (merged requirements) and appends it to the same editable grid.
+- Times: server `normalizeShiftTime` is the safety net; client `normalizeTime` gives instant feedback on blur.
 
 ---
 
-## 7. Data & persistence
+## 7. Ease-of-use features
 
-`accounts.setup_data` keys (existing + new):
+1. **Business-type quick-start templates** (Step 0): chips Restaurant / Café / Bar / Retail / Coffee shop. Tapping one pre-fills roles + a starter shift set (client-side data tables, no LLM); non-destructive merge with anything already entered.
+2. **Bulk-paste employees** (Step 2): paste newline/comma names → one row each via `splitNames`; role defaults to first role / "Staff".
+3. **Smart client-side time normalization** (Step 3): `normalizeTime` on blur.
+4. **Instant resume + clickable progress**: because data is live, reload just re-reads `GET /api/account/setup`; the current step is remembered in `localStorage`. Completed progress segments jump back. (No `setup_data` entity staging.)
+5. **Review & confirm step** (Step 5): recap with inline Edit links + note *"You can change all of this anytime from your dashboard or by chatting with Relay."*
+6. **Enter-to-add-row** in every list; new row gets focus.
 
-```jsonc
-{
-  "restaurant_name": "…",
-  "roles":      ["Server", "Cook", "Bartender"],          // NEW — canonical role list
-  "staff":      [{ "name": "…", "role": "Server" }],
-  "shifts":     [{ "name": "…", "day_of_week": "Monday",
-                  "start_time": "11:00 AM", "end_time": "3:00 PM",
-                  "requirements": [{ "role": "Server", "count": 2 }] }],
-  "role_rates": [{ "role_name": "Server", "hourly_rate": 16.5 }],
-  "overtime":   { /* unchanged */ },
-  "tips":       { /* unchanged */ },
-  "skipped":    ["…"]
-}
+---
+
+## 8. Frontend structure
+
+- `public/onboarding.html` → lean markup only (mirrors the existing `relayAuth.js` split).
+- **NEW `public/onboarding.js`** → ES module with all wizard logic + pure, testable named exports:
+  - `expandShiftRows(rows)` — multi-day rows → flat per-day shift payloads.
+  - `groupParsedShifts(parsed)` — day-expanded parser output → grouped multi-day rows.
+  - `normalizeTime(input)` — `"11" | "11a" | "1330" | "1:30pm"` → `"11:00 AM"` / `"1:30 PM"`; pass-through if unparseable.
+  - `splitNames(text)` — bulk-paste string → `string[]`.
+  - `TEMPLATES` — business-type → `{ roles[], shifts[] }` data table.
+
+---
+
+## 9. Data model
+
+- **No entity staging in `setup_data`.** Roles/employees/shifts/rates are live operational rows from the first keystroke (under the provisional `group_id`).
+- **`role_rates` is the canonical "role exists" store** (already what `GET /api/roles`, payroll, and staff pickers read). Creating a role inserts a `role_rates` row at rate 0; the Pay step sets the real rate. (`hourly_rate` stays `NOT NULL DEFAULT 0`; 0 = unpriced. No schema change.)
+- **Wizard UI state** (current step, chosen template) → `localStorage`. No server round-trip needed for navigation.
+- `accounts.setup_data` may retain only incidental flags (e.g. nothing required by this feature); the `staff/shifts/role_rates/roles` keys and `mergeFromAccount` are removed.
+
+---
+
+## 10. Sync guarantee
+
+```
+Account created ──▶ provisional group  web:<uuid>  (setup_sessions row)
+        │
+Wizard (accountRoutes/setup/*) ─┐
+                                ├─▶  ONE store: operational tables keyed by group_id
+Dashboard (/api/dash/*) ────────┤        (shifts · shift_requirements · staff · role_rates · …)
+Chat / bot writers ─────────────┘
+        │
+Telegram connect ──▶ rpc rekey_group(web:<uuid> → telegramId)   [atomic, idempotent, future-proof]
 ```
 
-- The wizard writes the new `roles` key; `mergeFromAccount` reads it to materialize role rows (Issue A fix). All other keys keep their current contract — `staff`, `shifts`, `role_rates` flow into the operational tables exactly as today.
-- No bot-side data-model migration; no new tables. `role_rates` remains the canonical "role exists" store that `GET /api/roles`, payroll, and staff role pickers already read.
+The wizard, dashboard, and bot all call writers that target the same `group_id`-keyed tables — and the wizard reuses the **bot's own writers**. There is no second copy and no translator, so drift is impossible by construction. Connect only changes the *key*, via a function that auto-covers every `group_id` table.
 
 ---
 
-## 8. Error handling
+## 11. Error handling
 
-- **Parse box failures:** parsers return `[]` → UI shows "Couldn't read that — add rows manually" and leaves the grid untouched.
-- **No LLM configured:** parse endpoints return 503; the describe boxes hide/disable on load (probe via the 503 reason). Manual grids fully functional.
-- **Save/network errors:** reuse the existing `#error` banner and per-step try/catch (matches current `handleNext`).
-- **Sync safety:** merge idempotency guard (Issue B) prevents duplicate seeding; orphan-role materialization (Issue A) prevents silent role loss.
-
----
-
-## 9. Testing
-
-- **Integration** (modeled on `src/tests/integration/accountAuthGuard.test.js` / `dashApiRoutes.test.js`): the two parse endpoints — happy path (mocked parser output), 503 when no LLM, 400 on >2000-char input, auth/account guard.
-- **Integration** (extend `src/tests/integration/accountLinking.test.js`): `mergeFromAccount` materializes orphan roles into `role_rates`; re-running merge with `account_merged` set is a no-op (no duplicate staff/shifts).
-- **Unit** (`node --test`, no DOM): `expandShiftRows`, `groupParsedShifts`, `normalizeTime`, `splitNames` as pure functions exported from `public/onboarding.js`.
+- Parse box: `[]` → "Couldn't read that — add rows manually"; grid untouched.
+- No LLM: parse endpoints 503 → describe boxes hide on load; manual grids fully functional.
+- Write/network errors: per-call try/catch → existing `#error` banner; the failing row stays editable.
+- Rekey: runs in a single DB transaction (the function); on RPC failure connect reports an error and leaves the provisional group intact (safe to retry — still idempotent).
 
 ---
 
-## 10. Out of scope
+## 12. Cutover / migration
 
-- No dedicated `roles` DB table (role_rates remains canonical).
-- No live re-sync of `setup_data` after a group is connected (dashboard/chat become the edit surface by design; the Review step communicates this).
-- No redesign of the dashboard or Telegram setup flows beyond the two sync fixes.
-- No change to overtime/tips steps (not currently in the web wizard).
+1. Add `rekey_group` function + provisioning to `supabase-schema.sql` and a new `scripts/migrations` file; backfill provisional sessions for any existing accounts without one.
+2. Provision in `ensureAccount`.
+3. Replace `mergeFromAccount` call in `connectAccount.js` with the rekey; **delete** `src/setup/mergeFromAccount.js`.
+4. Add the setup + parse endpoints to `accountRoutes.js`.
+5. Relax the dash mutation gate.
+6. Rebuild `onboarding.html` + add `onboarding.js`.
+7. Remove entity-staging code paths.
+
+---
+
+## 13. Testing
+
+- **Integration** (model on `accountAuthGuard.test.js` / `dashApiRoutesFull.test.js`):
+  - `setup/*` write endpoints create real operational rows under the provisional group and read back via `GET /api/account/setup`.
+  - parse endpoints: happy path (mocked parser), 503 no-LLM, 400 over-cap, auth guard.
+  - **Rekey** (replaces `accountLinking` merge test): rows written under `web:<uuid>` move to the Telegram id after `connectGroupToAccount`; re-running connect is a no-op (no duplicates); a role created with no staff/shift survives the rekey (orphan-proof).
+  - Provisioning is idempotent (double `ensureAccount` → one session).
+- **Unit** (`node --test`, no DOM): `expandShiftRows`, `groupParsedShifts`, `normalizeTime`, `splitNames` from `public/onboarding.js`.
+
+---
+
+## 14. Out of scope
+
+- No dedicated `roles` table (role_rates remains canonical).
+- No redesign of dashboard/Telegram setup flows beyond the rekey swap and the gate relaxation.
+- No change to overtime/tips steps (not in the web wizard).
+- No live re-sync after connect (unnecessary — there was never a second store; dashboard/chat edit the same rows the wizard did).
