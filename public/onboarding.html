@@ -45,268 +45,108 @@
     .label { font-size:13px; font-weight:600; color:#4A3F35; margin:12px 0 6px; }
     .error-message { display:none; color:#c0392b; font-size:14px; margin-top:12px; }
     .error-message.visible { display:block; }
+    .chip { display:inline-block; padding:7px 12px; margin:0 6px 6px 0; border:1.5px solid #E8DFD0; border-radius:20px; background:#FAF7F2; font-size:13px; font-family:inherit; cursor:pointer; color:#4A3F35; }
+    .chip:hover { border-color:#D95F2B; color:#D95F2B; }
+    .chip.on { background:#D95F2B; color:#fff; border-color:#D95F2B; }
+    .day-chips { display:flex; flex-wrap:wrap; gap:4px; }
+    .day-chip { width:34px; height:30px; display:flex; align-items:center; justify-content:center; border:1.5px solid #E8DFD0; border-radius:6px; font-size:12px; cursor:pointer; background:#FAF7F2; }
+    .day-chip.on { background:#D95F2B; color:#fff; border-color:#D95F2B; }
+    .presets { margin:6px 0; }
+    .shift-card { border:1.5px solid #E8DFD0; border-radius:10px; padding:12px; margin-bottom:10px; }
+    .shift-top { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .ai-box { width:100%; min-height:64px; padding:10px 12px; border:1.5px solid #E8DFD0; border-radius:8px; font-family:inherit; font-size:14px; background:#FAF7F2; resize:vertical; }
+    .ai-row { display:flex; gap:8px; margin:8px 0 14px; }
+    .staffing { margin-top:8px; padding-top:8px; border-top:1px dashed #E8DFD0; }
+    .review-section { margin-bottom:16px; }
+    .review-section h3 { font-size:14px; margin-bottom:4px; }
+    .review-edit { font-size:13px; color:#D95F2B; background:none; border:none; cursor:pointer; font-family:inherit; }
+    .progress div.clickable { cursor:pointer; }
+    .muted { color:#9A8880; font-size:13px; }
   </style>
 </head>
 <body>
   <nav class="nav">
     <div class="nav-left">
-      <div class="nav-logo-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/></svg>
-      </div>
+      <div class="nav-logo-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20"><path d="M 7,2.5 L 25,2.5 Q 29,2.5 29,6 L 29,19 Q 29,23 25,23 L 10,23 L 4,28 L 6,23 Q 3,23 3,19 L 3,6 Q 3,2.5 7,2.5 Z" fill="white"/></svg></div>
       <span class="nav-logo-text">Relay</span>
     </div>
     <button class="link-btn" id="logout-btn">Sign out</button>
   </nav>
-
   <main class="main">
     <div class="card">
-      <div class="progress">
-        <div data-p="0"></div><div data-p="1"></div><div data-p="2"></div><div data-p="3"></div><div data-p="4"></div>
+      <div class="progress" id="progress">
+        <div data-p="0"></div><div data-p="1"></div><div data-p="2"></div><div data-p="3"></div><div data-p="4"></div><div data-p="5"></div>
       </div>
 
-      <!-- Step 0: Business name -->
       <div class="step active" data-step="0">
         <h1>What's your business called?</h1>
-        <p class="subtitle">We'll use this name across your dashboard and team chat.</p>
+        <p class="subtitle">We'll use this across your dashboard and team chat.</p>
         <input type="text" class="form-input" id="business-name" placeholder="e.g. The Bagel Shop">
-        <div class="actions">
-          <span></span>
-          <button class="btn-primary" data-next>Continue</button>
-        </div>
+        <p class="label">Quick start (optional) — pick a type to pre-fill roles &amp; shifts:</p>
+        <div id="template-chips"></div>
+        <div class="actions"><span></span><button class="btn-primary" data-next>Continue</button></div>
       </div>
 
-      <!-- Step 1: Staff -->
       <div class="step" data-step="1">
+        <h1>What roles do you staff?</h1>
+        <p class="subtitle">Create your roles first — you'll assign people and shifts to them next.</p>
+        <div id="role-rows"></div>
+        <button class="add-row" id="add-role">+ Add role</button>
+        <div class="muted" id="role-suggest" style="margin-top:8px"></div>
+        <div class="actions"><button class="btn-skip" data-skip="roles">Skip</button><button class="btn-primary" data-next>Continue</button></div>
+      </div>
+
+      <div class="step" data-step="2">
         <h1>Add your team</h1>
-        <p class="subtitle">Who works there and what do they do? You can change this anytime.</p>
+        <p class="subtitle">Pick each person's role from your list.</p>
+        <div class="ai-row" id="staff-ai">
+          <textarea class="ai-box" id="staff-desc" placeholder="Or describe your team: 'Sam and Alex are servers, Mia cooks'"></textarea>
+          <button class="btn-skip" id="staff-parse" type="button" style="white-space:nowrap">✨ Parse</button>
+        </div>
         <div id="staff-rows"></div>
         <button class="add-row" id="add-staff">+ Add team member</button>
-        <div class="actions">
-          <button class="btn-skip" data-skip="staff">Skip for now</button>
-          <button class="btn-primary" data-next>Continue</button>
-        </div>
+        <button class="add-row" id="paste-staff" style="margin-top:6px">📋 Paste a list of names</button>
+        <div class="actions"><button class="btn-skip" data-skip="staff">Skip</button><button class="btn-primary" data-next>Continue</button></div>
       </div>
 
-      <!-- Step 2: Shifts -->
-      <div class="step" data-step="2">
+      <div class="step" data-step="3">
         <h1>Set up your shifts</h1>
-        <p class="subtitle">The recurring shifts you schedule each week.</p>
+        <p class="subtitle">Pick the days each shift runs — one row covers the whole week.</p>
+        <div class="ai-row" id="shift-ai">
+          <textarea class="ai-box" id="shift-desc" placeholder="Or describe them: '2 shifts a day 8am-12pm and 12pm-4pm Mon-Fri, 2 servers each'"></textarea>
+          <button class="btn-skip" id="shift-parse" type="button" style="white-space:nowrap">✨ Parse</button>
+        </div>
         <div id="shift-rows"></div>
         <button class="add-row" id="add-shift">+ Add shift</button>
-        <div class="actions">
-          <button class="btn-skip" data-skip="shifts">Skip for now</button>
-          <button class="btn-primary" data-next>Continue</button>
-        </div>
+        <div class="actions"><button class="btn-skip" data-skip="shifts">Skip</button><button class="btn-primary" data-next>Continue</button></div>
       </div>
 
-      <!-- Step 3: Pay rates -->
-      <div class="step" data-step="3">
-        <h1>Pay rates by role</h1>
-        <p class="subtitle">Hourly rates power payroll and labor-cost tracking.</p>
-        <div id="rate-rows"></div>
-        <button class="add-row" id="add-rate">+ Add role rate</button>
-        <div class="actions">
-          <button class="btn-skip" data-skip="role_rates">Skip for now</button>
-          <button class="btn-primary" data-next>Continue</button>
-        </div>
-      </div>
-
-      <!-- Step 4: Connect Telegram -->
       <div class="step" data-step="4">
-        <h1>Connect your team chat</h1>
-        <p class="subtitle">Relay runs in your Telegram group. Link it to finish — or do this later from your dashboard.</p>
+        <h1>Pay rates by role</h1>
+        <p class="subtitle">Pre-filled from your roles. Hourly rates power payroll and labor-cost tracking.</p>
+        <div id="rate-rows"></div>
+        <div class="actions"><button class="btn-skip" data-skip="rates">Skip</button><button class="btn-primary" data-next>Continue</button></div>
+      </div>
+
+      <div class="step" data-step="5">
+        <h1>Review &amp; connect</h1>
+        <p class="subtitle">Here's what we set up. You can change all of this anytime from your dashboard or by chatting with Relay.</p>
+        <div id="review"></div>
         <div class="deep-link-box">
-          <div style="font-size:14px;color:#4A3F35;margin-bottom:4px">Tap to open Telegram and link your account:</div>
+          <div style="font-size:14px;color:#4A3F35;margin-bottom:4px">Connect your Telegram team chat to finish:</div>
           <a id="deep-link" href="#" target="_blank" rel="noopener">Open Telegram →</a>
         </div>
-        <ol class="steps-list">
-          <li>Tap <strong>Open Telegram</strong> above — it links this account to your Telegram.</li>
-          <li>In the chat with Relay, tap <strong>“Add Relay to your group”</strong> and choose your team's group (add it as an admin).</li>
-          <li>Done — Relay finishes setup automatically. No commands to type.</li>
-        </ol>
         <p class="status-line" id="conn-status">Not connected yet — this updates automatically once you add Relay…</p>
-
-        <div id="invite-block" style="display:none;margin-top:20px">
+        <div id="invite-block" style="display:none;margin-top:16px">
           <div class="label">Share with your team 🎉</div>
-          <p class="subtitle" style="margin-bottom:8px">Send this link to your employees — they'll join the group and get set up automatically.</p>
-          <div class="row">
-            <input class="form-input" id="invite-link" readonly>
-            <button class="btn-skip" id="copy-invite" type="button" style="white-space:nowrap">Copy</button>
-          </div>
+          <div class="row"><input class="form-input" id="invite-link" readonly><button class="btn-skip" id="copy-invite" type="button" style="white-space:nowrap">Copy</button></div>
         </div>
-
-        <div class="actions">
-          <button class="btn-skip" id="finish-later">I'll do this later</button>
-          <button class="btn-primary" id="go-dashboard" style="display:none">Go to dashboard →</button>
-        </div>
+        <div class="actions"><button class="btn-skip" id="finish-later">I'll do this later</button><button class="btn-primary" id="go-dashboard" style="display:none">Go to dashboard →</button></div>
       </div>
 
       <p class="error-message" id="error"></p>
     </div>
   </main>
-
-  <script type="module">
-    import { requireSession, authFetch, signOut } from './relayAuth.js';
-
-    const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    let step = 0;
-    const errorEl = document.getElementById('error');
-    function showError(m){ errorEl.textContent = m; errorEl.classList.add('visible'); }
-    function clearError(){ errorEl.classList.remove('visible'); }
-
-    document.getElementById('logout-btn').addEventListener('click', () => signOut());
-
-    function setStep(n) {
-      step = n;
-      document.querySelectorAll('.step').forEach(s => s.classList.toggle('active', +s.dataset.step === n));
-      document.querySelectorAll('.progress div').forEach(d => d.classList.toggle('done', +d.dataset.p <= n));
-      if (n === 4) startConnect();
-    }
-
-    // ── Dynamic rows ──
-    function staffRow(name='', role='') {
-      const div = document.createElement('div'); div.className = 'row';
-      div.innerHTML = `<input class="form-input s-name" placeholder="Name" value="${name}">
-        <input class="form-input s-role" placeholder="Role (e.g. Server)" value="${role}">
-        <button class="row-del" title="Remove">×</button>`;
-      div.querySelector('.row-del').onclick = () => div.remove();
-      return div;
-    }
-    function shiftRow() {
-      const div = document.createElement('div'); div.className = 'row';
-      div.innerHTML = `<input class="form-input sh-name" placeholder="Name (e.g. Lunch)">
-        <select class="form-select sh-day">${DAYS.map(d=>`<option>${d}</option>`).join('')}</select>
-        <input class="form-input sh-start" placeholder="11am" style="max-width:80px">
-        <input class="form-input sh-end" placeholder="3pm" style="max-width:80px">
-        <button class="row-del">×</button>`;
-      div.querySelector('.row-del').onclick = () => div.remove();
-      return div;
-    }
-    function rateRow() {
-      const div = document.createElement('div'); div.className = 'row';
-      div.innerHTML = `<input class="form-input r-role" placeholder="Role (e.g. Server)">
-        <input class="form-input r-rate" placeholder="$/hr (e.g. 16.50)" type="number" step="0.25" style="max-width:140px">
-        <button class="row-del">×</button>`;
-      div.querySelector('.row-del').onclick = () => div.remove();
-      return div;
-    }
-    document.getElementById('add-staff').onclick = () => document.getElementById('staff-rows').appendChild(staffRow());
-    document.getElementById('add-shift').onclick = () => document.getElementById('shift-rows').appendChild(shiftRow());
-    document.getElementById('add-rate').onclick  = () => document.getElementById('rate-rows').appendChild(rateRow());
-
-    // ── Collect + persist a step's data ──
-    async function saveBusinessName() {
-      const v = document.getElementById('business-name').value.trim();
-      if (v) await authFetch('/api/account', { method:'PATCH', body: { businessName: v, setupData: { restaurant_name: v } } });
-    }
-    async function saveStaff() {
-      const staff = [...document.querySelectorAll('#staff-rows .row')].map(r => ({
-        name: r.querySelector('.s-name').value.trim(),
-        role: r.querySelector('.s-role').value.trim() || 'Staff',
-      })).filter(s => s.name);
-      await authFetch('/api/account', { method:'PATCH', body: { setupData: { staff } } });
-    }
-    async function saveShifts() {
-      const shifts = [...document.querySelectorAll('#shift-rows .row')].map(r => ({
-        name: r.querySelector('.sh-name').value.trim(),
-        day_of_week: r.querySelector('.sh-day').value,
-        start_time: r.querySelector('.sh-start').value.trim(),
-        end_time: r.querySelector('.sh-end').value.trim(),
-      })).filter(s => s.name);
-      await authFetch('/api/account', { method:'PATCH', body: { setupData: { shifts } } });
-    }
-    async function saveRates() {
-      const role_rates = [...document.querySelectorAll('#rate-rows .row')].map(r => ({
-        role_name: r.querySelector('.r-role').value.trim(),
-        hourly_rate: Number(r.querySelector('.r-rate').value) || 0,
-      })).filter(r => r.role_name);
-      await authFetch('/api/account', { method:'PATCH', body: { setupData: { role_rates } } });
-    }
-
-    async function markSkipped(key) {
-      try {
-        const acct = await authFetch('/api/account');
-        const skipped = new Set((acct.setupData?.skipped) || []);
-        skipped.add(key);
-        await authFetch('/api/account', { method:'PATCH', body: { setupData: { skipped: [...skipped] } } });
-      } catch {}
-    }
-
-    async function handleNext() {
-      clearError();
-      try {
-        if (step === 0) await saveBusinessName();
-        else if (step === 1) await saveStaff();
-        else if (step === 2) await saveShifts();
-        else if (step === 3) await saveRates();
-        setStep(step + 1);
-      } catch (err) { showError(err.message || 'Could not save — try again.'); }
-    }
-
-    document.querySelectorAll('[data-next]').forEach(b => b.onclick = handleNext);
-    document.querySelectorAll('[data-skip]').forEach(b => b.onclick = async () => {
-      await markSkipped(b.dataset.skip);
-      setStep(step + 1);
-    });
-
-    // ── Connect step ──
-    let pollTimer = null;
-    async function startConnect() {
-      try {
-        const { deepLink } = await authFetch('/api/account/link-code', { method:'POST' });
-        document.getElementById('deep-link').href = deepLink;
-      } catch (err) { showError(err.message || 'Could not generate a linking code.'); }
-      if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(checkConnection, 4000);
-      checkConnection();
-    }
-    async function checkConnection() {
-      try {
-        const s = await authFetch('/api/account/connection-status');
-        const statusEl = document.getElementById('conn-status');
-        if (s.connected) {
-          statusEl.textContent = '✓ Connected to ' + (s.restaurantName || 'your group') + '!';
-          statusEl.classList.add('connected');
-          document.getElementById('go-dashboard').style.display = '';
-          if (s.inviteLink) {
-            document.getElementById('invite-link').value = s.inviteLink;
-            document.getElementById('invite-block').style.display = '';
-          }
-          if (pollTimer) clearInterval(pollTimer);
-        }
-      } catch {}
-    }
-    document.getElementById('copy-invite').onclick = () => {
-      const el = document.getElementById('invite-link');
-      el.select();
-      navigator.clipboard?.writeText(el.value).catch(() => {});
-      const btn = document.getElementById('copy-invite');
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
-    };
-    document.getElementById('go-dashboard').onclick = () => location.href = '/dashboard';
-    document.getElementById('finish-later').onclick = () => location.href = '/dashboard';
-
-    // ── Init: load any saved staging data; skip ahead if already connected ──
-    (async () => {
-      await requireSession();
-      await authFetch('/api/account/bootstrap', { method:'POST' }).catch(()=>{});
-      try {
-        const status = await authFetch('/api/account/connection-status');
-        if (status.connected && status.setupComplete) { location.href = '/dashboard'; return; }
-      } catch {}
-      try {
-        const acct = await authFetch('/api/account');
-        const d = acct.setupData || {};
-        if (acct.businessName) document.getElementById('business-name').value = acct.businessName;
-        else if (d.restaurant_name) document.getElementById('business-name').value = d.restaurant_name;
-        (d.staff || []).forEach(s => document.getElementById('staff-rows').appendChild(staffRow(s.name, s.role)));
-      } catch {}
-      // Seed one empty row in each list for convenience.
-      if (!document.querySelector('#staff-rows .row')) document.getElementById('staff-rows').appendChild(staffRow());
-      document.getElementById('shift-rows').appendChild(shiftRow());
-      document.getElementById('rate-rows').appendChild(rateRow());
-    })();
-  </script>
+  <script type="module" src="./onboarding.js"></script>
 </body>
 </html>
