@@ -78,7 +78,7 @@ function buildWarningMessage(assignment) {
 
 // ── Main check (wired by cron) ────────────────────────────────────────────
 
-export async function checkUpcomingShifts(bot, db = null) {
+export async function checkUpcomingShifts(bot, db = null, now = new Date()) {
   const _getConfiguredGroups = db?.getConfiguredGroups ?? getConfiguredGroups
   const _getUpcomingShifts = db?.getUpcomingShifts ?? getUpcomingShifts
   const _wasWarned = db?.wasWarned ?? wasWarned
@@ -89,14 +89,16 @@ export async function checkUpcomingShifts(bot, db = null) {
 
   const groups = await _getConfiguredGroups()
   for (const groupId of groups) {
+    // Load session first so we can use the per-group no-show window
+    const session = await _getSetupSession(groupId)
+    const windowMin = Number(session?.setup_data?.noshow_window_min) || 30
+
     const assignments = await _getUpcomingShifts(groupId)
-    const upcoming = assignments.filter(a => isShiftStartingSoon(a.start_time))
+    const upcoming = assignments.filter(a => isShiftStartingSoon(a.start_time, windowMin, now))
 
     for (const assignment of upcoming) {
       checked++
       if (await _wasWarned(assignment.id)) { skipped++; continue }
-
-      const session = await _getSetupSession(groupId)
       if (!session?.dm_chat_id) { skipped++; continue }
 
       await bot.sendMessage(

@@ -231,3 +231,88 @@ test('handleMissedClockOutCheck: does not crash when manager DM unavailable', as
 
   await assert.doesNotReject(() => handleMissedClockOutCheck(bot, 'group-1', db))
 })
+
+// ── P1-9: per-group clockout_grace_min ───────────────────────────────────────
+
+test('getMissedClockOuts: respects clockout_grace_min from setup_data (short grace)', async () => {
+  // Shift ended 20 min ago. Default grace=30 → would NOT appear.
+  // With grace=15 → should appear.
+  const now = new Date('2025-01-06T22:20:00') // 10:20 PM
+  const entry = {
+    staffId: 1,
+    staffName: 'Petra',
+    dmChatId: 111,
+    shiftName: 'Late',
+    shiftEndTime: '22:00', // ended at 22:00 → 20 min ago
+    clockInTime: new Date('2025-01-06T18:00:00'),
+    clockEntryId: 55,
+  }
+  // Real filter path (no db.getMissedClockOuts shortcut), inject rows+grace
+  const rows = [
+    {
+      id: 55,
+      user_id: 1,
+      staff_id: 1,
+      shift_id: 10,
+      clock_in: new Date('2025-01-06T18:00:00').toISOString(),
+      alerted_at: null,
+      shifts: { name: 'Late', end_time: '22:00', day_of_week: 'Monday' },
+      staff: { name: 'Petra' },
+      staff_dms: { dm_chat_id: 111 },
+    },
+  ]
+  const db = {
+    _fetchOpenEntries: async () => rows,
+    getSetupSession: async () => ({ setup_data: { clockout_grace_min: 15 } }),
+  }
+  const result = await getMissedClockOuts('group-1', now, db)
+  assert.equal(result.length, 1, 'Grace=15 → 20-min-late entry should be returned')
+})
+
+test('getMissedClockOuts: respects clockout_grace_min from setup_data (long grace)', async () => {
+  // Shift ended 20 min ago. Grace=60 → should NOT appear yet.
+  const now = new Date('2025-01-06T22:20:00')
+  const rows = [
+    {
+      id: 56,
+      user_id: 1,
+      staff_id: 1,
+      shift_id: 10,
+      clock_in: new Date('2025-01-06T18:00:00').toISOString(),
+      alerted_at: null,
+      shifts: { name: 'Late', end_time: '22:00', day_of_week: 'Monday' },
+      staff: { name: 'Raj' },
+      staff_dms: { dm_chat_id: 222 },
+    },
+  ]
+  const db = {
+    _fetchOpenEntries: async () => rows,
+    getSetupSession: async () => ({ setup_data: { clockout_grace_min: 60 } }),
+  }
+  const result = await getMissedClockOuts('group-1', now, db)
+  assert.equal(result.length, 0, 'Grace=60 → 20-min-late entry should NOT be returned')
+})
+
+test('getMissedClockOuts: falls back to 30-min grace when clockout_grace_min unset', async () => {
+  // Shift ended 20 min ago → outside default 30-min grace.
+  const now = new Date('2025-01-06T22:20:00')
+  const rows = [
+    {
+      id: 57,
+      user_id: 1,
+      staff_id: 1,
+      shift_id: 10,
+      clock_in: new Date('2025-01-06T18:00:00').toISOString(),
+      alerted_at: null,
+      shifts: { name: 'Late', end_time: '22:00', day_of_week: 'Monday' },
+      staff: { name: 'Sam' },
+      staff_dms: { dm_chat_id: 333 },
+    },
+  ]
+  const db = {
+    _fetchOpenEntries: async () => rows,
+    getSetupSession: async () => ({ setup_data: {} }),
+  }
+  const result = await getMissedClockOuts('group-1', now, db)
+  assert.equal(result.length, 0, 'Default grace=30 → 20-min-late entry should NOT be returned')
+})

@@ -1,4 +1,5 @@
 import { getDb } from '../db.js'
+import { getSetupSession as _getSetupSessionDefault } from '../setup/setupDb.js'
 
 // ── Time parsing ──────────────────────────────────────────────────────────────
 
@@ -109,14 +110,27 @@ export async function getMissedClockOuts(groupId, now = new Date(), db = null) {
       return await db.getMissedClockOuts(groupId)
     }
 
-    const rows = await _fetchOpenEntries(groupId)
-    const THIRTY_MIN_MS = 30 * 60 * 1000
+    // Load per-group grace window (defaults to 30 min)
+    const _getSetupSession = db?.getSetupSession ?? _getSetupSessionDefault
+    let graceMin = 30
+    try {
+      const session = await _getSetupSession(groupId)
+      const configured = Number(session?.setup_data?.clockout_grace_min)
+      if (!isNaN(configured) && configured > 0) graceMin = configured
+    } catch (_) { /* ignore — use default */ }
+
+    const fetchRows = db?._fetchOpenEntries
+      ? () => db._fetchOpenEntries(groupId)
+      : () => _fetchOpenEntries(groupId)
+
+    const rows = await fetchRows()
+    const graceMsec = graceMin * 60 * 1000
 
     return rows
       .map(_mapRow)
       .filter((entry) => {
         const shiftEnd = buildShiftEndDatetime(entry.shiftEndTime, now)
-        return now.getTime() > shiftEnd.getTime() + THIRTY_MIN_MS
+        return now.getTime() > shiftEnd.getTime() + graceMsec
       })
   } catch (err) {
     console.error(`getMissedClockOuts failed: ${err.message}`)

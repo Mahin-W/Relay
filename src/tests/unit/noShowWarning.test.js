@@ -92,47 +92,47 @@ await Promise.all([
   // ── checkUpcomingShifts ────────────────────────────────────────────────
   test('checkUpcomingShifts sends manager DM for upcoming shift', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const db = makeDb({
       getUpcomingShifts: async () => [{
         id: 1, staff_name: 'Alice', shift_name: 'Lunch',
         start_time: timeInMinutes(30, now), group_id: 'g1',
       }],
     })
-    const result = await checkUpcomingShifts(bot, db)
+    const result = await checkUpcomingShifts(bot, db, now)
     bot.assertSent('99999', 'Alice')
     assert.equal(result.warned, 1)
   }),
 
   test('checkUpcomingShifts DM contains staff name', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const db = makeDb({
       getUpcomingShifts: async () => [{
         id: 2, staff_name: 'Bob', shift_name: 'Dinner',
         start_time: timeInMinutes(30, now), group_id: 'g1',
       }],
     })
-    await checkUpcomingShifts(bot, db)
+    await checkUpcomingShifts(bot, db, now)
     bot.assertSent('99999', 'Bob')
   }),
 
   test('checkUpcomingShifts DM contains shift name', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const db = makeDb({
       getUpcomingShifts: async () => [{
         id: 3, staff_name: 'Carol', shift_name: 'MorningShift',
         start_time: timeInMinutes(30, now), group_id: 'g1',
       }],
     })
-    await checkUpcomingShifts(bot, db)
+    await checkUpcomingShifts(bot, db, now)
     bot.assertSent('99999', 'MorningShift')
   }),
 
   test('checkUpcomingShifts DM contains start time', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const startTime = timeInMinutes(30, now)
     const db = makeDb({
       getUpcomingShifts: async () => [{
@@ -140,13 +140,13 @@ await Promise.all([
         start_time: startTime, group_id: 'g1',
       }],
     })
-    await checkUpcomingShifts(bot, db)
+    await checkUpcomingShifts(bot, db, now)
     bot.assertSent('99999', startTime)
   }),
 
   test('checkUpcomingShifts marks assignment as warned', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const warned = []
     const db = makeDb({
       getUpcomingShifts: async () => [{
@@ -155,13 +155,13 @@ await Promise.all([
       }],
       markWarned: async (id) => { warned.push(id) },
     })
-    await checkUpcomingShifts(bot, db)
+    await checkUpcomingShifts(bot, db, now)
     assert.deepEqual(warned, [5])
   }),
 
   test('checkUpcomingShifts skips already warned assignments', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const db = makeDb({
       getUpcomingShifts: async () => [{
         id: 6, staff_name: 'Frank', shift_name: 'Lunch',
@@ -169,14 +169,14 @@ await Promise.all([
       }],
       wasWarned: async () => true,
     })
-    const result = await checkUpcomingShifts(bot, db)
+    const result = await checkUpcomingShifts(bot, db, now)
     bot.assertSilent()
     assert.equal(result.skipped, 1)
   }),
 
   test('checkUpcomingShifts skips groups with no manager DM', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const db = makeDb({
       getUpcomingShifts: async () => [{
         id: 7, staff_name: 'Grace', shift_name: 'Lunch',
@@ -184,21 +184,21 @@ await Promise.all([
       }],
       getSetupSession: async () => null,
     })
-    const result = await checkUpcomingShifts(bot, db)
+    const result = await checkUpcomingShifts(bot, db, now)
     bot.assertSilent()
     assert.equal(result.skipped, 1)
   }),
 
   test('checkUpcomingShifts returns correct { checked, warned }', async () => {
     const bot = new MockBot()
-    const now = new Date()
+    const now = minuteNow()
     const db = makeDb({
       getUpcomingShifts: async () => [
         { id: 8, staff_name: 'Hank', shift_name: 'Lunch', start_time: timeInMinutes(30, now), group_id: 'g1' },
         { id: 9, staff_name: 'Iris', shift_name: 'Dinner', start_time: timeInMinutes(31, now), group_id: 'g1' },
       ],
     })
-    const result = await checkUpcomingShifts(bot, db)
+    const result = await checkUpcomingShifts(bot, db, now)
     assert.equal(result.warned, 2)
     assert.equal(result.checked, 2)
   }),
@@ -218,5 +218,37 @@ await Promise.all([
     const result = await checkUpcomingShifts(bot, db)
     bot.assertSilent()
     assert.equal(result.warned, 0)
+  }),
+
+  // ── P1-9: per-group noshow_window_min ─────────────────────────────────
+  test('checkUpcomingShifts uses noshow_window_min from setup_data when set', async () => {
+    const bot = new MockBot()
+    const now = minuteNow()
+    // Shift in 50 min — well inside a 55-min group window (50±5 range)
+    // but outside the default 30-min window (30±5 range)
+    const db = makeDb({
+      getUpcomingShifts: async () => [{
+        id: 10, staff_name: 'Nia', shift_name: 'Brunch',
+        start_time: timeInMinutes(50, now), group_id: 'g1',
+      }],
+      getSetupSession: async () => ({ dm_chat_id: '99999', setup_data: { noshow_window_min: 55 } }),
+    })
+    const result = await checkUpcomingShifts(bot, db, now)
+    assert.equal(result.warned, 1, 'Should warn when shift is within the group-configured 55-min window')
+  }),
+
+  test('checkUpcomingShifts defaults to 30-min window when noshow_window_min not set', async () => {
+    const bot = new MockBot()
+    const now = minuteNow()
+    // Shift in 50 min — outside default 30-min window (25-35 range)
+    const db = makeDb({
+      getUpcomingShifts: async () => [{
+        id: 11, staff_name: 'Omar', shift_name: 'Lunch',
+        start_time: timeInMinutes(50, now), group_id: 'g1',
+      }],
+      getSetupSession: async () => ({ dm_chat_id: '99999', setup_data: {} }),
+    })
+    const result = await checkUpcomingShifts(bot, db, now)
+    assert.equal(result.warned, 0, 'Should NOT warn when shift is outside the default 30-min window')
   }),
 ])
