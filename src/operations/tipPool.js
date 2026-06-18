@@ -125,10 +125,13 @@ export function calculateTipSplit(totalTips, staff, splitMethod) {
   const diff = (totalCents - sumCents) / 100
 
   if (diff !== 0) {
-    // Find highest earner index
+    // Find highest earner index by PRE-rounding raw amount (P1-22).
+    // Using rounded[i] to break ties causes the cent to go to whoever sorts first
+    // when multiple staff round to the same value. Instead compare rawAmounts so
+    // the cent always goes to the genuine top earner.
     let maxIdx = 0
     for (let i = 1; i < rounded.length; i++) {
-      if (rounded[i] > rounded[maxIdx]) maxIdx = i
+      if (rawAmounts[i] > rawAmounts[maxIdx]) maxIdx = i
     }
     rounded[maxIdx] = Math.round((rounded[maxIdx] + diff) * 100) / 100
   }

@@ -421,6 +421,38 @@ describe('calculateTipSplit — negative/invalid totals (BH.11)', { concurrency:
   })
 })
 
+// ── P1-22: leftover cent goes to genuine top earner (pre-rounding raw share) ──
+
+describe('calculateTipSplit — leftover cent to genuine top earner (P1-22)', { concurrency: true }, () => {
+  it('leftover cent lands on higher pre-rounding share, not first-in-array tie', () => {
+    // Scenario: $9.666 by hours, A=3.330h, B=3.334h, C=3.002h (total 9.666h).
+    // rawA=3.330→3.33, rawB=3.334→3.33, rawC=3.002→3.00.
+    // sumCents=333+333+300=966; totalCents=round(9.666*100)=967 → diff=+$0.01.
+    // A and B tie at max rounded (3.33). B has higher raw (3.334 > 3.330).
+    // Bug: cent goes to A (index 0, first tied max). Fix: cent goes to B (highest raw).
+    const totalTips = 9.666
+    const staff = [
+      { staffId: 1, staffName: 'A', roleName: 'Server', hoursWorked: 3.330 },
+      { staffId: 2, staffName: 'B', roleName: 'Server', hoursWorked: 3.334 },
+      { staffId: 3, staffName: 'C', roleName: 'Server', hoursWorked: 3.002 },
+    ]
+    const splits = calculateTipSplit(totalTips, staff, 'hours')
+    const A = splits.find(s => s.staffName === 'A')
+    const B = splits.find(s => s.staffName === 'B')
+    const C = splits.find(s => s.staffName === 'C')
+
+    // B has a higher pre-rounding raw share (3.334 raw) than A (3.330 raw),
+    // but both round to 3.33. The leftover +$0.01 cent must go to B (higher raw).
+    assert.equal(B.amount, 3.34, `B (higher raw) should get the extra cent, got ${B.amount}`)
+    assert.equal(A.amount, 3.33, `A (lower raw) should not get the extra cent, got ${A.amount}`)
+    assert.equal(C.amount, 3.00, `C amount should be 3.00, got ${C.amount}`)
+
+    // Sum must still equal totalTips exactly
+    const sum = splits.reduce((acc, s) => acc + Math.round(s.amount * 100), 0)
+    assert.equal(sum, Math.round(totalTips * 100), `sum should equal totalTips in cents`)
+  })
+})
+
 // ── handleTipHistory ──────────────────────────────────────────────────────────
 
 describe('handleTipHistory', { concurrency: true }, () => {
