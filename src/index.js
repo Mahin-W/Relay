@@ -940,6 +940,17 @@ cron.schedule('*/10 * * * *', async () => {
 })
 logger.info('Coverage escalation cron started (every 10 minutes)')
 
+// Nightly prune of the intelligence tables so they don't grow unbounded (P1-18).
+cron.schedule('0 3 * * *', async () => {
+  try {
+    const { pruneOldIntelligence } = await import('./maintenance/pruneIntelligence.js')
+    await pruneOldIntelligence()
+  } catch (err) {
+    logger.error(`Intelligence prune cron error: ${err.message}`)
+  }
+})
+logger.info('Intelligence prune cron started (daily 3am)')
+
 // Graceful shutdown: stop polling, drain in-flight HTTP requests, then exit.
 // Render sends SIGTERM on deploy/restart; also handle SIGINT for local Ctrl-C.
 let shuttingDown = false

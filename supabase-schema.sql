@@ -835,3 +835,19 @@ CREATE TABLE IF NOT EXISTS reminder_sends (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_reminder_sends_sent_on ON reminder_sends (sent_on);
+
+-- ═══════════════════════════════════════════════════════════════
+-- INTELLIGENCE INDEXES + PHONE UNIQUENESS (migrations 032, 033)
+-- ═══════════════════════════════════════════════════════════════
+
+-- P1-18: index created_at so windowed reads + nightly age-based pruning stay fast.
+CREATE INDEX IF NOT EXISTS idx_morale_events_created_at          ON morale_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_weekly_quality_scores_created_at  ON weekly_quality_scores (created_at);
+CREATE INDEX IF NOT EXISTS idx_schedule_edit_events_created_at   ON schedule_edit_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_discovered_patterns_created_at    ON discovered_patterns (created_at);
+
+-- P1-14: one manager phone → one group. Partial so NULL/empty phones (provisional
+-- and chat-only sessions) don't collide.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_setup_sessions_phone
+  ON setup_sessions (phone)
+  WHERE phone IS NOT NULL AND phone <> '';
