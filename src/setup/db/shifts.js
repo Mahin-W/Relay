@@ -109,6 +109,12 @@ export async function getShiftRequirements(shiftId) {
 
 export async function deleteShiftById(shiftId, groupId) {
   try {
+    // Verify the shift belongs to this group BEFORE deleting its child
+    // requirements — the server uses the service-role key (RLS bypassed), so an
+    // unscoped requirements delete on an attacker-supplied id would cross tenants.
+    const { data: own } = await getDb()
+      .from('shifts').select('id').eq('id', shiftId).eq('group_id', groupId).maybeSingle()
+    if (!own) return false
     await getDb().from('shift_requirements').delete().eq('shift_id', shiftId)
     const { error } = await getDb().from('shifts').delete().eq('id', shiftId).eq('group_id', groupId)
     if (error) throw error

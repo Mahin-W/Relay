@@ -59,9 +59,22 @@ export async function connectGroupToAccount(bot, { groupId, groupName, managerUs
   const dmChatId = await lookupDmChat(managerUserId)
   const provisionalId = 'web:' + account.id
 
+  // If this Telegram group already has an INCOMPLETE session row (e.g. the bot
+  // was added before the owner finished web setup), its PK would collide with
+  // the provisional session we're about to rekey onto `groupId` — and the
+  // rekey runs in one transaction, so a single collision aborts the whole move.
+  // Drop the stale incomplete row first so the web-entered setup wins.
+  if (existing && !existing.setup_complete) {
+    await getDb().from('setup_sessions').delete().eq('group_id', groupId)
+  }
+
   // Move everything the owner set up on the web (under the provisional group)
   // onto the real Telegram group id. Idempotent + covers every group_id table.
-  await rekeyGroup(provisionalId, groupId)
+  const moved = await rekeyGroup(provisionalId, groupId)
+  if (!moved) {
+    // Don't claim success while the owner's setup is stranded under web:<id>.
+    logger.error(`rekeyGroup failed for account ${account.id} → ${groupId}; web setup may not have moved`)
+  }
 
   // The rekey moved the provisional session's PK to groupId (if it existed).
   // Ensure a session row exists for this Telegram group, then fill its fields.

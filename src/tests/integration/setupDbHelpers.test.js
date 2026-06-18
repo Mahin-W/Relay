@@ -36,4 +36,13 @@ describe('setup db helpers', () => {
     await roles.deleteRole('g', 'Server')
     assert.equal(getFakeClient()._table('role_rates').length, 0)
   })
+  test('deleteShiftById refuses cross-tenant deletes (no requirement wipe)', async () => {
+    // Shift belongs to group "other"; caller is group "g".
+    seedTable('shifts', [{ id: 5, group_id: 'other', name: 'Lunch' }])
+    seedTable('shift_requirements', [{ id: 1, shift_id: 5, role: 'Server', count: 2 }])
+    const ok = await shifts.deleteShiftById(5, 'g')
+    assert.equal(ok, false)
+    assert.equal(getFakeClient()._table('shifts').length, 1)            // untouched
+    assert.equal(getFakeClient()._table('shift_requirements').length, 1) // untouched
+  })
 })

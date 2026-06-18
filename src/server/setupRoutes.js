@@ -159,7 +159,8 @@ router.post('/shift', ...gate, async (req, res) => {
 
 router.delete('/shift/:id', ...gate, async (req, res) => {
   try {
-    await deleteShiftById(req.params.id, req.manager.groupId)
+    const ok = await deleteShiftById(req.params.id, req.manager.groupId)
+    if (!ok) return res.status(404).json({ error: 'Shift not found' })
     res.status(204).end()
   } catch (err) {
     console.error('DELETE /setup/shift error:', err.message)
