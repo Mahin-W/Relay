@@ -23,7 +23,7 @@ function maskEmail(email) {
 
 // All account routes require an account-based (Supabase) session. Legacy
 // phone-OTP sessions have no accountId and are rejected here.
-function requireAccount(req, res, next) {
+export function requireAccount(req, res, next) {
   if (req.manager?.authType !== 'account' || !req.manager.accountId) {
     return res.status(403).json({ error: 'Sign in with your Relay account to access this.' })
   }

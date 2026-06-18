@@ -4,6 +4,7 @@ import cors from 'cors'
 import path from 'path'
 import authRoutes from './authRoutes.js'
 import accountRoutes from './accountRoutes.js'
+import setupRoutes from './setupRoutes.js'
 import dashRoutes from './dashRoutes.js'
 import marketingRoutes from './marketingRoutes.js'
 import exportRoutes from './exportRoutes.js'
@@ -49,6 +50,7 @@ export function createApp(bot, db) {
     }))
 
   app.use('/api/auth', authRoutes)
+  app.use('/api/account/setup', setupRoutes) // wizard live-write API (must precede /api/account)
   app.use('/api/account', accountRoutes)  // account identity + Telegram linking codes
   app.use('/api', marketingRoutes)       // POST /api/waitlist — public, no auth
   app.use('/api', exportRoutes)          // GET  /api/export    — JWT-gated, group-scoped
