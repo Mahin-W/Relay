@@ -11,6 +11,13 @@ import { handleTipSettingsStep } from './tipSettingsSteps.js'
 // Intentionally narrow — a casual "yes" should not destroy a manager's data.
 const WIPE_CONFIRM_RE = /^(yes\s*wipe|wipe\s*everything|wipe|confirm\s*wipe|start\s*over\s*and\s*wipe|reset\s*everything)$/i
 
+// Pure helper: recognise a cancel/abort intent during setup.
+// Exported so unit tests can cover it directly without wiring the full handler.
+const CANCEL_RE = /^(cancel|abort|exit|nevermind|never mind|stop)$/i
+export function isCancel(text) {
+  return CANCEL_RE.test((text ?? '').trim())
+}
+
 // Bottom-of-message footer shown to managers in setup so they always know how
 // to reach support. Staff-facing messages don't include it — they go to their
 // manager, not us.
@@ -123,6 +130,15 @@ export async function handleSetupMessage(bot, msg, session) {
         { parse_mode: 'Markdown' })
       logger.bot(`Setup wipe declined for group ${session.group_id}`)
     }
+    return
+  }
+
+  // Cancel/abort — manager can escape mid-setup at any step.
+  if (isCancel(text)) {
+    await updateSetupSession(session.group_id, { step: 'complete', setup_complete: true })
+    await bot.sendMessage(msg.chat.id,
+      `Setup cancelled — run /setup again any time.`)
+    logger.bot(`Setup cancelled by manager for group ${session.group_id} at step '${session.step}'`)
     return
   }
 
