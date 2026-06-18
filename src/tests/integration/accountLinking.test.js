@@ -1,6 +1,6 @@
 // Integration tests for the account-centric layer: accounts DB module,
-// one-time linking-code lifecycle, and mergeFromAccount() populating a group's
-// setup tables from staged web-signup data.
+// one-time linking-code lifecycle, and connectGroupToAccount() rekeying
+// provisional web rows onto the real Telegram group.
 //
 // Run with:
 //   node --experimental-test-module-mocks --test src/tests/integration/accountLinking.test.js
@@ -21,7 +21,6 @@ const { resetFakeClient, seedTable, getFakeClient } = supabaseFake
 
 // Dynamic imports so the env + mock above are in place first.
 const accounts = await import('../../server/db/accounts.js')
-const { mergeFromAccount } = await import('../../setup/mergeFromAccount.js')
 const { connectGroupToAccount, announceConnection } = await import('../../setup/connectAccount.js')
 
 // Minimal bot stub capturing sent messages and serving an invite link.
@@ -113,72 +112,44 @@ describe('linking-code lifecycle', () => {
   })
 })
 
-describe('mergeFromAccount', () => {
-  test('populates group tables from staged setup_data', async () => {
-    const GROUP = 'grp-merge'
-    seedTable('setup_sessions', [{ group_id: GROUP, group_name: 'Bagels', account_id: AUTH_ID }])
-    const account = {
-      id: AUTH_ID,
-      setup_data: {
-        restaurant_name: 'Bagels',
-        phone: '+14155550123',
-        shifts: [
-          { name: 'Lunch', day_of_week: 'Monday', start_time: '11am', end_time: '3pm',
-            requirements: [{ role: 'Server', count: 2 }] },
-        ],
-        staff: [{ name: 'Sam', role: 'Server' }, { name: 'Mia', role: 'Cook' }],
-        role_rates: [{ role_name: 'Server', hourly_rate: 16.5 }],
-        tips: { mode: 'pool', split_method: 'hours', boh_included: false },
-      },
-    }
+describe('connectGroupToAccount via rekey', () => {
+  test('rekeys provisional rows onto the Telegram group and survives orphan roles', async () => {
+    const account = await accounts.ensureAccount(AUTH_ID, 'o@shop.com') // provisions web:<id>
+    const prov = 'web:' + AUTH_ID
+    seedTable('staff', [{ id: 1, group_id: prov, name: 'Sam', role: 'Server', active: true }])
+    seedTable('shifts', [{ id: 1, group_id: prov, name: 'Lunch', day_of_week: 'Monday', start_time: '11:00', end_time: '15:00', active: true }])
+    // A role with NO staff/shift — must still survive (orphan-proof):
+    seedTable('role_rates', [{ id: 9, group_id: prov, role_name: 'Dishwasher', hourly_rate: 0 }])
+    // Map Telegram user 555 -> this account (account_links is the real table):
+    seedTable('account_links', [{ account_id: AUTH_ID, telegram_user_id: 555, used_at: new Date().toISOString() }])
 
-    const summary = await mergeFromAccount(GROUP, account)
-    assert.equal(summary.hasShifts, true)
-    assert.equal(summary.hasStaff, true)
-    assert.equal(summary.hasRates, true)
+    const bot = fakeBot()
+    const result = await connectGroupToAccount(bot, { groupId: '-100999', groupName: 'Sams', managerUserId: 555 })
 
-    const db = getFakeClient()
-    assert.equal(db._table('shifts').length, 1)
-    assert.equal(db._table('shifts')[0].group_id, GROUP)
-    assert.equal(db._table('shift_requirements').length, 1)
-    assert.equal(db._table('staff').length, 2)
-    assert.equal(db._table('role_rates').length, 1)
-    assert.equal(db._table('restaurant_tip_settings').length, 1)
-
-    const session = db._table('setup_sessions').find(s => s.group_id === GROUP)
-    assert.equal(session.phone, '+14155550123')
-    assert.equal(session.setup_data.restaurant_name, 'Bagels')
-  })
-
-  test('reports missing essentials when staging is partial', async () => {
-    const GROUP = 'grp-partial'
-    seedTable('setup_sessions', [{ group_id: GROUP, group_name: 'X', account_id: AUTH_ID }])
-    const summary = await mergeFromAccount(GROUP, {
-      id: AUTH_ID,
-      setup_data: { restaurant_name: 'X', staff: [{ name: 'Sam', role: 'Server' }] },
-    })
-    assert.equal(summary.hasStaff, true)
-    assert.equal(summary.hasShifts, false)
+    assert.equal(result.ok, true)
+    assert.equal(getFakeClient()._table('staff')[0].group_id, '-100999')
+    assert.equal(getFakeClient()._table('shifts')[0].group_id, '-100999')
+    assert.equal(getFakeClient()._table('role_rates')[0].group_id, '-100999')
+    assert.equal(result.status, 'complete') // staff + shifts both present
   })
 })
 
 describe('connectGroupToAccount (auto-connect on bot-added)', () => {
+  // Seeds an account with live provisioned rows (new model: wizard wrote live rows
+  // under the provisional web:<id> group; connect rekeys them onto the Telegram group).
   function seedLinkedAccount(tgUserId) {
-    seedTable('accounts', [{
-      id: AUTH_ID, business_name: 'Bagels',
-      setup_data: {
-        restaurant_name: 'Bagels',
-        shifts: [{ name: 'Lunch', day_of_week: 'Monday', start_time: '11am', end_time: '3pm' }],
-        staff: [{ name: 'Sam', role: 'Server' }],
-        role_rates: [{ role_name: 'Server', hourly_rate: 16 }],
-      },
-    }])
+    const prov = 'web:' + AUTH_ID
+    seedTable('accounts', [{ id: AUTH_ID, business_name: 'Bagels' }])
+    seedTable('setup_sessions', [{ group_id: prov, account_id: AUTH_ID, setup_complete: false }])
+    seedTable('shifts', [{ group_id: prov, name: 'Lunch', day_of_week: 'Monday', start_time: '11am', end_time: '3pm', active: true }])
+    seedTable('staff', [{ group_id: prov, name: 'Sam', role: 'Server', active: true }])
+    seedTable('role_rates', [{ group_id: prov, role_name: 'Server', hourly_rate: 16 }])
     seedTable('account_links', [{
       account_id: AUTH_ID, code: 'C1', telegram_user_id: tgUserId, used_at: new Date().toISOString(),
     }])
   }
 
-  test('auto-connects, merges, completes, and stores an invite link', async () => {
+  test('auto-connects, rekeys, completes, and stores an invite link', async () => {
     seedLinkedAccount(7001)
     const bot = fakeBot()
     const result = await connectGroupToAccount(bot, { groupId: 'grp-auto', groupName: 'Bagels Group', managerUserId: 7001 })

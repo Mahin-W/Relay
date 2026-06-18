@@ -1,6 +1,9 @@
 import { getSetupSession, createSetupSession, updateSetupSession } from './setupDb.js'
 import { getAccountByTelegramUser } from '../server/db/accounts.js'
-import { mergeFromAccount } from './mergeFromAccount.js'
+import { rekeyGroup } from './db/rekey.js'
+import { getStaffForGroup } from './db/staff.js'
+import { getShiftsForGroup } from './db/shifts.js'
+import { getRatesForGroup } from './db/roles.js'
 import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 
@@ -54,7 +57,18 @@ export async function connectGroupToAccount(bot, { groupId, groupName, managerUs
   }
 
   const dmChatId = await lookupDmChat(managerUserId)
-  await createSetupSession(groupId, groupName, managerUserId, dmChatId)
+  const provisionalId = 'web:' + account.id
+
+  // Move everything the owner set up on the web (under the provisional group)
+  // onto the real Telegram group id. Idempotent + covers every group_id table.
+  await rekeyGroup(provisionalId, groupId)
+
+  // The rekey moved the provisional session's PK to groupId (if it existed).
+  // Ensure a session row exists for this Telegram group, then fill its fields.
+  let sess = await getSetupSession(groupId)
+  if (!sess) {
+    await createSetupSession(groupId, groupName, managerUserId, dmChatId)
+  }
   await updateSetupSession(groupId, {
     account_id: account.id,
     manager_id: managerUserId,
@@ -62,25 +76,35 @@ export async function connectGroupToAccount(bot, { groupId, groupName, managerUs
     group_name: groupName,
   })
 
-  const summary = await mergeFromAccount(groupId, account)
-  const bizName = summary.restaurantName || account.business_name || groupName
+  // Completion is derived from the live tables, not a merge summary.
+  const [staff, shifts, rates] = await Promise.all([
+    getStaffForGroup(groupId),
+    getShiftsForGroup(groupId),
+    getRatesForGroup(groupId),
+  ])
+  const summary = {
+    hasStaff: staff.length > 0,
+    hasShifts: shifts.length > 0,
+    hasRates: rates.length > 0,
+    restaurantName: account.business_name || groupName,
+  }
+  const bizName = summary.restaurantName
   const inviteLink = await ensureGroupInviteLink(bot, groupId)
 
-  // Persist the invite link alongside the merged setup_data.
-  const sess = await getSetupSession(groupId)
+  const sess2 = await getSetupSession(groupId)
   await updateSetupSession(groupId, {
-    setup_data: { ...(sess?.setup_data || {}), invite_link: inviteLink || null },
+    setup_data: { ...(sess2?.setup_data || {}), invite_link: inviteLink || null },
   })
 
   if (summary.hasShifts && summary.hasStaff) {
     await updateSetupSession(groupId, { step: 'complete', setup_complete: true })
-    logger.bot(`Group ${groupId} auto-connected to account ${account.id} (complete)`)
+    logger.bot(`Group ${groupId} connected to account ${account.id} (complete)`)
     return { ok: true, status: 'complete', account, summary, bizName, inviteLink }
   }
 
   const nextStep = !summary.hasShifts ? 'add_shifts' : 'add_staff'
   await updateSetupSession(groupId, { step: nextStep })
-  logger.bot(`Group ${groupId} auto-connected to account ${account.id} (continuing at ${nextStep})`)
+  logger.bot(`Group ${groupId} connected to account ${account.id} (continuing at ${nextStep})`)
   return { ok: true, status: 'needs_more', nextStep, account, summary, bizName, dmChatId, inviteLink }
 }
 
