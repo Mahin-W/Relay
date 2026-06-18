@@ -236,7 +236,18 @@ class FakeClient {
   }
 
   from(table) { return new Query(table, this.store) }
-  rpc() { return Promise.resolve({ data: null, error: null }) }
+  rpc(fn, args = {}) {
+    if (fn === 'rekey_group') {
+      const { old_group, new_group } = args
+      for (const table of Object.keys(this.store)) {
+        for (const row of this.store[table]) {
+          if (row.group_id === old_group) row.group_id = new_group
+        }
+      }
+      return Promise.resolve({ data: null, error: null })
+    }
+    return Promise.resolve({ data: null, error: null })
+  }
 
   // Convenience for tests — preload a table
   _seed(table, rows) {
