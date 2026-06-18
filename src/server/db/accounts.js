@@ -19,18 +19,45 @@ export async function getAccountByAuthId(authId) {
   }
 }
 
+export const isProvisionalGroup = (id) => typeof id === 'string' && id.startsWith('web:')
+
+// Ensure the account owns a group_id. Returns the group_id (provisional
+// 'web:<accountId>' until a Telegram group is rekeyed onto it). Idempotent.
+export async function ensureAccountGroup(accountId) {
+  try {
+    const existing = await getDb()
+      .from('setup_sessions')
+      .select('group_id')
+      .eq('account_id', accountId)
+      .limit(1)
+      .maybeSingle()
+    if (existing.data?.group_id) return existing.data.group_id
+    const groupId = 'web:' + accountId
+    await getDb()
+      .from('setup_sessions')
+      .insert({ group_id: groupId, account_id: accountId, setup_complete: false })
+    return groupId
+  } catch (err) {
+    logger.error(`ensureAccountGroup failed: ${err.message}`)
+    return null
+  }
+}
+
 // Idempotent — backstop for the auth.users INSERT trigger (migration 010).
 export async function ensureAccount(authId, email) {
   try {
-    const existing = await getAccountByAuthId(authId)
-    if (existing) return existing
-    const { data, error } = await getDb()
-      .from('accounts')
-      .upsert({ id: authId, email, updated_at: new Date().toISOString() }, { onConflict: 'id' })
-      .select()
-      .single()
-    if (error) throw error
-    return data
+    let account = await getAccountByAuthId(authId)
+    if (!account) {
+      const { data, error } = await getDb()
+        .from('accounts')
+        .upsert({ id: authId, email, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+        .select()
+        .single()
+      if (error) throw error
+      account = data
+    }
+    await ensureAccountGroup(authId)
+    return account
   } catch (err) {
     logger.error(`ensureAccount failed: ${err.message}`)
     return null

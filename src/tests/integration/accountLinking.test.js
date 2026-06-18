@@ -60,8 +60,10 @@ describe('accounts DB module', () => {
 
   test('getLinkedGroup returns the connected group', async () => {
     await accounts.ensureAccount(AUTH_ID, 'owner@shop.com')
+    // Seed with a future created_at so it sorts first (desc) over the provisional web: row.
     seedTable('setup_sessions', [
-      { group_id: 'grp-9', group_name: 'Bagels', account_id: AUTH_ID, setup_complete: true },
+      { group_id: 'grp-9', group_name: 'Bagels', account_id: AUTH_ID, setup_complete: true,
+        created_at: new Date(Date.now() + 10000).toISOString() },
     ])
     const g = await accounts.getLinkedGroup(AUTH_ID)
     assert.equal(g.group_id, 'grp-9')
