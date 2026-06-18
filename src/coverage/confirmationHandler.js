@@ -236,7 +236,9 @@ export async function handleCoverageConfirmation(bot, msg, intent, db = null) {
 
   const marked = await _markCovered(openRequest.id, volunteer)
   if (!marked) {
-    await bot.sendMessage(msg.chat.id, 'That shift was already covered by someone else — thanks for offering! 🙏')
+    // Lost the race — send a DM only to the volunteer; never post to the group.
+    const loserDmId = msg.from?.id ?? msg.chat.id
+    await bot.sendMessage(loserDmId, 'Thanks for offering — that shift was just covered by someone else 🙏')
     return
   }
 

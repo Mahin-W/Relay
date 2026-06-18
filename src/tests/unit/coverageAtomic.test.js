@@ -214,3 +214,76 @@ await test('E2/1.20: manager pre-approved volunteer bypasses role check', async 
 
   assert.equal(markCoveredCalled, true, 'markCovered MUST be called when manager pre-approved the volunteer')
 })
+
+// ── P1-25: concurrent confirmations — loser must not post to group ─────────
+
+await test('P1-25: second concurrent confirmation gets DM only, group sees exactly one covered message', async () => {
+  const GROUP_ID = '-100'
+  const BOB_DM = '2001'
+  const CAROL_DM = '3001'
+
+  // Shared DB with two staff members that have DM chat IDs
+  const db = new MockDB()
+  const req = await db.saveRequest(GROUP_ID, 'Test Group', 'Saturday Dinner', 'Alice')
+
+  // Add dm_chat_id resolution — confirmationHandler uses msg.from?.id for DMs
+  // We test via two sequential calls: Bob wins, Carol loses.
+
+  // Override markCovered so the second call returns null (simulating real atomic race)
+  let callCount = 0
+  const origMarkCovered = db.markCovered.bind(db)
+  db.markCovered = async (id, coveredBy) => {
+    callCount++
+    if (callCount === 1) return origMarkCovered(id, coveredBy)   // Bob wins
+    return null  // Carol loses
+  }
+
+  // Also expose getOpenRequest so both calls see the same open request
+  db.getOpenRequest = async (groupId) =>
+    db.coverageRequests.find(r => r.group_id === String(groupId) && r.status === 'open') ?? req
+
+  const bot = new MockBot()
+
+  // Bob's message — winner
+  const bobMsg = {
+    chat: { id: GROUP_ID, type: 'supergroup', title: 'Test Group' },
+    from: { id: 2001, first_name: 'Bob' },
+    text: 'I can cover',
+    message_id: 1,
+    date: Math.floor(Date.now() / 1000),
+  }
+
+  // Carol's message — loser
+  const carolMsg = {
+    chat: { id: GROUP_ID, type: 'supergroup', title: 'Test Group' },
+    from: { id: 3001, first_name: 'Carol' },
+    text: 'I can cover',
+    message_id: 2,
+    date: Math.floor(Date.now() / 1000),
+  }
+
+  await handleCoverageConfirmation(bot, bobMsg, { person: 'Bob' }, db)
+  await handleCoverageConfirmation(bot, carolMsg, { person: 'Carol' }, db)
+
+  // The group should receive exactly ONE "covered/Covered/✅" message (from Bob winning)
+  const groupMsgs = bot.messagesTo(GROUP_ID)
+  const coveredMsgs = groupMsgs.filter(m =>
+    /covered|✅|Shift Covered/i.test(m.text)
+  )
+  assert.equal(coveredMsgs.length, 1, `Group should see exactly 1 covered message, got ${coveredMsgs.length}:\n${groupMsgs.map(m => m.text).join('\n---\n')}`)
+
+  // Carol's loser message must be sent as a DM to Carol (chatId === Carol's userId)
+  const carolDMs = bot.messagesTo(String(carolMsg.from.id))
+  assert.ok(carolDMs.length > 0, 'Carol should receive a DM when she loses the race')
+  const carolDMText = carolDMs.map(m => m.text).join(' ')
+  assert.ok(
+    /covered by someone else|just covered|already covered/i.test(carolDMText),
+    `Carol's DM should mention "covered by someone else", got: ${carolDMText}`
+  )
+
+  // The group must NOT see a second "already covered" or duplicate message from Carol's losing path
+  const groupNonCoveredMsgs = groupMsgs.filter(m =>
+    /already covered|someone else/i.test(m.text)
+  )
+  assert.equal(groupNonCoveredMsgs.length, 0, `No "already covered" messages should go to the group, got:\n${groupNonCoveredMsgs.map(m => m.text).join('\n---\n')}`)
+})
