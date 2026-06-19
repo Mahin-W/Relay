@@ -41,6 +41,12 @@ import { handleMissedClockOutCheck } from './timeclock/missedClockOut.js'
 import { getDb } from './db.js'
 import cron from 'node-cron'
 
+// Deployment-level timezone for all cron jobs. Set CRON_TZ=America/New_York
+// (or any IANA tz) to run schedules in the restaurant's local time instead of
+// UTC. When unset, crons run in UTC (existing behaviour).
+const CRON_TZ = process.env.CRON_TZ
+const cronOpts = CRON_TZ ? { timezone: CRON_TZ } : {}
+
 const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']
 if (!process.env.CEREBRAS_API_KEY && !process.env.GROQ_API_KEY) {
   console.error('❌ Missing LLM key: set CEREBRAS_API_KEY or GROQ_API_KEY in .env')
@@ -777,7 +783,7 @@ function startPreferenceCron(bot) {
     } catch (err) {
       logger.error(`Preference cron error: ${err.message}`)
     }
-  })
+  }, cronOpts)
   logger.info('Preference analysis cron started (Sunday midnight)')
 }
 
@@ -927,7 +933,7 @@ cron.schedule('*/15 * * * *', async () => {
   } catch (err) {
     logger.error(`Missed clock-out cron error: ${err.message}`)
   }
-})
+}, cronOpts)
 
 // Coverage-fill escalation: 30/60/120-min ladder for unanswered coverage requests.
 cron.schedule('*/10 * * * *', async () => {
@@ -940,7 +946,7 @@ cron.schedule('*/10 * * * *', async () => {
   } catch (err) {
     logger.error(`Coverage escalation cron error: ${err.message}`)
   }
-})
+}, cronOpts)
 logger.info('Coverage escalation cron started (every 10 minutes)')
 
 // Nightly prune of the intelligence tables so they don't grow unbounded (P1-18).
@@ -951,7 +957,7 @@ cron.schedule('0 3 * * *', async () => {
   } catch (err) {
     logger.error(`Intelligence prune cron error: ${err.message}`)
   }
-})
+}, cronOpts)
 logger.info('Intelligence prune cron started (daily 3am)')
 
 // Graceful shutdown: stop polling, drain in-flight HTTP requests, then exit.

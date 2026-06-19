@@ -4,6 +4,11 @@ import { logger } from '../logger.js'
 import { getSetupSession as liveGetSetupSession } from '../setup/setupDb.js'
 import { getClockComplianceReport, formatComplianceSection } from '../timeclock/clockAlerts.js'
 
+// Deployment-level timezone (mirrors index.js). Set CRON_TZ=America/New_York
+// (or any IANA tz) so briefings arrive at the correct local time.
+const CRON_TZ = process.env.CRON_TZ
+const cronOpts = CRON_TZ ? { timezone: CRON_TZ } : {}
+
 // ── DB helpers (live implementations) ────────────────────────────────────
 
 async function getTodaysAssignments(groupId) {
@@ -296,7 +301,7 @@ export function startBriefingCron(bot) {
     } catch (err) {
       logger.error(`Briefing cron error: ${err.message}`)
     }
-  })
+  }, cronOpts)
   logger.info('Daily briefing cron started (8am daily)')
 }
 
@@ -420,6 +425,6 @@ export function startSundayBriefingCron(bot) {
     } catch (err) {
       logger.error(`Sunday briefing cron error: ${err.message}`)
     }
-  })
+  }, cronOpts)
   logger.info('Sunday narrative briefing cron started (7pm Sundays)')
 }

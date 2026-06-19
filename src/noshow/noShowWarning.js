@@ -3,6 +3,11 @@ import { logger } from '../logger.js'
 import { getUpcomingShifts, markWarned, wasWarned, getConfiguredGroups } from './noShowDb.js'
 import { getSetupSession } from '../setup/setupDb.js'
 
+// Deployment-level timezone (mirrors index.js). Set CRON_TZ=America/New_York
+// (or any IANA tz) so no-show checks fire at the right local time.
+const CRON_TZ = process.env.CRON_TZ
+const cronOpts = CRON_TZ ? { timezone: CRON_TZ } : {}
+
 // ── Time parsing ──────────────────────────────────────────────────────────
 
 function parseShiftTime(timeStr) {
@@ -123,6 +128,6 @@ export function startNoShowCron(bot) {
     } catch (err) {
       logger.error(`No-show cron error: ${err.message}`)
     }
-  })
+  }, cronOpts)
   logger.info('No-show cron started (every 15 min)')
 }

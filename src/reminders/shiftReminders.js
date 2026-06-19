@@ -2,6 +2,11 @@ import cron from 'node-cron'
 import { getDb } from '../db.js'
 import { logger } from '../logger.js'
 
+// Deployment-level timezone (mirrors index.js). Set CRON_TZ=America/New_York
+// (or any IANA tz) to send reminders at the correct local time.
+const CRON_TZ = process.env.CRON_TZ
+const cronOpts = CRON_TZ ? { timezone: CRON_TZ } : {}
+
 // Reminder dedup. An in-memory cache is the fast path AND the graceful fallback
 // when the persistent `reminder_sends` table isn't reachable (e.g. before the
 // migration is applied); the DB row is what survives a process restart so a
@@ -144,7 +149,7 @@ export function startReminderJobs(bot) {
   cron.schedule('0 0 * * *', () => {
     recentlySent.clear()
     logger.bot('Reminder dedup cache cleared for new day')
-  })
+  }, cronOpts)
 
   // Job 1 — Night before reminder (8pm server time)
   cron.schedule('0 20 * * *', async () => {
@@ -179,7 +184,7 @@ export function startReminderJobs(bot) {
     } catch (err) {
       logger.error(`Night-before reminder job failed: ${err.message}`)
     }
-  })
+  }, cronOpts)
 
   // Job 2 — 2-hour warning (every 30 min)
   cron.schedule('*/30 * * * *', async () => {
@@ -217,7 +222,7 @@ export function startReminderJobs(bot) {
     } catch (err) {
       logger.error(`2hr reminder job failed: ${err.message}`)
     }
-  })
+  }, cronOpts)
 
   logger.bot('Reminder jobs scheduled (night-before 8pm, 2hr warning every 30min)')
 }
