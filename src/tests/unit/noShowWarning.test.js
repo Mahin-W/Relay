@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { test, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { MockBot } from '../helpers/mocks.js'
 import {
@@ -6,6 +6,12 @@ import {
   formatTimeUntilShift,
   checkUpcomingShifts,
 } from '../../noshow/noShowWarning.js'
+
+// Pin the clock for this whole (isolated) test file to a fixed local noon. The
+// tests build wall-clock "H:MM" shift times a few minutes from `now`; with the
+// real clock those wrap past midnight late at night and "starting soon" detection
+// flips, making the suite fail by time-of-day. Noon never wraps for these offsets.
+mock.timers.enable({ apis: ['Date'], now: new Date('2026-06-15T12:00:00').getTime() })
 
 // Helper: build a time string X minutes from now.
 // Rounds `now` to the start of the current minute so there are no sub-minute
