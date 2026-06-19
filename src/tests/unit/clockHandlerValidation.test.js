@@ -3,7 +3,7 @@
 // Tests use the db injection pattern from clockIdempotency.test.js.
 // manualClockIn in clockOverride.js is NOT tested here (it bypasses these checks).
 
-import { test } from 'node:test'
+import { test, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { handleClockIn } from '../../timeclock/clockHandler.js'
 
@@ -76,20 +76,29 @@ test('P1-10: no assigned shift → rejected with friendly message', async () => 
 
 test('P1-10: clock-in 3 hours before shift start → rejected', async () => {
   const b = makeFreshBot()
-  const startTime = shiftStartingInMinutes(180) // 3 hours from now
-  const db = makeDb({
-    findPersonShiftForDay: async () => ({
-      matches: [{ shift: { id: 5, name: 'Dinner', start_time: startTime, end_time: '23:00' } }],
-    }),
-  })
-  await handleClockIn(b, makeMsg(), db)
-  const last = b.sentMessages.at(-1)
-  assert.ok(last, 'Should send a message')
-  const txt = last.text.toLowerCase()
-  assert.ok(
-    txt.includes('early') || txt.includes('before') || txt.includes('min'),
-    `Expected early-clock-in rejection, got: "${last.text}"`
-  )
+  // Fake the whole clock to noon so now+3h (15:00) never wraps past midnight —
+  // otherwise the shift's wall-clock start reads as earlier-today (the past) and
+  // the early-clock-in guard correctly doesn't fire, making the test time-flaky.
+  const noon = new Date(); noon.setHours(12, 0, 0, 0)
+  mock.timers.enable({ apis: ['Date'], now: noon.getTime() })
+  try {
+    const startTime = shiftStartingInMinutes(180) // 3 hours from faked now → 15:00
+    const db = makeDb({
+      findPersonShiftForDay: async () => ({
+        matches: [{ shift: { id: 5, name: 'Dinner', start_time: startTime, end_time: '23:00' } }],
+      }),
+    })
+    await handleClockIn(b, makeMsg(), db)
+    const last = b.sentMessages.at(-1)
+    assert.ok(last, 'Should send a message')
+    const txt = last.text.toLowerCase()
+    assert.ok(
+      txt.includes('early') || txt.includes('before') || txt.includes('min'),
+      `Expected early-clock-in rejection, got: "${last.text}"`
+    )
+  } finally {
+    mock.timers.reset()
+  }
 })
 
 // ── (c) Clock-in within grace window → allowed ────────────────────────────────
