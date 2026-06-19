@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   analyzeShiftStaffingHistory,
@@ -319,6 +319,12 @@ describe('detectSeasonalPatterns', { concurrency: true }, () => {
   })
 
   it('groups by month and calculates relativeLoad with 12+ weeks', async () => {
+    // Pin "now" to the Monday the seeded weeks end on so detectSeasonalPatterns'
+    // internal getWeekStarts(16) window lines up with the data we seed below —
+    // otherwise the overlap shrinks below the 12-week threshold as real time
+    // advances past the reference date, making this test fail by calendar date.
+    mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-06T12:00:00Z').getTime() })
+    try {
     // Simulate 16 weeks of data with varying understaffing
     const weeks = mondaysBack(16, new Date('2026-04-06'))
     const shifts = [
@@ -355,6 +361,9 @@ describe('detectSeasonalPatterns', { concurrency: true }, () => {
     const jan = result.patterns.find(p => p.month === 0)
     if (jan) {
       assert.equal(jan.relativeLoad, 'heavy')
+    }
+    } finally {
+      mock.timers.reset()
     }
   })
 })
