@@ -27,9 +27,12 @@ function req(shiftId, role, count) {
 
 // ── Scenario runner ───────────────────────────────────────────────────────────
 
-async function runScenario(name, mockData, assertFn) {
+async function runScenario(name, mockData, assertFn, groupId = 'test_group') {
   try {
-    const result = await generateWeeklySchedule('test_group', WEEK, mockData)
+    // Each parallel scenario needs its OWN group id — generateWeeklySchedule has a
+    // per-(group, week) in-progress lock, so reusing 'test_group' across the
+    // Promise.all made later scenarios receive the first scenario's result.
+    const result = await generateWeeklySchedule(groupId, WEEK, mockData)
     assertFn(result)
     return { name, passed: true }
   } catch (err) {
@@ -192,9 +195,10 @@ describe('Schedule Generation — parallel scenarios', () => {
       },
     ]
 
-    // Run ALL scenarios in parallel
+    // Run ALL scenarios in parallel — each under a distinct group id so they
+    // don't collide on the generator's per-(group, week) concurrency lock.
     const results = await Promise.all(
-      scenarios.map(s => runScenario(s.name, s.data, s.assert))
+      scenarios.map((s, i) => runScenario(s.name, s.data, s.assert, `test_group_${i}`))
     )
 
     const failures = results.filter(r => !r.passed)

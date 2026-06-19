@@ -111,15 +111,18 @@ describe('handleClockIn idempotency (BH.32)', () => {
     const entry = await db.clockIn({ user_id: userId, group_id: groupId, staff_id: 2, shift_id: 2, clock_in: new Date().toISOString() })
     assert.ok(entry, 'Clock-in must succeed')
 
-    const firstOut = await db.clockOut(entry.id, '15:00')
+    // SimulationDb.clockOut stores an ISO arg as clock_out (non-ISO text goes to
+    // clock_out_raw with a timestamped clock_out) — pass ISO so the value we
+    // assert on is the one stored, matching how the sim harness calls it.
+    const firstOut = await db.clockOut(entry.id, '2026-01-01T15:00:00Z')
     assert.ok(firstOut, 'First clock-out must succeed')
-    assert.equal(firstOut.clock_out, '15:00', 'First clock-out time must be preserved')
+    assert.equal(firstOut.clock_out, '2026-01-01T15:00:00Z', 'First clock-out time must be preserved')
 
-    const secondOut = await db.clockOut(entry.id, '17:00')
+    const secondOut = await db.clockOut(entry.id, '2026-01-01T17:00:00Z')
     assert.equal(secondOut, null, 'Second clock-out must return null (D.02 idempotency guard)')
 
     // Verify first time was NOT overwritten
     const stored = db.timeEntries.find(e => e.id === entry.id)
-    assert.equal(stored.clock_out, '15:00', 'Original clock_out must not be overwritten by second call')
+    assert.equal(stored.clock_out, '2026-01-01T15:00:00Z', 'Original clock_out must not be overwritten by second call')
   })
 })
