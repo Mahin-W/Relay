@@ -851,3 +851,145 @@ CREATE INDEX IF NOT EXISTS idx_discovered_patterns_created_at    ON discovered_p
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_setup_sessions_phone
   ON setup_sessions (phone)
   WHERE phone IS NOT NULL AND phone <> '';
+
+-- ═══════════════════════════════════════════════════════════════
+-- AUDIT LOG + IDEMPOTENCY (migration 034 — Epic 0, WP-0.4)
+-- ═══════════════════════════════════════════════════════════════
+-- Immutable, append-only audit trail. logEvent() only ever INSERTs.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id    TEXT NOT NULL,
+  actor_id    TEXT,
+  actor_type  TEXT NOT NULL DEFAULT 'system'
+              CHECK (actor_type IN ('system','owner','manager','staff','provider')),
+  action      TEXT NOT NULL,
+  target      TEXT,
+  meta        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_group   ON audit_log (group_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action  ON audit_log (action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log (created_at);
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
+
+-- Generalized at-most-once guard (claim → run → complete; release on failure).
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  key           TEXT NOT NULL UNIQUE,
+  status        TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','completed')),
+  result        JSONB,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys (created_at);
+ALTER TABLE idempotency_keys ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- ENTITLEMENTS / FEATURE FLAGS (migration 035 — Epic 0, WP-0.5)
+-- ═══════════════════════════════════════════════════════════════
+-- Flat-fee: one tier per group, no per-seat metering. Tiers gate features.
+CREATE TABLE IF NOT EXISTS entitlements (
+  group_id    TEXT PRIMARY KEY,
+  tier        TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free','starter','pro')),
+  overrides   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE entitlements ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- DM FLOW SESSIONS (migration 036 — Epic 0, WP-0.2)
+-- ═══════════════════════════════════════════════════════════════
+-- Generic multi-step DM wizard state. Flow definitions live in code; a row
+-- holds only collected answers + the step index (restart-safe).
+CREATE TABLE IF NOT EXISTS dm_flow_sessions (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  recipient_id TEXT NOT NULL,
+  group_id     TEXT,
+  flow_name    TEXT NOT NULL,
+  step_index   INT NOT NULL DEFAULT 0,
+  answers      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  context      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status       TEXT NOT NULL DEFAULT 'active'
+               CHECK (status IN ('active','complete','cancelled')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_dm_flow_active
+  ON dm_flow_sessions (recipient_id) WHERE status = 'active';
+ALTER TABLE dm_flow_sessions ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- EMPLOYEE PAYROLL SETTINGS (migration 037 — Epic 2, WP-2.6)
+-- ═══════════════════════════════════════════════════════════════
+-- Per-employee tax classification. Default W-2; owner can switch to 1099.
+CREATE TABLE IF NOT EXISTS employee_payroll_settings (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id      TEXT NOT NULL,
+  staff_id      BIGINT NOT NULL,
+  tax_type      TEXT NOT NULL DEFAULT 'w2' CHECK (tax_type IN ('w2','1099')),
+  filing_status TEXT,
+  allowances    INT,
+  w4_ref        TEXT,
+  w9_ref        TEXT,
+  updated_by    TEXT,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(group_id, staff_id)
+);
+CREATE INDEX IF NOT EXISTS idx_emp_payroll_settings_group ON employee_payroll_settings (group_id);
+ALTER TABLE employee_payroll_settings ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- PAY RUNS + ITEMS (migration 038 — Epic 1, WP-1.3)
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS pay_runs (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id     TEXT NOT NULL,
+  week_start   DATE,
+  status       TEXT NOT NULL DEFAULT 'processing'
+               CHECK (status IN ('processing','completed','completed_with_errors','failed')),
+  total_cents  BIGINT NOT NULL DEFAULT 0,
+  initiated_by TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_pay_runs_group ON pay_runs (group_id);
+ALTER TABLE pay_runs ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS pay_run_items (
+  id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  pay_run_id      BIGINT NOT NULL REFERENCES pay_runs(id) ON DELETE CASCADE,
+  group_id        TEXT NOT NULL,
+  staff_id        BIGINT NOT NULL,
+  wage_cents      BIGINT NOT NULL DEFAULT 0,
+  tip_cents       BIGINT NOT NULL DEFAULT 0,
+  deduction_cents BIGINT NOT NULL DEFAULT 0,
+  net_cents       BIGINT NOT NULL DEFAULT 0,
+  tax_type        TEXT NOT NULL DEFAULT 'w2',
+  status          TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending','paid','failed')),
+  provider_ref    TEXT,
+  idem_key        TEXT,
+  error           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pay_run_items_run ON pay_run_items (pay_run_id);
+ALTER TABLE pay_run_items ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- EMPLOYEE BANK ACCOUNTS (migration 039 — Epic 1, WP-1.2)
+-- ═══════════════════════════════════════════════════════════════
+-- Provider reference + KYC status ONLY — never raw bank data.
+CREATE TABLE IF NOT EXISTS employee_bank_accounts (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id     TEXT NOT NULL,
+  staff_id     BIGINT NOT NULL,
+  provider     TEXT,
+  provider_ref TEXT,
+  kyc_status   TEXT NOT NULL DEFAULT 'pending'
+               CHECK (kyc_status IN ('pending','verified','rejected')),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(group_id, staff_id)
+);
+CREATE INDEX IF NOT EXISTS idx_employee_bank_accounts_group ON employee_bank_accounts (group_id);
+ALTER TABLE employee_bank_accounts ENABLE ROW LEVEL SECURITY;
