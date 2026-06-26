@@ -6,6 +6,7 @@ import { connectGroupToAccount, announceConnection } from './setup/connectAccoun
 import { upsertGroupMember } from './db.js'
 import { handleDmMessage } from './routing/dmRouter.js'
 import { handleGroupMessage } from './routing/groupRouter.js'
+import { registerAllFeatures } from './lib/registerFeatures.js'
 import { startReminderJobs } from './reminders/shiftReminders.js'
 import { shouldSkip } from './preFilter.js'
 import { startNoShowCron } from './noshow/noShowWarning.js'
@@ -82,6 +83,7 @@ bot.getMe().then((me) => {
   logger.bot(`Environment: ${process.env.NODE_ENV}`)
   logger.bot('Listening for group messages...')
   logger.bot('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  registerAllFeatures()
   startReminderJobs(bot)
   startNoShowCron(bot)
   startBriefingCron(bot)

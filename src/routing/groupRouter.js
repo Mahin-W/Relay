@@ -7,6 +7,8 @@ import { handleAvailabilityMention } from '../availability/passiveAvailability.j
 import { handleOnCallOffer } from '../oncall/handleOnCall.js'
 import { logger } from '../logger.js'
 import { handleGroupCommands } from './commandRouter.js'
+import { dispatchCommand } from '../lib/commandRegistry.js'
+import { matchIntent, dispatchIntent } from '../parsers/intentRegistry.js'
 import { handleCopySchedule } from '../schedule/copySchedule.js'
 import { handleNewHireAnnouncement } from '../onboarding/handleNewHire.js'
 import { handlePartialCoverageOffer } from '../coverage/partialCoverage.js'
@@ -32,7 +34,27 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
 
   // Skip LLM parsing for slash commands — they're handled by bot.onText in index.js
   // or by handleGroupCommands above. Prevents double-fire and wasteful API calls.
-  if (msg.text.trim().startsWith('/')) return
+  if (msg.text.trim().startsWith('/')) {
+    // ── Registered feature commands (Epic 0+ — additive fallback) ────────────
+    // handleGroupCommands ran first and returned false; the command registry is
+    // empty until features register, so unregistered slash commands behave
+    // exactly as before (ignored). Role 'owner' maps to the group-admin check.
+    const m = msg.text.trim().match(/^\/(\w+)(?:@\w+)?\s*([\s\S]*)$/)
+    if (m) {
+      const name = m[1].toLowerCase()
+      const reply = (text) => bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' })
+      try {
+        await dispatchCommand(
+          name,
+          { groupId, userId, actorId: userId, text: m[2].trim(), reply },
+          { isAuthorized: async (role) => (role === 'any' ? true : await isAuthorizedAdmin(groupId, userId)), reply },
+        )
+      } catch (err) {
+        logger.error(`dispatchCommand('${name}') failed: ${err.message}`)
+      }
+    }
+    return
+  }
 
   // ── F3: Revenue messages in group chat must be redirected to DM ──────────
   try {
@@ -73,6 +95,21 @@ export async function handleGroupMessage(bot, msg, BOT_USERNAME, isAuthorizedAdm
       logger.error(`Pending clarification handler failed: ${err.message}`)
     }
     return
+  }
+
+  // ── Registered feature intents (Epic 0+ — additive, pre-LLM fast path) ──────
+  // Specific trigger-based intents (e.g. "set location to CA", "compliance
+  // check") resolve with no LLM call. The registry is empty until features
+  // register, so this is a no-op for core NL behavior.
+  try {
+    const hit = matchIntent(msg.text)
+    if (hit) {
+      const reply = (text) => bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' })
+      const dispatched = await dispatchIntent(hit.name, { groupId, userId, actorId: userId, text: msg.text, fields: hit.fields, reply })
+      if (dispatched.handled) return
+    }
+  } catch (err) {
+    logger.error(`Intent registry dispatch failed: ${err.message}`)
   }
 
   try {
