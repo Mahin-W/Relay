@@ -98,6 +98,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
         role: s.role,
         userId: s.userId ?? null,
         dmChatId: s.dmChatId ?? null,
+        dob: s.dob ?? null,
       }))
     } else {
       // ── Live path: load all data from DB ──────────────────────────────────
@@ -141,6 +142,7 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
           role: s.role,
           userId: matched?.userId ?? null,
           dmChatId: matched?.dmChatId ?? null,
+          dob: s.dob ?? null,
         }
       })
 
@@ -556,7 +558,37 @@ export async function generateWeeklySchedule(groupId, weekStart, mockData = null
       })
     }
 
-    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed, alreadyPublished, warnings }
+    // ── Labor-law compliance check (Epic 4 / WP-4.5 — additive, non-fatal) ────
+    // Only minor-labor violations become warnings, and only when staff have a
+    // DOB on file (default null ⇒ treated as adult ⇒ no warnings), so groups
+    // without compliance data see no behavior change. In mock mode the check is
+    // opt-in via mockData.complianceRuleset.
+    let complianceIssues = []
+    if (assignments.length > 0) {
+      try {
+        let ruleset = null
+        let staffForCheck = []
+        if (mockData) {
+          ruleset = mockData.complianceRuleset ?? null
+          staffForCheck = mockData.staff ?? []
+        } else {
+          const { getRuleset } = await import('../compliance/complianceProfiles.js')
+          ruleset = await getRuleset(groupId)
+          staffForCheck = resolvedStaff.map(s => ({ id: s.staffId, name: s.name, dob: s.dob ?? null }))
+        }
+        if (ruleset) {
+          const { evaluateScheduleCompliance } = await import('../compliance/scheduleCompliance.js')
+          const res = evaluateScheduleCompliance(assignments, staffForCheck, ruleset, { weekStart })
+          complianceIssues = res.issues
+          for (const w of res.warnings) warnings.push(w)
+          if (complianceIssues.length > 0) logger.bot(`Compliance violations: ${complianceIssues.length}`)
+        }
+      } catch (compErr) {
+        logger.error(`Compliance check failed (non-fatal): ${compErr.message}`)
+      }
+    }
+
+    return { assignments, gaps, weekStart, scheduleId: saved?.id ?? null, clopenings, hoursIssues, ruleConflicts, crossTrainingUsed, alreadyPublished, warnings, complianceIssues }
   } catch (err) {
     logger.error(`generateWeeklySchedule failed: ${err.message}`)
     return { assignments: [], gaps: [], weekStart, scheduleId: null, warnings: [] }

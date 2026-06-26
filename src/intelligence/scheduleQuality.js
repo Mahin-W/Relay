@@ -166,7 +166,14 @@ export function calculateQualityScore(metrics, staffScheduled) {
   else if (unconfirmedPct >= 20) unconfirmedDeduction = 10
   else if (unconfirmedPct > 0) unconfirmedDeduction = 5
 
-  score -= editsDeduction + coverageDeduction + noShowsDeduction + fillTimeDeduction + unconfirmedDeduction
+  // Labor-law compliance violations (Epic 4 / WP-4.5). Defaults to 0 when the
+  // caller doesn't supply the metric, so existing scores are unaffected.
+  const complianceViolations = metrics.complianceViolations ?? 0
+  let complianceDeduction = 0
+  if (complianceViolations >= 3) complianceDeduction = 25
+  else if (complianceViolations >= 1) complianceDeduction = 15
+
+  score -= editsDeduction + coverageDeduction + noShowsDeduction + fillTimeDeduction + unconfirmedDeduction + complianceDeduction
   score = Math.max(0, Math.min(100, score))
 
   const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F'
@@ -180,6 +187,7 @@ export function calculateQualityScore(metrics, staffScheduled) {
       noShows: noShowsDeduction,
       fillTime: fillTimeDeduction,
       unconfirmed: unconfirmedDeduction,
+      compliance: complianceDeduction,
     },
   }
 }

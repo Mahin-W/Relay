@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS staff (
   name TEXT NOT NULL,
   role TEXT DEFAULT 'Staff',
   active BOOLEAN DEFAULT true,
+  dob DATE,  -- date of birth — drives minor-labor compliance (Epic 4, WP-4.3)
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -993,3 +994,41 @@ CREATE TABLE IF NOT EXISTS employee_bank_accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_employee_bank_accounts_group ON employee_bank_accounts (group_id);
 ALTER TABLE employee_bank_accounts ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- COMPLIANCE PROFILES (migration 040 — Epic 4, WP-4.1)
+-- ═══════════════════════════════════════════════════════════════
+-- Per-workplace jurisdiction (state + optional city) and the resolved
+-- labor-law `ruleset` jsonb consumed by the break/minor/fair-workweek engines.
+CREATE TABLE IF NOT EXISTS compliance_profiles (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id    TEXT NOT NULL,
+  state       TEXT,
+  city        TEXT,
+  ruleset     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_by  TEXT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_compliance_profiles_group ON compliance_profiles (group_id);
+ALTER TABLE compliance_profiles ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- COMPLIANCE EVENTS (migration 042 — Epic 4, WP-4.6)
+-- ═══════════════════════════════════════════════════════════════
+-- Append-only labor-law compliance log feeding the exportable audit report.
+CREATE TABLE IF NOT EXISTS compliance_events (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id    TEXT NOT NULL,
+  staff_id    BIGINT,
+  event_type  TEXT NOT NULL,
+  code        TEXT,
+  severity    TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info','warn','block')),
+  week_start  DATE,
+  meta        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_compliance_events_group ON compliance_events (group_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_events_group_created ON compliance_events (group_id, created_at DESC);
+ALTER TABLE compliance_events ENABLE ROW LEVEL SECURITY;
