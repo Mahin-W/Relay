@@ -1045,3 +1045,18 @@ CREATE TABLE IF NOT EXISTS certifications (
 CREATE INDEX IF NOT EXISTS idx_certifications_group   ON certifications (group_id);
 CREATE INDEX IF NOT EXISTS idx_certifications_expires ON certifications (expires_date);
 ALTER TABLE certifications ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- DOCUMENTS metadata (migration 052 — Epic 5) — montreal block 052+
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS documents (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id   TEXT NOT NULL,
+  staff_id   BIGINT NOT NULL,
+  doc_type   TEXT NOT NULL,
+  doc_ref    TEXT,
+  signed_at  TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_documents_staff ON documents (group_id, staff_id);
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
