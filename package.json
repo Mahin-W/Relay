@@ -19,7 +19,9 @@
     "test-parse": "node src/test-parse.js",
     "watch": "node scripts/auto-commit.js",
     "migrate": "node scripts/migrate.js",
-    "migrate:dry": "node scripts/migrate.js --dry-run"
+    "migrate:dry": "node scripts/migrate.js --dry-run",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
-    "chokidar": "^5.0.0"
+    "chokidar": "^5.0.0",
+    "wrangler": "^4.105.0"
   }
 }
