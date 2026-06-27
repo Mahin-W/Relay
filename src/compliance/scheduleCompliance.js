@@ -7,6 +7,7 @@
 
 import { checkMinorShift } from './minorLabor.js'
 import { planBreaks, shiftHours } from './breakPlanning.js'
+import { isFeatureEnabled } from './complianceProfiles.js'
 
 const DAY_ORDER = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 }
 
@@ -29,6 +30,10 @@ export function evaluateScheduleCompliance(assignments = [], staff = [], ruleset
     (a, b) => (DAY_ORDER[a.dayOfWeek] ?? 8) - (DAY_ORDER[b.dayOfWeek] ?? 8),
   )
 
+  // Owner toggles (Dashboard → Settings → Compliance). Default on when unset.
+  const minorOn = isFeatureEnabled(ruleset, 'minorLabor')
+  const breaksOn = isFeatureEnabled(ruleset, 'breaks')
+
   const weekHoursByStaff = new Map()
   const issues = []
   const breaks = []
@@ -38,27 +43,31 @@ export function evaluateScheduleCompliance(assignments = [], staff = [], ruleset
     const dur = shiftHours({ start: a.startTime, end: a.endTime })
     const prior = weekHoursByStaff.get(String(a.staffId)) ?? 0
 
-    const minor = checkMinorShift(
-      { dob: s.dob, age: s.age, asOf, start: a.startTime, end: a.endTime, day: a.dayOfWeek, schoolInSession, weeklyHoursSoFar: prior },
-      ruleset,
-    )
-    if (minor.isMinor && minor.violations.length > 0) {
-      for (const v of minor.violations) {
-        issues.push({
-          staffId: a.staffId, staffName: a.staffName ?? s.name ?? null,
-          day: a.dayOfWeek, shiftName: a.shiftName ?? null,
-          age: minor.age, code: v.code,
-          message: `${a.staffName ?? s.name ?? 'Staff'} (age ${minor.age}): ${v.message}`,
-          severity: 'block',
-        })
+    if (minorOn) {
+      const minor = checkMinorShift(
+        { dob: s.dob, age: s.age, asOf, start: a.startTime, end: a.endTime, day: a.dayOfWeek, schoolInSession, weeklyHoursSoFar: prior },
+        ruleset,
+      )
+      if (minor.isMinor && minor.violations.length > 0) {
+        for (const v of minor.violations) {
+          issues.push({
+            staffId: a.staffId, staffName: a.staffName ?? s.name ?? null,
+            day: a.dayOfWeek, shiftName: a.shiftName ?? null,
+            age: minor.age, code: v.code,
+            message: `${a.staffName ?? s.name ?? 'Staff'} (age ${minor.age}): ${v.message}`,
+            severity: 'block',
+          })
+        }
       }
     }
     weekHoursByStaff.set(String(a.staffId), prior + dur)
 
     // Required breaks for this shift (informational — for insertion / reports).
-    const bp = planBreaks({ start: a.startTime, end: a.endTime }, ruleset)
-    if (bp.breaks.length > 0) {
-      breaks.push({ staffId: a.staffId, staffName: a.staffName ?? s.name ?? null, day: a.dayOfWeek, shiftName: a.shiftName ?? null, ...bp })
+    if (breaksOn) {
+      const bp = planBreaks({ start: a.startTime, end: a.endTime }, ruleset)
+      if (bp.breaks.length > 0) {
+        breaks.push({ staffId: a.staffId, staffName: a.staffName ?? s.name ?? null, day: a.dayOfWeek, shiftName: a.shiftName ?? null, ...bp })
+      }
     }
   }
 

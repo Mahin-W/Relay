@@ -1652,6 +1652,32 @@
       color: white;
     }
 
+    /* ── Compliance rule summary (data-dense card) ── */
+    .compliance-summary {
+      margin-top: 14px; padding: 14px 16px;
+      background: var(--color-surface-alt);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px 18px;
+    }
+    .compliance-summary .cs-title {
+      grid-column: 1 / -1;
+      font-size: 12px; font-weight: 600;
+      color: var(--color-text-secondary);
+    }
+    .compliance-summary .cs-item { display: flex; flex-direction: column; gap: 2px; }
+    .compliance-summary .cs-k {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--color-text-muted);
+    }
+    .compliance-summary .cs-v {
+      font-size: 13px; font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
     /* ── Sticky table headers (schedule + data tables in scroll containers) ── */
     .schedule-table thead th,
     .data-table thead th {
@@ -5230,6 +5256,13 @@
       const tips = config.tips || {};
       const budget = config.budget || {};
       const rules = config.rules || [];
+      const compliance = config.compliance || {};
+      const crs = compliance.ruleset || {};
+      const cMeal = crs.meal?.afterHours ? `After ${crs.meal.afterHours}h · ${crs.meal.durationMin}min ${crs.meal.paid ? 'paid' : 'unpaid'}` : 'Not mandated';
+      const cRest = crs.rest?.perHours ? `Every ${crs.rest.perHours}h · ${crs.rest.durationMin}min paid` : 'Not mandated';
+      const cMinor = crs.minorRules ? 'State + federal limits' : 'Federal limits';
+      const cFW = crs.fairWorkweek ? `Yes · ${crs.advanceNoticeDays ?? 14}-day notice` : 'No';
+      const cWhere = [compliance.city, compliance.state].filter(Boolean).join(', ');
 
       // Store staff options on window for add-rule modal
       window.__staffOptsHtml = staff.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
@@ -5242,6 +5275,7 @@
           <button data-target="navigation"  onclick="scrollToSection(this)">Navigation</button>
           <button data-target="operations"  onclick="scrollToSection(this)">Operations</button>
           <button data-target="business"    onclick="scrollToSection(this)">Business</button>
+          <button data-target="compliance"  onclick="scrollToSection(this)">Compliance</button>
           <button data-target="pay-rates"   onclick="scrollToSection(this)">Pay Rates</button>
           <button data-target="overtime"    onclick="scrollToSection(this)">Overtime</button>
           <button data-target="tips"        onclick="scrollToSection(this)">Tips</button>
@@ -5321,6 +5355,69 @@
             <input class="setting-input" id="rest-phone" placeholder="+1 555 123 4567" value="${escapeHtml(r.phone || '')}">
           </div>
           <button class="setting-save-btn" onclick="saveRestaurant(event)">Save</button>
+        </div>
+
+        <div class="settings-section" id="compliance">
+          <div class="settings-section-title">Labor-Law Compliance</div>
+          <div class="setting-desc" style="margin-bottom:14px">
+            Set your workplace location and Relay flags illegal shifts — minor hours, missing meal/rest breaks, and short-notice schedule changes — when you generate a schedule. Turn any guardrail off below.
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">State</div>
+              <div class="setting-desc">Sets meal/rest break and minor-labor rules.</div>
+            </div>
+            <select class="setting-input" id="compliance-state" aria-label="Workplace state" style="width:220px">
+              <option value="">— Select state —</option>
+              ${(compliance.options?.states || []).map(s => `<option value="${s.code}" ${compliance.state === s.code ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">City</div>
+              <div class="setting-desc">Only needed for Fair Workweek cities (predictive scheduling).</div>
+            </div>
+            <select class="setting-input" id="compliance-city" aria-label="Workplace city" style="width:220px">
+              <option value="">— None —</option>
+              ${(compliance.options?.fairWorkweekCities || []).map(c => `<option value="${escapeHtml(c)}" ${(compliance.city || '').toLowerCase() === c.toLowerCase() ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div style="height:1px;background:var(--color-border-light);margin:14px 0"></div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Meal &amp; rest breaks</div>
+              <div class="setting-desc">Flag the required breaks for each shift based on its length.</div>
+            </div>
+            <div class="toggle ${compliance.features?.breaks !== false ? 'on' : ''}" id="cf-breaks" role="switch" aria-label="Meal and rest breaks" tabindex="0" onclick="this.classList.toggle('on')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();this.classList.toggle('on')}"></div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Minor-labor rules</div>
+              <div class="setting-desc">Flag illegal under-18 shifts (school-night hours, daily/weekly maximums). Needs each minor's date of birth on their staff profile.</div>
+            </div>
+            <div class="toggle ${compliance.features?.minorLabor !== false ? 'on' : ''}" id="cf-minorLabor" role="switch" aria-label="Minor-labor rules" tabindex="0" onclick="this.classList.toggle('on')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();this.classList.toggle('on')}"></div>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Fair Workweek</div>
+              <div class="setting-desc">Track advance notice and predictability pay (turns on automatically for Fair Workweek cities).</div>
+            </div>
+            <div class="toggle ${compliance.features?.fairWorkweek !== false ? 'on' : ''}" id="cf-fairWorkweek" role="switch" aria-label="Fair Workweek" tabindex="0" onclick="this.classList.toggle('on')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();this.classList.toggle('on')}"></div>
+          </div>
+
+          <div class="compliance-summary">
+            <div class="cs-title">Rules in effect${cWhere ? ` · ${escapeHtml(cWhere)}` : ' · federal default (set your state)'}</div>
+            <div class="cs-item"><span class="cs-k">Meal break</span><span class="cs-v">${escapeHtml(cMeal)}</span></div>
+            <div class="cs-item"><span class="cs-k">Rest break</span><span class="cs-v">${escapeHtml(cRest)}</span></div>
+            <div class="cs-item"><span class="cs-k">Minor labor</span><span class="cs-v">${escapeHtml(cMinor)}</span></div>
+            <div class="cs-item"><span class="cs-k">Fair Workweek</span><span class="cs-v">${escapeHtml(cFW)}</span></div>
+          </div>
+
+          <button class="setting-save-btn" onclick="saveCompliance(event)">Save Compliance</button>
         </div>
 
         <div class="settings-section" id="pay-rates">
@@ -5489,6 +5586,7 @@
           </div>
         </div>
       `);
+      initSettingsScrollSpy();
     }
 
     async function downloadExport(btn) {
@@ -5523,6 +5621,37 @@
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       document.querySelectorAll('.settings-subnav button')
         .forEach(b => b.classList.toggle('active', b === btn));
+    }
+
+    // Highlight the sub-nav pill for whichever settings section is in view.
+    function initSettingsScrollSpy() {
+      const nav = document.getElementById('settings-subnav');
+      if (!nav || !('IntersectionObserver' in window)) return;
+      const buttons = [...nav.querySelectorAll('button')];
+      const obs = new IntersectionObserver((entries) => {
+        const visible = entries.filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (!visible) return;
+        buttons.forEach(b => b.classList.toggle('active', b.dataset.target === visible.target.id));
+      }, { rootMargin: '-15% 0px -75% 0px', threshold: 0 });
+      buttons.forEach(b => { const el = document.getElementById(b.dataset.target); if (el) obs.observe(el); });
+    }
+
+    async function saveCompliance(ev) {
+      const btn = ev?.currentTarget || null;
+      const state = document.getElementById('compliance-state')?.value || null;
+      const city = document.getElementById('compliance-city')?.value || null;
+      const feat = id => document.getElementById(id)?.classList.contains('on') ?? true;
+      const features = { breaks: feat('cf-breaks'), minorLabor: feat('cf-minorLabor'), fairWorkweek: feat('cf-fairWorkweek') };
+      try {
+        await api('/api/settings/full', 'PATCH', { compliance: { state, city, features } });
+        showSaveSuccess(btn);
+        // Re-fetch so the "Rules in effect" summary reflects the new jurisdiction.
+        const cfg = await api('/api/settings/full');
+        if (cfg) { renderSettingsPage(cfg); setTimeout(() => document.getElementById('compliance')?.scrollIntoView({ block: 'start' }), 0); }
+      } catch (e) {
+        showToast('Could not save compliance settings', 'error');
+      }
     }
 
     async function saveRestaurant(ev) {

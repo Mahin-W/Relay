@@ -443,6 +443,28 @@ describe('Settings', () => {
     })
     assert.ok(status >= 200 && status < 300, `expected 2xx, got ${status}`)
   })
+
+  test('GET /api/settings/full includes a compliance block with options', async () => {
+    const app = createTestApp()
+    const { status, body } = await request(app, 'GET', '/api/settings/full', {
+      headers: { Cookie: authCookie() },
+    })
+    assert.equal(status, 200, `got ${status}: ${JSON.stringify(body)}`)
+    assert.ok(body.compliance, 'compliance block present')
+    assert.ok(Array.isArray(body.compliance.options.states) && body.compliance.options.states.length >= 50, 'state options populated')
+    // unset profile ⇒ all guardrails default on
+    assert.deepEqual(body.compliance.features, { breaks: true, minorLabor: true, fairWorkweek: true })
+  })
+
+  test('PATCH /api/settings/full saves compliance location + toggles', async () => {
+    const app = createTestApp()
+    const { status, body } = await request(app, 'PATCH', '/api/settings/full', {
+      headers: { Cookie: authCookie() },
+      body: { compliance: { state: 'CA', city: 'San Francisco', features: { minorLabor: false } } },
+    })
+    assert.ok(status >= 200 && status < 300, `expected 2xx, got ${status}: ${JSON.stringify(body)}`)
+    assert.equal(body.updated?.compliance, true)
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -61,6 +61,24 @@ export const FAIR_WORKWEEK_CITIES = Object.freeze({
 const normState = (s) => (s ? String(s).trim().toUpperCase() : null)
 const normCity = (c) => (c ? String(c).trim().toLowerCase() : null)
 
+// ── Owner-customizable feature toggles ──────────────────────────────────
+// Each compliance guardrail can be switched off per workplace by the owner
+// (Dashboard → Settings → Compliance). Toggles live under `ruleset.enabled`;
+// an absent flag means ENABLED (safe default). The evaluator reads these.
+export const COMPLIANCE_FEATURES = Object.freeze(['breaks', 'minorLabor', 'fairWorkweek'])
+
+/** Whether a guardrail is on for this ruleset (default true when unset). */
+export function isFeatureEnabled(ruleset, feature) {
+  return ruleset?.enabled?.[feature] !== false
+}
+
+/** Normalize an arbitrary toggle object to the known feature keys (default true). */
+export function normalizeFeatures(enabled = {}) {
+  const out = {}
+  for (const k of COMPLIANCE_FEATURES) out[k] = enabled?.[k] !== false
+  return out
+}
+
 /** Merge an overlay onto base, descending up to two object levels deep. */
 function mergeRuleset(base, overlay) {
   if (!overlay) return base

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   getProfile, setProfile, getRuleset, resolveRuleset,
   FEDERAL_RULESET, STATE_RULESETS, FAIR_WORKWEEK_CITIES,
+  isFeatureEnabled, normalizeFeatures, COMPLIANCE_FEATURES,
 } from '../../compliance/complianceProfiles.js'
 
 // Mock db implements compliance-profile methods AND insertAuditEvent so
@@ -50,6 +51,22 @@ describe('resolveRuleset', () => {
       assert.ok(FAIR_WORKWEEK_CITIES[c], `missing FW city ${c}`)
     }
     assert.ok(STATE_RULESETS.OR.fairWorkweek, 'Oregon should be a Fair-Workweek state')
+  })
+})
+
+describe('feature toggles', () => {
+  it('defaults every guardrail to enabled when unset', () => {
+    for (const f of COMPLIANCE_FEATURES) assert.equal(isFeatureEnabled({}, f), true)
+    assert.equal(isFeatureEnabled(undefined, 'breaks'), true)
+  })
+  it('respects an explicit false', () => {
+    const rs = { enabled: { minorLabor: false } }
+    assert.equal(isFeatureEnabled(rs, 'minorLabor'), false)
+    assert.equal(isFeatureEnabled(rs, 'breaks'), true) // unset ⇒ on
+  })
+  it('normalizeFeatures fills all known keys with booleans', () => {
+    const n = normalizeFeatures({ breaks: false })
+    assert.deepEqual(n, { breaks: false, minorLabor: true, fairWorkweek: true })
   })
 })
 

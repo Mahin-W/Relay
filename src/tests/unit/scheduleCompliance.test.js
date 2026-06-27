@@ -66,6 +66,30 @@ describe('evaluateScheduleCompliance', () => {
   })
 })
 
+describe('evaluateScheduleCompliance — owner feature toggles', () => {
+  const minorShift = [{ staffId: 1, staffName: 'Sam', dayOfWeek: 'Monday', startTime: '16:00', endTime: '23:00', shiftName: 'Close' }]
+  const minorStaff = [{ id: 1, name: 'Sam', dob: '2009-01-01' }]
+
+  it('suppresses minor-labor violations when minorLabor is disabled', () => {
+    const rs = { ...resolveRuleset('CA'), enabled: { minorLabor: false } }
+    const res = evaluateScheduleCompliance(minorShift, minorStaff, rs, { asOf: ASOF })
+    assert.equal(res.hasViolations, false)
+    assert.equal(res.violationCount, 0)
+  })
+
+  it('still flags violations when minorLabor is enabled (default)', () => {
+    const res = evaluateScheduleCompliance(minorShift, minorStaff, resolveRuleset('CA'), { asOf: ASOF })
+    assert.equal(res.hasViolations, true)
+  })
+
+  it('suppresses break suggestions when breaks is disabled', () => {
+    const rs = { ...resolveRuleset('CA'), enabled: { breaks: false } }
+    const longShift = [{ staffId: 5, staffName: 'Lee', dayOfWeek: 'Monday', startTime: '09:00', endTime: '19:00' }]
+    const res = evaluateScheduleCompliance(longShift, [{ id: 5, name: 'Lee', dob: '1990-01-01' }], rs, { asOf: ASOF })
+    assert.equal(res.breaks.length, 0)
+  })
+})
+
 describe('formatComplianceReport', () => {
   it('renders a clean bill of health', () => {
     const out = formatComplianceReport({ violationCount: 0, issues: [], breaks: [] })

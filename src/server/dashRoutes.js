@@ -5,6 +5,34 @@ import { calculateTipSplit } from '../operations/tipPool.js'
 import { generateWeeklySchedule } from '../schedule/generateSchedule.js'
 import { manualClockOut, manualClockIn } from '../timeclock/clockOverride.js'
 import { normalizeShiftTime } from '../utils/time.js'
+import {
+  getProfile, setProfile, resolveRuleset, normalizeFeatures, FAIR_WORKWEEK_CITIES,
+} from '../compliance/complianceProfiles.js'
+import { STATE_NAME_TO_CODE } from '../compliance/complianceFeature.js'
+
+// State dropdown options ({ code, name }) built once, deduped by code, A→Z.
+const STATE_OPTIONS = (() => {
+  const byCode = new Map()
+  for (const [name, code] of Object.entries(STATE_NAME_TO_CODE)) {
+    if (byCode.has(code)) continue
+    byCode.set(code, name.replace(/\b\w/g, c => c.toUpperCase()))
+  }
+  return [...byCode.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name))
+})()
+const FAIR_WORKWEEK_CITY_OPTIONS = Object.keys(FAIR_WORKWEEK_CITIES)
+  .filter(c => c !== 'nyc') // alias of 'new york'
+  .map(c => c.replace(/\b\w/g, ch => ch.toUpperCase()))
+
+/** UI-friendly summary of a resolved ruleset (no jsonb internals leaked). */
+function summarizeRuleset(rs = {}) {
+  return {
+    meal: rs.meal ?? null,
+    rest: rs.rest ?? null,
+    minorRules: !!rs.minor,
+    fairWorkweek: !!rs.fairWorkweek,
+    advanceNoticeDays: rs.advanceNoticeDays ?? null,
+  }
+}
 
 const router = express.Router()
 router.use(requireAuth)
@@ -2375,11 +2403,25 @@ router.get('/settings/full', async (req, res) => {
     const session = sessionRes.data || {}
     const setupData = session.setup_data || {}
 
+    // Compliance profile (Epic 4). Resolve from stored ruleset, else state/city.
+    const profile = await getProfile(groupId).catch(() => null)
+    const complianceRuleset = (profile?.ruleset && Object.keys(profile.ruleset).length > 0)
+      ? profile.ruleset
+      : resolveRuleset(profile?.state, profile?.city)
+
     res.json({
       restaurant: {
         groupId: session.group_id,
         name: session.group_name,
         phone: session.phone || null,
+      },
+      compliance: {
+        configured: !!(profile?.state || profile?.city),
+        state: profile?.state ?? null,
+        city: profile?.city ?? null,
+        features: normalizeFeatures(complianceRuleset?.enabled),
+        ruleset: summarizeRuleset(complianceRuleset),
+        options: { states: STATE_OPTIONS, fairWorkweekCities: FAIR_WORKWEEK_CITY_OPTIONS },
       },
       staff: (staffRes.data ?? []).map(s => ({ id: s.id, name: s.name, role: s.role })),
       shifts: (shiftsRes.data ?? []).map(s => ({
@@ -2483,6 +2525,21 @@ router.patch('/settings/full', async (req, res) => {
         if (error) throw error
         updated.budget = true
       } catch (e) { errors.budget = e.message }
+    }
+
+    if (body.compliance) {
+      try {
+        const c = body.compliance
+        const state = c.state || null
+        const city = c.city || null
+        // Re-resolve the legal ruleset from the chosen jurisdiction, then layer
+        // the owner's on/off toggles. setProfile audits the change.
+        const ruleset = resolveRuleset(state, city)
+        ruleset.enabled = normalizeFeatures(c.features)
+        const saved = await setProfile(groupId, { state, city, ruleset }, req.manager?.userId ?? null)
+        if (!saved) throw new Error('Could not save compliance profile')
+        updated.compliance = true
+      } catch (e) { errors.compliance = e.message }
     }
 
     if (Object.keys(updated).length === 0 && Object.keys(errors).length === 0) {
