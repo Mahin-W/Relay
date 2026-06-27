@@ -1028,3 +1028,20 @@ CREATE TABLE IF NOT EXISTS pto_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_pto_ledger_staff ON pto_ledger (group_id, staff_id);
 ALTER TABLE pto_ledger ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- CERTIFICATIONS (migration 051 — Epic 5) — montreal block 051+
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS certifications (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id     TEXT NOT NULL,
+  staff_id     BIGINT NOT NULL,
+  cert_type    TEXT NOT NULL,
+  issued_date  DATE,
+  expires_date DATE,
+  doc_ref      TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_certifications_group   ON certifications (group_id);
+CREATE INDEX IF NOT EXISTS idx_certifications_expires ON certifications (expires_date);
+ALTER TABLE certifications ENABLE ROW LEVEL SECURITY;
