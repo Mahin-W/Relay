@@ -1060,3 +1060,17 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 CREATE INDEX IF NOT EXISTS idx_documents_staff ON documents (group_id, staff_id);
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+
+-- ═══════════════════════════════════════════════════════════════
+-- API KEYS (migration 053 — Epic 7) — montreal block 053+
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS api_keys (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  group_id   TEXT NOT NULL,
+  key_hash   TEXT NOT NULL UNIQUE,
+  scopes     TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  revoked_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_group ON api_keys (group_id);
+ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
